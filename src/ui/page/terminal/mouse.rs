@@ -1,9 +1,102 @@
 //! Map egui pointer / touch / wheel to xterm mouse reporting for the PTY.
 
-use egui::{PointerButton, Pos2, Rect, Response, TouchPhase, Ui};
+use egui::{CornerRadius, CursorIcon, PointerButton, Pos2, Rect, Response, Sense, TouchPhase, Ui};
 
+use crate::config::TerminalTheme;
 use crate::terminal::screen::Screen;
 use crate::ui::page::terminal::selection::TerminalTouchState;
+
+/// Hit target width for the scrollback scrollbar (sits in the panel right margin).
+pub const SCROLLBAR_HIT_WIDTH: f32 = 4.0;
+/// Visible thumb width, flush against the panel's right edge.
+pub const SCROLLBAR_THUMB_WIDTH: f32 = 2.0;
+
+pub fn scrollbar_track_rect(panel_rect: Rect, grid_rect: Rect) -> Rect {
+    let right = panel_rect.right();
+    Rect::from_min_max(
+        egui::pos2(right - SCROLLBAR_HIT_WIDTH, grid_rect.top()),
+        egui::pos2(right, grid_rect.bottom()),
+    )
+}
+
+pub fn pointer_in_scrollbar(pos: Pos2, panel_rect: Rect, grid_rect: Rect) -> bool {
+    scrollbar_track_rect(panel_rect, grid_rect).contains(pos)
+}
+
+fn scroll_offset_from_pointer_y(
+    y: f32,
+    grid_rect: Rect,
+    grid_rows: usize,
+    max_scroll_offset: usize,
+) -> usize {
+    let total_rows = max_scroll_offset + grid_rows;
+    if total_rows == 0 || grid_rect.height() <= 0.0 {
+        return 0;
+    }
+    let rel = ((y - grid_rect.top()) / grid_rect.height()).clamp(0.0, 1.0);
+    ((1.0 - rel) * total_rows as f32)
+        .round()
+        .clamp(0.0, max_scroll_offset as f32) as usize
+}
+
+/// Interactive scrollback scrollbar (thumb at bottom = live tail / offset 0).
+pub fn process_terminal_scrollbar(
+    ui: &Ui,
+    theme: &TerminalTheme,
+    panel_rect: Rect,
+    grid_rect: Rect,
+    grid_rows: usize,
+    max_scroll_offset: usize,
+    scroll_offset: &mut usize,
+) -> bool {
+    if max_scroll_offset == 0 || grid_rows == 0 {
+        return false;
+    }
+
+    let track_rect = scrollbar_track_rect(panel_rect, grid_rect);
+    let total_rows = max_scroll_offset + grid_rows;
+    let grid_h = grid_rect.height();
+    let sb_visible = grid_rows as f32 / total_rows as f32;
+    let sb_pos = 1.0 - (*scroll_offset as f32 / total_rows as f32);
+    let thumb_h = (grid_h * sb_visible).max(6.0);
+    let thumb_y = grid_rect.top() + grid_h * (sb_pos - sb_visible).max(0.0);
+    let thumb_rect = Rect::from_min_size(
+        egui::pos2(panel_rect.right() - SCROLLBAR_THUMB_WIDTH, thumb_y),
+        egui::vec2(SCROLLBAR_THUMB_WIDTH, thumb_h),
+    );
+
+    let track_id = ui.id().with("terminal_scrollbar_track");
+    let track_resp = ui.interact(track_rect, track_id, Sense::click_and_drag());
+
+    let active = track_resp.hovered() || track_resp.is_pointer_button_down_on();
+    if active {
+        ui.ctx().set_cursor_icon(if track_resp.dragged() {
+            CursorIcon::Grabbing
+        } else {
+            CursorIcon::Grab
+        });
+    }
+
+    let mut changed = false;
+    if (track_resp.clicked() || track_resp.dragged())
+        && let Some(pos) = track_resp.interact_pointer_pos()
+    {
+        let new_offset = scroll_offset_from_pointer_y(pos.y, grid_rect, grid_rows, max_scroll_offset);
+        if new_offset != *scroll_offset {
+            *scroll_offset = new_offset;
+            changed = true;
+        }
+    }
+
+    let thumb_color = if active {
+        theme.scrollbar_thumb_hover
+    } else {
+        theme.scrollbar_thumb
+    };
+    ui.painter().rect_filled(thumb_rect, CornerRadius::same(1), thumb_color);
+
+    changed
+}
 
 /// Encode xterm SGR mouse report (`CSI < Cb ; Cx ; Cy M|m`).
 pub fn encode_sgr_mouse(button: u8, col: usize, row: usize, release: bool) -> Vec<u8> {
@@ -194,6 +287,7 @@ pub fn process_terminal_mouse(
 pub fn process_touch_scroll(
     ui: &Ui,
     term_resp: &Response,
+    panel_rect: Rect,
     grid_rect: Rect,
     cell_h: f32,
     screen: &Screen,
@@ -227,6 +321,9 @@ pub fn process_touch_scroll(
 
         match phase {
             TouchPhase::Start => {
+                if pointer_in_scrollbar(pos, panel_rect, grid_rect) {
+                    continue;
+                }
                 if grid_rect.contains(pos) || term_resp.rect.contains(pos) {
                     touch_state.scroll_last_pos = Some(pos);
                     touch_state.scroll_remainder_rows = 0.0;
@@ -234,6 +331,9 @@ pub fn process_touch_scroll(
                 }
             }
             TouchPhase::Move => {
+                if pointer_in_scrollbar(pos, panel_rect, grid_rect) {
+                    continue;
+                }
                 let Some(last_pos) = touch_state.scroll_last_pos else {
                     continue;
                 };

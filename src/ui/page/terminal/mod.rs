@@ -32,7 +32,7 @@ use crate::ui::page::terminal::input::{
 };
 use crate::ui::page::terminal::paint::{paint_row, RowGalleyCache};
 use crate::ui::page::terminal::mouse::{
-    process_terminal_mouse, process_terminal_wheel, process_touch_scroll,
+    process_terminal_mouse, process_terminal_scrollbar, process_terminal_wheel, process_touch_scroll,
 };
 use crate::ui::page::terminal::selection::{
     CellPos, TerminalSelection, TerminalTouchState, is_pos_in_selection,
@@ -879,6 +879,7 @@ pub fn connection_view(
             if process_touch_scroll(
                 ui,
                 &term_resp,
+                panel_rect,
                 grid_rect,
                 cell_h,
                 screen,
@@ -1015,7 +1016,9 @@ pub fn connection_view(
                     &mut session.selection,
                     &mut session.selection_pointer,
                     screen,
-                    offset,
+                    &mut session.scroll_offset,
+                    max_scroll_offset,
+                    &ctx,
                     ui,
                     &term_resp,
                     grid_rect,
@@ -1070,18 +1073,16 @@ pub fn connection_view(
             }
 
             // Scrollbar (thumb at bottom when viewing the live tail / offset == 0)
-            if max_scroll_offset > 0 && !in_alt {
-                let total_rows = max_scroll_offset + grid_rows;
-                let sb_pos = 1.0 - (offset as f32 / total_rows as f32);
-                let sb_visible = grid_rows as f32 / total_rows as f32;
-                let bar_x = grid_rect.right() - 6.0;
-                let bar_h = (grid_size.y * sb_visible).max(8.0);
-                let bar_y = grid_rect.top() + grid_size.y * (sb_pos - sb_visible).max(0.0);
-                painter.rect_filled(
-                    egui::Rect::from_min_size(egui::pos2(bar_x, bar_y), egui::vec2(4.0, bar_h)),
-                    egui::CornerRadius::same(2),
-                    egui::Color32::from_rgba_premultiplied(255, 255, 255, 60),
-                );
+            if process_terminal_scrollbar(
+                ui,
+                theme,
+                panel_rect,
+                grid_rect,
+                grid_rows,
+                max_scroll_offset,
+                &mut session.scroll_offset,
+            ) {
+                ctx.request_repaint();
             }
         }
     }

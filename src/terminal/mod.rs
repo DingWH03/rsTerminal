@@ -1133,6 +1133,83 @@ mod tests {
         );
     }
 
+    fn count_prompt_only_rows(term: &Terminal) -> usize {
+        term.screen
+            .cells
+            .iter()
+            .filter(|row| {
+                let text: String = row.iter().map(|c| c.ch).collect();
+                let trimmed = text.trim();
+                trimmed.starts_with("dwh@") && trimmed.contains('»') && !trimmed.contains("130")
+            })
+            .count()
+    }
+
+    #[test]
+    fn resize_shrink_widen_does_not_duplicate_prompt_lines_with_exit_code() {
+        // Start narrow so the exit-code padding soft-wraps, then alternate width.
+        let ls = b" 111         Apps   Desktop\n ai-models   code   Documents\n";
+        let prompt_prefix =
+            b"\r\n%                                                                                                                      \r \r\r\x1b[01;32mdwh@dwh-82sk\x1b[00m \x1b[01;34m~\x1b[00m \xc2\xbb ";
+        let exit_pad = b"                                                                                                    130 \xe2\x86\xb5 ";
+        let winch_redraw =
+            b"\r\r\x1b[0m\x1b[27m\x1b[24m\x1b[J\x1b[01;32mdwh@dwh-82sk\x1b[00m \x1b[01;34m~\x1b[00m \x1b[33m\xc2\xbb\x1b[0m ";
+        let exit_redraw = b"                                                                                                    130 \xe2\x86\xb5 ";
+
+        let mut term = Terminal::new(24, 40);
+        term.write(ls);
+        term.write(prompt_prefix);
+        term.write(exit_pad);
+        let baseline_prompt_rows = count_prompt_only_rows(&term);
+        assert!(baseline_prompt_rows >= 1, "expected at least one prompt row");
+
+        for cycle in 0..8 {
+            term.resize(24, 120);
+            term.write(winch_redraw);
+            term.write(exit_redraw);
+            term.resize(24, 40);
+            term.write(winch_redraw);
+            term.write(exit_redraw);
+            let count = count_prompt_only_rows(&term);
+            assert_eq!(
+                count, baseline_prompt_rows,
+                "cycle {cycle}: prompt row count changed ({count}, expected {baseline_prompt_rows})"
+            );
+        }
+    }
+
+    #[test]
+    fn resize_with_zsh_winch_redraw_does_not_duplicate_prompt_lines() {
+        let ls = b" 111         Apps   Desktop\n ai-models   code   Documents\n";
+        let prompt_prefix =
+            b"\r\n%                                                                                                                      \r \r\r\x1b[01;32mdwh@dwh-82sk\x1b[00m \x1b[01;34m~\x1b[00m \xc2\xbb ";
+        let exit_pad = b"                                                                                                    130 \xe2\x86\xb5 ";
+        let winch_redraw =
+            b"\r\r\x1b[0m\x1b[27m\x1b[24m\x1b[J\x1b[01;32mdwh@dwh-82sk\x1b[00m \x1b[01;34m~\x1b[00m \x1b[33m\xc2\xbb\x1b[0m ";
+        let exit_redraw = b"                                                                                                    130 \xe2\x86\xb5 ";
+
+        let mut term = Terminal::new(24, 120);
+        term.write(ls);
+        term.write(prompt_prefix);
+        term.write(exit_pad);
+        let baseline = count_prompt_only_rows(&term);
+
+        for cycle in 0..8 {
+            term.resize(24, 40);
+            term.write(winch_redraw);
+            term.write(exit_redraw);
+            term.resize(24, 120);
+            term.write(winch_redraw);
+            term.write(exit_redraw);
+            let count = count_prompt_only_rows(&term);
+            assert!(
+                count <= baseline + 1,
+                "cycle {cycle}: too many prompt rows ({count}, baseline {baseline}), cursor_y={}",
+                term.screen.cursor_y
+            );
+        }
+    }
+
     #[test]
     fn zsh_consecutive_cr_cr_lf_advances_on_blank_rows() {
         // After the first `\r\r\n`, the cursor sits at col 0 on a blank row.  zsh repeats

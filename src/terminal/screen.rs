@@ -936,6 +936,27 @@ impl Screen {
         self.in_zsh_line_pad = false;
     }
 
+    /// First row of the soft-wrapped logical line containing `y`.
+    fn logical_line_start_row(&self, y: usize) -> usize {
+        let mut start = y.min(self.rows.saturating_sub(1));
+        while start > 0 && self.wrapped.get(start).copied().unwrap_or(false) {
+            start -= 1;
+        }
+        start
+    }
+
+    /// Clear the row at `start_y` and any soft-wrapped continuation rows below it.
+    fn clear_soft_wrapped_run_from(&mut self, start_y: usize) {
+        let mut y = start_y;
+        loop {
+            self.clear_row(y);
+            y += 1;
+            if y >= self.rows || !self.wrapped.get(y).copied().unwrap_or(false) {
+                break;
+            }
+        }
+    }
+
     /// Apply a deferred `\r`.  When `clear_row_on_direct_print` is true (plain output
     /// immediately after `\r`), clear the row for apt/wget-style progress overwrites.
     /// When false (CSI/BS between `\r` and the next output), only move to column 0 so
@@ -943,6 +964,22 @@ impl Screen {
     /// the line.
     fn flush_pending_cr(&mut self, clear_row_on_direct_print: bool) {
         if self.pending_cr {
+            let double_cr = self.pending_double_cr;
+            if double_cr && !self.in_alternate_screen() {
+                // zsh SIGWINCH and multiline redraw use `\r\r` before rewriting a
+                // logical line.  When the prompt soft-wraps (e.g. right-aligned exit
+                // code), the cursor may sit on a continuation row; move to the first
+                // physical row of the logical line and clear the whole wrapped run so
+                // stale prefix/ suffix rows are not left behind.
+                let start = self.logical_line_start_row(self.cursor_y);
+                self.cursor_y = start;
+                self.clear_soft_wrapped_run_from(start);
+                self.cursor_x = 0;
+                self.pending_cr = false;
+                self.pending_double_cr = false;
+                self.pending_wrap = false;
+                return;
+            }
             if self.in_zsh_line_pad || self.row_is_zsh_clear_pad(self.cursor_y) {
                 self.clear_row(self.cursor_y);
                 self.in_zsh_line_pad = false;
@@ -982,19 +1019,38 @@ impl Screen {
         // terminal background.  Including them when the width shrinks anchors the
         // bottom blank area and pushes command history into scrollback, which makes
         // history appear to "move upward" and later makes `clear` look ineffective.
+        //
+        // When the cursor sits on a blank row *below* the last content row (typical
+        // after a soft-wrapped prompt with right-aligned exit code), do not treat
+        // that padding row as its own logical line.  Otherwise reflow leaves the
+        // cursor below the prompt and zsh's SIGWINCH `\r\r` redraw creates a new
+        // prompt line on every resize.
         let old_active_rows = if old_cells.is_empty() {
             0
         } else {
-            let mut last = old_cursor_y.min(old_cells.len().saturating_sub(1));
+            let old_cols = self.cols;
+            let mut last_content = 0usize;
             for (y, row) in old_cells.iter().enumerate() {
                 if row
                     .iter()
-                    .take(self.cols.min(row.len()))
+                    .take(old_cols.min(row.len()))
                     .any(|c| c.ch != ' ' || c.wide_continuation)
                 {
-                    last = last.max(y);
+                    last_content = y;
                 }
             }
+            let cursor_y_bound = old_cursor_y.min(old_cells.len().saturating_sub(1));
+            let cursor_on_trailing_blank = cursor_y_bound > last_content
+                && old_cells.get(cursor_y_bound).is_some_and(|row| {
+                    row.iter()
+                        .take(old_cols.min(row.len()))
+                        .all(|c| (c.ch == ' ' || c.ch == '\0') && !c.wide_continuation)
+                });
+            let last = if cursor_on_trailing_blank {
+                last_content
+            } else {
+                cursor_y_bound.max(last_content)
+            };
             (last + 1).min(old_cells.len())
         };
 
@@ -1059,6 +1115,10 @@ impl Screen {
                 let offset = row_base_offset[old_cursor_y]
                     + row_logical_offset_for_display_col(&old_cells[old_cursor_y], old_cursor_x);
                 Some((li, offset.min(logical_lines[li].cells.len())))
+            } else if !logical_lines.is_empty() {
+                // Cursor was on trailing blank padding below the reflowed content.
+                let li = logical_lines.len() - 1;
+                Some((li, logical_lines[li].cells.len()))
             } else {
                 None
             };

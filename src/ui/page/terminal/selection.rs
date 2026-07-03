@@ -1,4 +1,4 @@
-use egui::{Painter, Pos2, Rect, Response, TouchPhase, Ui};
+use egui::{Context, Painter, Pos2, Rect, Response, TouchPhase, Ui};
 
 use crate::config::TerminalTheme;
 use crate::terminal::screen::{cell_display_width, Screen};
@@ -146,12 +146,125 @@ pub fn cursor_virtual_pos(screen: &Screen) -> CellPos {
     }
 }
 
+fn col_from_pointer_x(pos: Pos2, rect: Rect, cell_w: f32, cols: usize) -> usize {
+    if cell_w <= 0.0 || cols == 0 {
+        return 0;
+    }
+    let x = pos.x.clamp(rect.left(), rect.right() - 0.001);
+    ((x - rect.left()) / cell_w)
+        .floor()
+        .clamp(0.0, cols.saturating_sub(1) as f32) as usize
+}
+
+/// While dragging a selection, scroll scrollback when the pointer nears or leaves the top/bottom edge.
+fn apply_selection_edge_scroll(
+    ctx: &Context,
+    pos: Pos2,
+    rect: Rect,
+    cell_w: f32,
+    cell_h: f32,
+    grid_rows: usize,
+    grid_cols: usize,
+    screen: &Screen,
+    scroll_offset: &mut usize,
+    max_scroll_offset: usize,
+    selection: &mut Option<TerminalSelection>,
+) -> bool {
+    if max_scroll_offset == 0 || cell_h <= 0.0 || grid_rows == 0 {
+        return false;
+    }
+
+    let edge = cell_h * 1.5;
+    let mut changed = false;
+
+    if pos.y < rect.top() + edge {
+        if *scroll_offset < max_scroll_offset {
+            *scroll_offset += 1;
+            changed = true;
+        }
+        if let Some(sel) = selection {
+            let line = screen.viewport_virtual_start(grid_rows, *scroll_offset);
+            sel.cursor = CellPos {
+                line,
+                col: col_from_pointer_x(pos, rect, cell_w, grid_cols),
+            };
+        }
+    } else if pos.y > rect.bottom() - edge {
+        if *scroll_offset > 0 {
+            *scroll_offset -= 1;
+            changed = true;
+        }
+        if let Some(sel) = selection {
+            let vstart = screen.viewport_virtual_start(grid_rows, *scroll_offset);
+            sel.cursor = CellPos {
+                line: vstart + grid_rows.saturating_sub(1),
+                col: col_from_pointer_x(pos, rect, cell_w, grid_cols),
+            };
+        }
+    }
+
+    if changed {
+        ctx.request_repaint_after(std::time::Duration::from_millis(16));
+    }
+    changed
+}
+
+fn cell_at_pos(
+    pos: Pos2,
+    rect: Rect,
+    cell_w: f32,
+    cell_h: f32,
+    grid_rows: usize,
+    grid_cols: usize,
+    screen: &Screen,
+    scroll_offset: usize,
+) -> Option<CellPos> {
+    pointer_to_cell(
+        pos,
+        rect,
+        cell_w,
+        cell_h,
+        grid_rows,
+        grid_cols,
+        screen,
+        scroll_offset,
+    )
+}
+
+fn start_selection(
+    selection: &mut Option<TerminalSelection>,
+    selection_pointer: &mut Option<CellPos>,
+    cell: CellPos,
+) {
+    *selection_pointer = Some(cell);
+    *selection = Some(TerminalSelection::new(cell));
+}
+
+fn extend_selection_to(
+    selection: &mut Option<TerminalSelection>,
+    selection_pointer: &mut Option<CellPos>,
+    cell: CellPos,
+) {
+    if let Some(sel) = selection {
+        sel.cursor = cell;
+    } else if let Some(anchor) = *selection_pointer {
+        *selection = Some(TerminalSelection {
+            anchor,
+            cursor: cell,
+        });
+    } else {
+        start_selection(selection, selection_pointer, cell);
+    }
+}
+
 /// Update text selection from mouse or touch pointer (press / drag / release).
 pub fn update_terminal_selection(
     selection: &mut Option<TerminalSelection>,
     selection_pointer: &mut Option<CellPos>,
     screen: &Screen,
-    scroll_offset: usize,
+    scroll_offset: &mut usize,
+    max_scroll_offset: usize,
+    ctx: &Context,
     ui: &Ui,
     term_resp: &Response,
     rect: Rect,
@@ -164,59 +277,58 @@ pub fn update_terminal_selection(
     let has_touch = ui.input(|i| i.has_touch_screen());
     let mut finished_touch_selection = false;
 
-    let cell_at = |pos: Pos2| -> Option<CellPos> {
-        pointer_to_cell(
-            pos,
-            rect,
-            cell_w,
-            cell_h,
-            grid_rows,
-            grid_cols,
-            screen,
-            scroll_offset,
-        )
-    };
-
-    let start_selection = |selection: &mut Option<TerminalSelection>,
-                           selection_pointer: &mut Option<CellPos>,
-                           cell: CellPos| {
-        *selection_pointer = Some(cell);
-        *selection = Some(TerminalSelection::new(cell));
-    };
-
-    let extend_to = |selection: &mut Option<TerminalSelection>,
-                     selection_pointer: &mut Option<CellPos>,
-                     cell: CellPos| {
-        if let Some(sel) = selection {
-            sel.cursor = cell;
-        } else if let Some(anchor) = *selection_pointer {
-            *selection = Some(TerminalSelection {
-                anchor,
-                cursor: cell,
-            });
-        } else {
-            start_selection(selection, selection_pointer, cell);
-        }
-    };
-
     let mut touch_ended = false;
     if has_touch && touch_selection_enabled {
         for event in ui.input(|i| i.events.clone()) {
             let egui::Event::Touch { pos, phase, .. } = event else {
                 continue;
             };
-            if !rect.contains(pos) {
-                continue;
-            }
             match phase {
                 TouchPhase::Start => {
-                    if let Some(cell) = cell_at(pos) {
+                    if !rect.contains(pos) {
+                        continue;
+                    }
+                    if let Some(cell) = cell_at_pos(
+                        pos,
+                        rect,
+                        cell_w,
+                        cell_h,
+                        grid_rows,
+                        grid_cols,
+                        screen,
+                        *scroll_offset,
+                    ) {
                         start_selection(selection, selection_pointer, cell);
                     }
                 }
                 TouchPhase::Move => {
-                    if let Some(cell) = cell_at(pos) {
-                        extend_to(selection, selection_pointer, cell);
+                    if selection_pointer.is_none() {
+                        continue;
+                    }
+                    apply_selection_edge_scroll(
+                        ctx,
+                        pos,
+                        rect,
+                        cell_w,
+                        cell_h,
+                        grid_rows,
+                        grid_cols,
+                        screen,
+                        scroll_offset,
+                        max_scroll_offset,
+                        selection,
+                    );
+                    if let Some(cell) = cell_at_pos(
+                        pos,
+                        rect,
+                        cell_w,
+                        cell_h,
+                        grid_rows,
+                        grid_cols,
+                        screen,
+                        *scroll_offset,
+                    ) {
+                        extend_selection_to(selection, selection_pointer, cell);
                     }
                 }
                 TouchPhase::End | TouchPhase::Cancel => touch_ended = true,
@@ -233,15 +345,25 @@ pub fn update_terminal_selection(
     let primary_pressed = pointer_selection_enabled
         && ui.input(|i| i.pointer.primary_pressed())
         && contains;
-    let primary_down = pointer_selection_enabled
-        && ui.input(|i| i.pointer.primary_down())
-        && contains;
+    let primary_down = pointer_selection_enabled && ui.input(|i| i.pointer.primary_down());
     let primary_released = pointer_selection_enabled && ui.input(|i| i.pointer.primary_released());
 
     if pointer_selection_enabled {
-        if let Some(pos) = term_resp.interact_pointer_pos() {
+        let pos = term_resp
+            .interact_pointer_pos()
+            .or_else(|| ui.input(|i| i.pointer.latest_pos()));
+        if let Some(pos) = pos {
             if primary_pressed {
-                if let Some(cell) = cell_at(pos) {
+                if let Some(cell) = cell_at_pos(
+                    pos,
+                    rect,
+                    cell_w,
+                    cell_h,
+                    grid_rows,
+                    grid_cols,
+                    screen,
+                    *scroll_offset,
+                ) {
                     if shift {
                         if let Some(sel) = selection {
                             sel.cursor = cell;
@@ -260,19 +382,59 @@ pub fn update_terminal_selection(
                 }
             } else if primary_down || term_resp.dragged() {
                 if selection_pointer.is_some() {
-                    if let Some(cell) = cell_at(pos) {
-                        extend_to(selection, selection_pointer, cell);
+                    apply_selection_edge_scroll(
+                        ctx,
+                        pos,
+                        rect,
+                        cell_w,
+                        cell_h,
+                        grid_rows,
+                        grid_cols,
+                        screen,
+                        scroll_offset,
+                        max_scroll_offset,
+                        selection,
+                    );
+                    if let Some(cell) = cell_at_pos(
+                        pos,
+                        rect,
+                        cell_w,
+                        cell_h,
+                        grid_rows,
+                        grid_cols,
+                        screen,
+                        *scroll_offset,
+                    ) {
+                        extend_selection_to(selection, selection_pointer, cell);
                     }
                 }
             } else if term_resp.drag_started() {
-                if let Some(cell) = cell_at(pos) {
+                if let Some(cell) = cell_at_pos(
+                    pos,
+                    rect,
+                    cell_w,
+                    cell_h,
+                    grid_rows,
+                    grid_cols,
+                    screen,
+                    *scroll_offset,
+                ) {
                     start_selection(selection, selection_pointer, cell);
                 }
             }
 
             if !has_touch && term_resp.clicked() && shift {
-                if let Some(cell) = cell_at(pos) {
-                    extend_to(selection, selection_pointer, cell);
+                if let Some(cell) = cell_at_pos(
+                    pos,
+                    rect,
+                    cell_w,
+                    cell_h,
+                    grid_rows,
+                    grid_cols,
+                    screen,
+                    *scroll_offset,
+                ) {
+                    extend_selection_to(selection, selection_pointer, cell);
                 }
             }
         }

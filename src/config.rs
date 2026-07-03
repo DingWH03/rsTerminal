@@ -134,6 +134,12 @@ pub struct TerminalTheme {
     pub fg: egui::Color32,
     pub cursor: egui::Color32,
     pub selection: egui::Color32,
+    /// Scrollback scrollbar thumb.
+    #[serde(default = "default_theme_scrollbar_thumb")]
+    pub scrollbar_thumb: egui::Color32,
+    /// Scrollback scrollbar thumb while hovered or dragged.
+    #[serde(default = "default_theme_scrollbar_thumb_hover")]
+    pub scrollbar_thumb_hover: egui::Color32,
     pub black: egui::Color32,
     pub red: egui::Color32,
     pub green: egui::Color32,
@@ -152,6 +158,14 @@ pub struct TerminalTheme {
     pub bright_white: egui::Color32,
 }
 
+fn default_theme_scrollbar_thumb() -> egui::Color32 {
+    egui::Color32::from_rgba_premultiplied(180, 180, 180, 190)
+}
+
+fn default_theme_scrollbar_thumb_hover() -> egui::Color32 {
+    egui::Color32::from_rgb(59, 142, 234)
+}
+
 impl Default for TerminalTheme {
     fn default() -> Self {
         Self {
@@ -159,6 +173,8 @@ impl Default for TerminalTheme {
             fg: egui::Color32::from_rgb(220, 220, 220),
             cursor: egui::Color32::from_rgb(255, 255, 255),
             selection: egui::Color32::from_rgba_premultiplied(100, 100, 255, 128),
+            scrollbar_thumb: egui::Color32::from_rgba_premultiplied(180, 180, 180, 190),
+            scrollbar_thumb_hover: egui::Color32::from_rgb(59, 142, 234),
             black: egui::Color32::from_rgb(0, 0, 0),
             red: egui::Color32::from_rgb(205, 49, 49),
             green: egui::Color32::from_rgb(13, 188, 121),
@@ -235,6 +251,8 @@ impl TerminalTheme {
             fg: egui::Color32::from_rgb(248, 248, 242),
             cursor: egui::Color32::from_rgb(248, 248, 242),
             selection: egui::Color32::from_rgba_premultiplied(68, 71, 90, 160),
+            scrollbar_thumb: egui::Color32::from_rgba_premultiplied(139, 233, 253, 175),
+            scrollbar_thumb_hover: egui::Color32::from_rgb(139, 233, 253),
             black: egui::Color32::from_rgb(33, 34, 44),
             red: egui::Color32::from_rgb(255, 85, 85),
             green: egui::Color32::from_rgb(80, 250, 123),
@@ -260,6 +278,8 @@ impl TerminalTheme {
             fg: egui::Color32::from_rgb(131, 148, 150),
             cursor: egui::Color32::from_rgb(131, 148, 150),
             selection: egui::Color32::from_rgba_premultiplied(7, 54, 66, 160),
+            scrollbar_thumb: egui::Color32::from_rgba_premultiplied(131, 148, 150, 200),
+            scrollbar_thumb_hover: egui::Color32::from_rgb(38, 139, 210),
             black: egui::Color32::from_rgb(7, 54, 66),
             red: egui::Color32::from_rgb(220, 50, 47),
             green: egui::Color32::from_rgb(133, 153, 0),
@@ -285,6 +305,8 @@ impl TerminalTheme {
             fg: egui::Color32::from_rgb(248, 248, 242),
             cursor: egui::Color32::from_rgb(248, 248, 240),
             selection: egui::Color32::from_rgba_premultiplied(73, 72, 62, 160),
+            scrollbar_thumb: egui::Color32::from_rgba_premultiplied(166, 226, 46, 175),
+            scrollbar_thumb_hover: egui::Color32::from_rgb(166, 226, 46),
             black: egui::Color32::from_rgb(39, 40, 34),
             red: egui::Color32::from_rgb(249, 38, 114),
             green: egui::Color32::from_rgb(166, 226, 46),
@@ -310,6 +332,8 @@ impl TerminalTheme {
             fg: egui::Color32::from_rgb(216, 222, 233),
             cursor: egui::Color32::from_rgb(216, 222, 233),
             selection: egui::Color32::from_rgba_premultiplied(67, 76, 94, 160),
+            scrollbar_thumb: egui::Color32::from_rgba_premultiplied(136, 192, 208, 180),
+            scrollbar_thumb_hover: egui::Color32::from_rgb(136, 192, 208),
             black: egui::Color32::from_rgb(59, 66, 82),
             red: egui::Color32::from_rgb(191, 97, 106),
             green: egui::Color32::from_rgb(163, 190, 140),
@@ -335,6 +359,8 @@ impl TerminalTheme {
             fg: egui::Color32::from_rgb(169, 177, 214),
             cursor: egui::Color32::from_rgb(169, 177, 214),
             selection: egui::Color32::from_rgba_premultiplied(54, 57, 79, 160),
+            scrollbar_thumb: egui::Color32::from_rgba_premultiplied(122, 162, 247, 180),
+            scrollbar_thumb_hover: egui::Color32::from_rgb(122, 162, 247),
             black: egui::Color32::from_rgb(26, 27, 38),
             red: egui::Color32::from_rgb(247, 118, 142),
             green: egui::Color32::from_rgb(158, 206, 106),
@@ -360,6 +386,8 @@ impl TerminalTheme {
             fg: egui::Color32::from_rgb(235, 219, 178),
             cursor: egui::Color32::from_rgb(235, 219, 178),
             selection: egui::Color32::from_rgba_premultiplied(60, 56, 54, 160),
+            scrollbar_thumb: egui::Color32::from_rgba_premultiplied(215, 153, 33, 185),
+            scrollbar_thumb_hover: egui::Color32::from_rgb(215, 153, 33),
             black: egui::Color32::from_rgb(40, 40, 40),
             red: egui::Color32::from_rgb(204, 36, 29),
             green: egui::Color32::from_rgb(152, 151, 26),
