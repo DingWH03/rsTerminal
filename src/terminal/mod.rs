@@ -79,7 +79,10 @@ mod tests {
         let mut term = Terminal::new(1, 20);
         term.write("文件.txt".as_bytes());
         let row: String = term.screen.cells[0].iter().map(|c| c.ch).collect();
-        assert!(row.contains('文'), "expected Chinese chars in buffer, got {row:?}");
+        assert!(
+            row.contains('文'),
+            "expected Chinese chars in buffer, got {row:?}"
+        );
         assert!(row.contains('件'));
     }
 
@@ -111,8 +114,14 @@ mod tests {
         term.write(typed);
         let cy = term.screen.cursor_y;
         let line = row_plaintext(&term, cy);
-        assert!(line.contains("dwh"), "prompt text missing on cursor row: {line:?}");
-        assert!(line.contains('a'), "typed char missing on cursor row: {line:?}");
+        assert!(
+            line.contains("dwh"),
+            "prompt text missing on cursor row: {line:?}"
+        );
+        assert!(
+            line.contains('a'),
+            "typed char missing on cursor row: {line:?}"
+        );
     }
 
     #[test]
@@ -184,7 +193,10 @@ mod tests {
         term.write(b"\x1b[?1049l");
         assert!(!term.screen.in_alternate_screen());
         let row: String = term.screen.cells[0].iter().map(|c| c.ch).collect();
-        assert!(row.contains('p'), "main prompt should return after vim: {row:?}");
+        assert!(
+            row.contains('p'),
+            "main prompt should return after vim: {row:?}"
+        );
     }
 
     #[test]
@@ -315,11 +327,17 @@ mod tests {
         term.write(b"\r\n");
         assert_eq!(term.screen.cursor_y, 1);
         term.write(b"\r\n");
-        assert_eq!(term.screen.cursor_y, 1, "second LF right after first should be skipped");
+        assert_eq!(
+            term.screen.cursor_y, 1,
+            "second LF right after first should be skipped"
+        );
         term.write(b"next");
         assert_eq!(term.screen.cursor_y, 1);
         term.write(b"\r\n");
-        assert_eq!(term.screen.cursor_y, 2, "LF after printed text should apply");
+        assert_eq!(
+            term.screen.cursor_y, 2,
+            "LF after printed text should apply"
+        );
     }
 
     #[test]
@@ -328,7 +346,10 @@ mod tests {
         let mut term = Terminal::new(4, 40);
         term.write(b"some old content that should disappear\n");
         term.write(b"more content on row 2\n");
-        assert_ne!(term.screen.cells[0][0].ch, ' ', "row 0 should have content before clear");
+        assert_ne!(
+            term.screen.cells[0][0].ch, ' ',
+            "row 0 should have content before clear"
+        );
 
         term.write(b"\x1b[H\x1b[2J");
         // After clear: all cells should be blank spaces
@@ -361,7 +382,10 @@ mod tests {
     fn crlf_is_single_newline() {
         let mut term = Terminal::new(3, 10);
         term.write(b"line1\r\nline2");
-        assert_eq!(term.screen.cursor_y, 1, "LF after CR should advance one row");
+        assert_eq!(
+            term.screen.cursor_y, 1,
+            "LF after CR should advance one row"
+        );
         assert_eq!(term.screen.cells[0][0].ch, 'l');
         assert_eq!(term.screen.cells[0][4].ch, '1');
         assert_eq!(term.screen.cells[1][0].ch, 'l');
@@ -418,6 +442,19 @@ mod tests {
         assert!(
             !row.contains("Get:48") && !row.contains("linux-image"),
             "trailing download text must be cleared, got {row:?}"
+        );
+    }
+
+    #[test]
+    fn zsh_syntax_highlight_patch_after_cr_cub_preserves_line() {
+        // zsh-syntax-highlighting: `\r` to column 0, CUF to a token, recolor in place.
+        let mut term = Terminal::new(1, 80);
+        term.write(b"import base64, io, subprocess, json");
+        term.write(b"\r\x1b[7C\x1b[1;33mbase64\x1b[0m");
+        let row = row_plaintext(&term, 0);
+        assert!(
+            row.contains("import") && row.contains("base64") && row.contains("subprocess"),
+            "patch highlight must not erase rest of line, got {row:?}"
         );
     }
 
@@ -576,13 +613,13 @@ mod tests {
         let mut term = Terminal::new(1, 60);
         term.write(b"\x1b[01;32mdwh@dwh-82sk\x1b[00m \x1b[01;34m~\x1b[00m \xc2\xbb ");
         term.write(b"vim ");
-        let bb_col = term
-            .screen
-            .cells[0]
+        let bb_col = term.screen.cells[0]
             .iter()
             .position(|c| c.ch == '\u{bb}')
             .expect("»");
-        term.write(b"\x1b[38;5;244m \xe8\x87\xaa\xe5\x8a\xa8\xe4\xbf\x9d\xe5\xad\x98\\ .xmi\x1b[39m");
+        term.write(
+            b"\x1b[38;5;244m \xe8\x87\xaa\xe5\x8a\xa8\xe4\xbf\x9d\xe5\xad\x98\\ .xmi\x1b[39m",
+        );
         assert_eq!(
             term.screen.cells[0][bb_col].ch,
             '\u{bb}',
@@ -600,25 +637,23 @@ mod tests {
         let mut term = Terminal::new(1, 40);
         term.write(b"\x1b[01;34m~\x1b[00m \xc2\xbb ");
         term.write(b"vim ");
-        let bb_col = term
-            .screen
-            .cells[0]
+        let bb_col = term.screen.cells[0]
             .iter()
             .position(|c| c.ch == '\u{bb}')
             .expect("» on line");
-        let v_col = term
-            .screen
-            .cells[0]
+        let v_col = term.screen.cells[0]
             .iter()
             .position(|c| c.ch == 'v')
             .expect("v on line");
         let cursor_before = term.screen.cursor_x;
         term.write(b"\x1b[38;5;244m");
-        assert_eq!(term.screen.cursor_x, cursor_before, "SGR must not move cursor");
+        assert_eq!(
+            term.screen.cursor_x, cursor_before,
+            "SGR must not move cursor"
+        );
         term.write(b" ");
         assert_eq!(
-            term.screen.cells[0][bb_col].ch,
-            '\u{bb}',
+            term.screen.cells[0][bb_col].ch, '\u{bb}',
             "» must remain after gray space"
         );
         assert_eq!(term.screen.cells[0][v_col].ch, 'v');
@@ -637,15 +672,11 @@ mod tests {
         let mut term = Terminal::new(1, 100);
         term.write(prompt);
         term.write(b"vim ");
-        let bb_col = term
-            .screen
-            .cells[0]
+        let bb_col = term.screen.cells[0]
             .iter()
             .position(|c| c.ch == '\u{bb}')
             .expect("»");
-        let v_col = term
-            .screen
-            .cells[0]
+        let v_col = term.screen.cells[0]
             .iter()
             .position(|c| c.ch == 'v')
             .expect("v");
@@ -659,10 +690,7 @@ mod tests {
             term.screen.cells[0][bb_col].ch == '\u{bb}',
             "» corrupted after redraw: {row:?}"
         );
-        assert!(
-            !row.contains("~ m"),
-            "stray m in prompt region: {row:?}"
-        );
+        assert!(!row.contains("~ m"), "stray m in prompt region: {row:?}");
         assert_eq!(term.screen.cells[0][v_col].ch, 'v');
         assert_eq!(term.screen.cursor_x, v_col + 4, "cursor after 'vim '");
     }
@@ -673,7 +701,9 @@ mod tests {
         term.write(b"\x1b[01;32mdwh@dwh-82sk\x1b[00m \x1b[01;34m~\x1b[00m \xc2\xbb ");
         term.write(b"vim ");
         let start = term.screen.cursor_x;
-        term.write(b"\x1b[38;5;244m \xe8\x87\xaa\xe5\x8a\xa8\xe4\xbf\x9d\xe5\xad\x98\\ .xmi\x1b[39m");
+        term.write(
+            b"\x1b[38;5;244m \xe8\x87\xaa\xe5\x8a\xa8\xe4\xbf\x9d\xe5\xad\x98\\ .xmi\x1b[39m",
+        );
         assert_eq!(
             term.screen.cursor_x,
             start + 14,
@@ -723,43 +753,43 @@ mod tests {
     fn btop_like_status_bar_on_first_row() {
         // Simulate btop's initialization sequence and UI drawing
         let mut term = Terminal::new(24, 80);
-        
+
         // Step 1: Enter alternate screen (btop uses CSI ?1049h)
         term.write(b"\x1b[?1049h");
         assert!(term.screen.in_alternate_screen(), "should be in alt screen");
-        
+
         // Step 2: btop typical initialization
-        term.write(b"\x1b[22;0;0t");  // save window title (ignored)
-        term.write(b"\x1b[?1l");      // reset cursor keys
-        term.write(b"\x1b(B");        // set G0 to US ASCII
-        term.write(b"\x1b[m");        // reset attributes
-        term.write(b"\x1b[?7h");      // set auto-wrap
-        term.write(b"\x1b[?12l");     // reset blink cursor
-        term.write(b"\x1b[?25l");     // hide cursor
-        term.write(b"\x1b[?1000l");   // disable mouse
-        term.write(b"\x1b[?1002l");   // disable mouse drag
-        term.write(b"\x1b[?1006l");   // disable SGR mouse
-        
+        term.write(b"\x1b[22;0;0t"); // save window title (ignored)
+        term.write(b"\x1b[?1l"); // reset cursor keys
+        term.write(b"\x1b(B"); // set G0 to US ASCII
+        term.write(b"\x1b[m"); // reset attributes
+        term.write(b"\x1b[?7h"); // set auto-wrap
+        term.write(b"\x1b[?12l"); // reset blink cursor
+        term.write(b"\x1b[?25l"); // hide cursor
+        term.write(b"\x1b[?1000l"); // disable mouse
+        term.write(b"\x1b[?1002l"); // disable mouse drag
+        term.write(b"\x1b[?1006l"); // disable SGR mouse
+
         // Step 3: Clear screen and home cursor
-        term.write(b"\x1b[2J");       // clear screen
-        term.write(b"\x1b[H");        // home cursor
-        
+        term.write(b"\x1b[2J"); // clear screen
+        term.write(b"\x1b[H"); // home cursor
+
         // Step 4: Draw first row (status bar with box drawing and battery)
         // btop typically draws with colors, but we test basic positioning
-        term.write(b"\x1b[1;1H");     // CUP to row 1, col 1
-        term.write(b"\x1b[44m");      // set blue background
-        term.write(b"\x1b[37m");      // set white foreground
-        term.write(b"\xe2\x94\x8c");  // ┌ (U+250C)
-        term.write(b"\xe2\x94\x80");  // ─ (U+2500)
+        term.write(b"\x1b[1;1H"); // CUP to row 1, col 1
+        term.write(b"\x1b[44m"); // set blue background
+        term.write(b"\x1b[37m"); // set white foreground
+        term.write(b"\xe2\x94\x8c"); // ┌ (U+250C)
+        term.write(b"\xe2\x94\x80"); // ─ (U+2500)
         term.write(b" BAT 100% ");
-        term.write(b"\xe2\x94\x80");  // ─
-        term.write(b"\xe2\x94\x90");  // ┐ (U+2510)
-        term.write(b"\x1b[m");        // reset
-        
+        term.write(b"\xe2\x94\x80"); // ─
+        term.write(b"\xe2\x94\x90"); // ┐ (U+2510)
+        term.write(b"\x1b[m"); // reset
+
         // Step 5: Draw second row (CPU bar)
-        term.write(b"\x1b[2;1H");     // CUP to row 2, col 1
-        term.write(b"CPU \xe2\x96\x88\xe2\x96\x88\xe2\x96\x88 50%");  // CPU ███ 50%
-        
+        term.write(b"\x1b[2;1H"); // CUP to row 2, col 1
+        term.write(b"CPU \xe2\x96\x88\xe2\x96\x88\xe2\x96\x88 50%"); // CPU ███ 50%
+
         // Verify first row content
         let row0: String = term.screen.cells[0].iter().map(|c| c.ch).collect();
         let row0_trimmed = row0.trim_end().to_string();
@@ -775,7 +805,7 @@ mod tests {
             row0_trimmed.contains('\u{2510}'),
             "row 0 should end with ┐, got row0={row0:?}"
         );
-        
+
         // Verify second row content
         let row1: String = term.screen.cells[1].iter().map(|c| c.ch).collect();
         let row1_trimmed = row1.trim_end().to_string();
@@ -793,25 +823,25 @@ mod tests {
     fn btop_first_row_survives_resize() {
         // Simulate the exact flow: create terminal, resize, run btop-like output
         let mut term = Terminal::new(24, 80);
-        
+
         // Simulate first frame resize (24x80 -> 35x100)
         term.resize(35, 100);
         assert_eq!(term.screen.rows, 35);
         assert_eq!(term.screen.cols, 100);
-        
+
         // Now run btop
-        term.write(b"\x1b[?1049h");  // Enter alt screen
+        term.write(b"\x1b[?1049h"); // Enter alt screen
         assert!(term.screen.in_alternate_screen());
         assert_eq!(term.screen.rows, 35);
         assert_eq!(term.screen.cols, 100);
-        
-        term.write(b"\x1b[?25l");    // Hide cursor
-        term.write(b"\x1b[0m");      // Reset
-        term.write(b"\x1b[38;2;200;200;200m");  // Light gray fg
-        term.write(b"\x1b[48;2;0;0;0m");        // Black bg
-        
+
+        term.write(b"\x1b[?25l"); // Hide cursor
+        term.write(b"\x1b[0m"); // Reset
+        term.write(b"\x1b[38;2;200;200;200m"); // Light gray fg
+        term.write(b"\x1b[48;2;0;0;0m"); // Black bg
+
         // Draw top border row with ─ and corners
-        term.write(b"\x1b[1;1f");    // Position (1,1)
+        term.write(b"\x1b[1;1f"); // Position (1,1)
         term.write(b"\xe2\x95\xad"); // ╭ (U+256D)
         for _ in 0..30 {
             term.write(b"\xe2\x94\x80"); // ─
@@ -821,14 +851,14 @@ mod tests {
             term.write(b"\xe2\x94\x80"); // ─
         }
         term.write(b"\xe2\x95\xae"); // ╮ (U+256E)
-        
+
         // Draw left box side and text on row 1
-        term.write(b"\x1b[2;1f");    // Position (2,1)
+        term.write(b"\x1b[2;1f"); // Position (2,1)
         term.write(b"\xe2\x94\x82 \xe2\x96\x88\xe2\x96\x88 50% \xe2\x94\x82");
-        
+
         // Now resize while in alt screen (simulating window resize)
         term.screen.resize(40, 120);
-        
+
         // After resize, old alt-screen content is preserved (not cleared) until
         // the app redraws after SIGWINCH.
         let row0: String = term.screen.cells[0].iter().map(|c| c.ch).collect();
@@ -836,19 +866,19 @@ mod tests {
             !row0.trim().is_empty(),
             "alt screen should preserve content after resize until app redraws, got row0={row0:?}"
         );
-        
+
         // Now simulate btop repaint after SIGWINCH
-        term.write(b"\x1b[1;1f");    // Re-draw at new size
+        term.write(b"\x1b[1;1f"); // Re-draw at new size
         term.write(b"\xe2\x95\xad BAT 100% \xe2\x95\xae");
         term.write(b"\x1b[2;1f");
         term.write(b"CPU \xe2\x96\x88\xe2\x96\x88 50%");
-        
+
         let row0: String = term.screen.cells[0].iter().map(|c| c.ch).collect();
         assert!(
             row0.contains("BAT"),
             "row 0 should contain BAT after repaint, got row0={row0:?}"
         );
-        
+
         let row1: String = term.screen.cells[1].iter().map(|c| c.ch).collect();
         assert!(
             row1.contains("CPU"),
@@ -868,9 +898,7 @@ mod tests {
         assert!(term.screen.in_alternate_screen());
 
         for row in 0..5 {
-            let cells: String = term.screen.cells[row].iter()
-                .map(|c| c.ch)
-                .collect();
+            let cells: String = term.screen.cells[row].iter().map(|c| c.ch).collect();
             eprintln!("ROW{row}: [{:?}]", cells.trim_end());
         }
 
@@ -906,8 +934,14 @@ mod tests {
             .filter_map(|i| term.screen.scrollback_row(i))
             .flat_map(|row| row.iter().map(|c| c.ch))
             .collect();
-        assert!(all_text.contains("AAAAA"), "should contain start, got {all_text:?}");
-        assert!(all_text.contains("MMMMM"), "should contain end, got {all_text:?}");
+        assert!(
+            all_text.contains("AAAAA"),
+            "should contain start, got {all_text:?}"
+        );
+        assert!(
+            all_text.contains("MMMMM"),
+            "should contain end, got {all_text:?}"
+        );
     }
 
     #[test]
@@ -930,8 +964,14 @@ mod tests {
             .filter_map(|i| term.screen.scrollback_row(i))
             .flat_map(|row| row.iter().map(|c| c.ch))
             .collect();
-        assert!(new_text.contains("AAAA"), "{new_text:?} should contain AAAA");
-        assert!(new_text.contains("MMMM"), "{new_text:?} should contain MMMM");
+        assert!(
+            new_text.contains("AAAA"),
+            "{new_text:?} should contain AAAA"
+        );
+        assert!(
+            new_text.contains("MMMM"),
+            "{new_text:?} should contain MMMM"
+        );
     }
 
     #[test]
@@ -949,8 +989,14 @@ mod tests {
         //   segment 0  cols 0‑9   "ABCDEFGHIJ"
         //   segment 1  cols 0‑9   "KLMNOPQRST"
         //   segment 2  cols 0‑5   "UVWXYZ"      ← cursor after Z = display col 6
-        assert_eq!(term.screen.cursor_x, 6, "cursor at display col 6 in last segment");
-        assert_eq!(term.screen.cursor_y, 2, "cursor on row 2 (third visual segment of the reflowed logical line)");
+        assert_eq!(
+            term.screen.cursor_x, 6,
+            "cursor at display col 6 in last segment"
+        );
+        assert_eq!(
+            term.screen.cursor_y, 2,
+            "cursor on row 2 (third visual segment of the reflowed logical line)"
+        );
     }
 
     #[test]
@@ -978,8 +1024,14 @@ mod tests {
             .filter_map(|i| term.screen.scrollback_row(i))
             .flat_map(|row| row.iter().map(|c| c.ch))
             .collect();
-        assert!(all_text.contains("FIRST"), "FIRST should be in scrollback, got {all_text:?}");
-        assert!(all_text.contains("SECOND"), "SECOND should be in scrollback, got {all_text:?}");
+        assert!(
+            all_text.contains("FIRST"),
+            "FIRST should be in scrollback, got {all_text:?}"
+        );
+        assert!(
+            all_text.contains("SECOND"),
+            "SECOND should be in scrollback, got {all_text:?}"
+        );
     }
 
     #[test]
@@ -1006,7 +1058,8 @@ mod tests {
         term.resize(5, 5);
         term.resize(5, 6);
         assert_eq!(
-            row0_text(&term), "文件 ",
+            row0_text(&term),
+            "文件 ",
             "no extra space after 1 shrink/widen cycle"
         );
 
@@ -1016,10 +1069,89 @@ mod tests {
             term.resize(5, 6);
         }
         assert_eq!(
-            row0_text(&term), "文件 ",
+            row0_text(&term),
+            "文件 ",
             "no extra space after 6 shrink/widen cycles"
         );
 
-        assert!(term.screen.cursor_y < term.screen.rows, "cursor inside screen");
+        assert!(
+            term.screen.cursor_y < term.screen.rows,
+            "cursor inside screen"
+        );
+    }
+
+    #[test]
+    fn zsh_multiline_heredoc_redraw_preserves_all_lines() {
+        // Simulate zsh drawing initial prompt: \r\n%<spaces>\r \r\r<prompt>
+        let prompt = b"\r\n%                                                                                                                      \r \r\r\x1b[01;32mdwh@dwh-82sk\x1b[00m \x1b[01;34m~\x1b[00m \xc2\xbb ";
+        let mut term = Terminal::new(10, 80);
+        term.write(prompt);
+        let prompt_row = term.screen.cursor_y;
+
+        // Simulate zsh redrawing a multi-line heredoc after up-arrow:
+        // ESC[10D (CUB 10) + first line, then CR CR LF between each subsequent line
+        let redraw = concat!(
+            "\x1b[10D",                                   // CUB 10: move cursor back past "echo hello"
+            "source /tmp/activate && python3 << 'PYEOF'", // overwrite first line
+            "\r\r\n",                                     // CR CR LF → go to next line
+            "import base64",                              // line 2
+            "\x1b[K",                                     // EL: clear rest of line
+            "\r\r\n",                                     // CR CR LF
+            "import json",                                // line 3
+            "\x1b[K",
+            "\r\r\n",         // CR CR LF
+            "print('hello')", // line 4
+            "\x1b[K",
+        );
+        term.write(redraw.as_bytes());
+
+        // Each CR CR LF should create a real newline (not be suppressed).
+        // After redraw, cursor should be on a row containing "import json" or "print".
+        let cy = term.screen.cursor_y;
+        assert!(
+            cy > prompt_row,
+            "cursor should have advanced past prompt row {prompt_row}, got {cy}"
+        );
+
+        // Verify that the heredoc lines are on separate rows.
+        let row0 = row_plaintext(&term, prompt_row);
+        assert!(
+            row0.contains("source"),
+            "first line should contain 'source' on row {prompt_row}, got {row0:?}"
+        );
+        let row1 = row_plaintext(&term, prompt_row + 1);
+        assert!(
+            row1.contains("import base64"),
+            "second line should contain 'import base64' on row {}, got {row1:?}",
+            prompt_row + 1
+        );
+        let row2 = row_plaintext(&term, prompt_row + 2);
+        assert!(
+            row2.contains("import json"),
+            "third line should contain 'import json' on row {}, got {row2:?}",
+            prompt_row + 2
+        );
+    }
+
+    #[test]
+    fn zsh_consecutive_cr_cr_lf_advances_on_blank_rows() {
+        // After the first `\r\r\n`, the cursor sits at col 0 on a blank row.  zsh repeats
+        // `\r\r\n` for each additional line in a multiline history entry; those LFs must
+        // not be swallowed by the blank-line skip meant for lone `\r\n`.
+        let prompt = b"\r\n%                                                                                                                      \r \r\r\x1b[01;32mdwh@dwh-82sk\x1b[00m \x1b[01;34m~\x1b[00m \xc2\xbb ";
+        let mut term = Terminal::new(10, 80);
+        term.write(prompt);
+        let start_y = term.screen.cursor_y;
+
+        for i in 0..4 {
+            term.write(b"\r\r\n");
+            assert_eq!(
+                term.screen.cursor_y,
+                start_y + i + 1,
+                "after {} consecutive \\r\\r\\n, cursor should be on row {}",
+                i + 1,
+                start_y + i + 1
+            );
+        }
     }
 }

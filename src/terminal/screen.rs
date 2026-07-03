@@ -510,6 +510,9 @@ pub struct Screen {
     /// Deferred `\r` (applied on next output unless followed immediately by `\n`).
     pending_cr: bool,
 
+    /// Second `\r` before `\n` without intervening output (`\r\r\n`, zsh multiline redraw).
+    pending_double_cr: bool,
+
     /// Skip the LF in a second consecutive `\r\n` (zsh: `\r\n\r\n` → one line break).
     suppress_extra_crlf_newline: bool,
 
@@ -592,6 +595,7 @@ impl Screen {
             mouse_sgr_encoding: false,
             title: String::new(),
             pending_cr: false,
+            pending_double_cr: false,
             suppress_extra_crlf_newline: false,
             in_zsh_line_pad: false,
             postdisplay_leading_space: false,
@@ -719,9 +723,10 @@ impl Screen {
     }
 
     fn row_is_blank(&self, y: usize) -> bool {
-        self.cells
-            .get(y)
-            .is_some_and(|row| row.iter().all(|c| (c.ch == ' ' || c.ch == '\0') && !c.wide_continuation))
+        self.cells.get(y).is_some_and(|row| {
+            row.iter()
+                .all(|c| (c.ch == ' ' || c.ch == '\0') && !c.wide_continuation)
+        })
     }
 
     /// zsh preprompt: `%` then spaces until `\r`, used to clear the line before drawing the prompt.
@@ -804,13 +809,18 @@ impl Screen {
 
     /// Handle LF from output or from the `\n` in `\r\n`.
     /// Only `\r\n\r\n` collapses to a single newline; bare `\n` from program output is never swallowed.
-    fn newline_from_lf(&mut self, preceded_by_cr: bool) {
+    ///
+    /// zsh multiline linefeed uses `\r\r\n` (two CRs before LF).  The blank-line skip for a
+    /// lone `\r\n` must not apply to `\r\r\n`, otherwise consecutive `\r\r\n` after the first
+    /// land on a blank row, the LF is swallowed, and zsh's cursor row diverges from ours
+    /// (history completion / heredoc redraw then shows stray prompts and garbled text).
+    fn newline_from_lf(&mut self, preceded_by_cr: bool, double_cr: bool) {
         if self.in_alternate_screen() {
             self.newline();
             return;
         }
         if preceded_by_cr {
-            if self.suppress_extra_crlf_newline {
+            if self.suppress_extra_crlf_newline && !double_cr {
                 self.suppress_extra_crlf_newline = false;
                 return;
             }
@@ -819,11 +829,15 @@ impl Screen {
             // However, after `\x1b[H\x1b[2J` (clear), cursor is at (0,0) and row 0 is blank,
             // but the shell `\r\n` before the prompt should advance past the cleared area,
             // so we check cursor_y > 0 to distinguish natural scrolling from explicit clear.
-            if self.cursor_x == 0 && self.cursor_y > 0 && self.row_is_blank(self.cursor_y) {
+            if !double_cr
+                && self.cursor_x == 0
+                && self.cursor_y > 0
+                && self.row_is_blank(self.cursor_y)
+            {
                 return;
             }
             self.newline();
-            self.suppress_extra_crlf_newline = true;
+            self.suppress_extra_crlf_newline = !double_cr;
         } else {
             self.newline();
             self.suppress_extra_crlf_newline = false;
@@ -833,6 +847,7 @@ impl Screen {
     /// IND / NEL and similar — not part of zsh's double-`\r\n` quirk.
     fn maybe_newline(&mut self) {
         self.pending_cr = false;
+        self.pending_double_cr = false;
         if self.in_alternate_screen() {
             self.newline();
             return;
@@ -857,6 +872,7 @@ impl Screen {
             self.origin_mode = false;
             self.current_attrs = self.default_attrs;
             self.pending_cr = false;
+            self.pending_double_cr = false;
             self.pending_wrap = false;
             self.suppress_extra_crlf_newline = false;
             self.in_zsh_line_pad = false;
@@ -891,6 +907,7 @@ impl Screen {
         self.origin_mode = false;
         self.current_attrs = self.default_attrs;
         self.pending_cr = false;
+        self.pending_double_cr = false;
         self.pending_wrap = false;
         self.suppress_extra_crlf_newline = false;
         self.in_zsh_line_pad = false;
@@ -914,23 +931,35 @@ impl Screen {
             self.saved_cursor_y = main.saved_cursor_y;
         }
         self.pending_cr = false;
+        self.pending_double_cr = false;
         self.suppress_extra_crlf_newline = false;
         self.in_zsh_line_pad = false;
     }
 
-    fn flush_pending_cr(&mut self) {
+    /// Apply a deferred `\r`.  When `clear_row_on_direct_print` is true (plain output
+    /// immediately after `\r`), clear the row for apt/wget-style progress overwrites.
+    /// When false (CSI/BS between `\r` and the next output), only move to column 0 so
+    /// zsh-syntax-highlighting can patch individual tokens without erasing the rest of
+    /// the line.
+    fn flush_pending_cr(&mut self, clear_row_on_direct_print: bool) {
         if self.pending_cr {
             if self.in_zsh_line_pad || self.row_is_zsh_clear_pad(self.cursor_y) {
                 self.clear_row(self.cursor_y);
                 self.in_zsh_line_pad = false;
-            } else if !self.in_alternate_screen() {
-                // Shell progress bars (apt, wget): full-line overwrite after '\r'.
-                // Alternate-screen apps (htop, vim) often '\r' then patch columns via CUP;
-                // clearing the row would erase cells they do not rewrite.
-                self.clear_row(self.cursor_y);
+            } else if clear_row_on_direct_print && !self.in_alternate_screen() {
+                // Shell progress bars (apt, wget): `\r` then rewrite from column 0.
+                // Clear cells but preserve the `wrapped` flag so that CUB
+                // reverse-wrap can still cross back to the previous line.
+                if let Some(row) = self.cells.get_mut(self.cursor_y) {
+                    row.resize(self.cols, Cell::default());
+                    for cell in row.iter_mut() {
+                        *cell = Cell::default();
+                    }
+                }
             }
             self.cursor_x = 0;
             self.pending_cr = false;
+            self.pending_double_cr = false;
             self.pending_wrap = false;
         }
     }
@@ -976,8 +1005,8 @@ impl Screen {
 
         for (r, row) in old_cells.iter().take(old_active_rows).enumerate() {
             let is_cont = old_wrapped.get(r).copied().unwrap_or(false);
-            let next_is_cont = r + 1 < old_active_rows
-                && old_wrapped.get(r + 1).copied().unwrap_or(false);
+            let next_is_cont =
+                r + 1 < old_active_rows && old_wrapped.get(r + 1).copied().unwrap_or(false);
             // If the next row is a soft-wrap continuation, this row is an
             // interior segment of the same logical line.  Preserve trailing
             // spaces at the segment boundary; they may be real column padding.
@@ -1051,7 +1080,8 @@ impl Screen {
         for i in 0..visible_start {
             let (li, segment) = &visual_rows[i];
             let line = &logical_lines[*li];
-            let cells = line.cells[segment.start.min(line.cells.len())..segment.end.min(line.cells.len())]
+            let cells = line.cells
+                [segment.start.min(line.cells.len())..segment.end.min(line.cells.len())]
                 .to_vec();
             if segment.wrapped {
                 self.extend_last_logical_with_visuals(cells);
@@ -1215,7 +1245,12 @@ impl Screen {
         row_cells
     }
 
-    fn resize_grid_exact(cells: &[Vec<Cell>], old_rows: usize, rows: usize, cols: usize) -> Vec<Vec<Cell>> {
+    fn resize_grid_exact(
+        cells: &[Vec<Cell>],
+        old_rows: usize,
+        rows: usize,
+        cols: usize,
+    ) -> Vec<Vec<Cell>> {
         (0..rows)
             .map(|r| {
                 if r < old_rows {
@@ -1228,7 +1263,12 @@ impl Screen {
     }
 
     #[allow(dead_code)]
-    fn resize_grid_keep_tails(cells: &[Vec<Cell>], old_rows: usize, rows: usize, cols: usize) -> Vec<Vec<Cell>> {
+    fn resize_grid_keep_tails(
+        cells: &[Vec<Cell>],
+        old_rows: usize,
+        rows: usize,
+        cols: usize,
+    ) -> Vec<Vec<Cell>> {
         (0..rows)
             .map(|r| {
                 if r < old_rows {
@@ -1277,7 +1317,6 @@ impl Screen {
 
         self.cursor_y = self.cursor_y.min(rows.saturating_sub(1));
         self.cursor_x = self.cursor_x.min(cols.saturating_sub(1));
-
         self.scroll_top = 0;
         self.scroll_bottom = rows.saturating_sub(1);
 
@@ -1363,20 +1402,26 @@ impl Screen {
 
         let attrs = self.current_attrs;
 
-        if self.postdisplay_leading_space && c == ' ' && width == 1 {
-            self.postdisplay_leading_space = false;
-            if self.cursor_x >= self.cols {
+        if self.postdisplay_leading_space {
+            if c == ' ' && width == 1 {
+                self.postdisplay_leading_space = false;
+                if self.cursor_x >= self.cols {
+                    return;
+                }
+                let row = self.cursor_y;
+                let col = self.cursor_x;
+                self.clear_wide_trailer(row, col);
+                let mut cell = attrs;
+                cell.ch = ' ';
+                cell.wide_continuation = false;
+                self.cells[row][col] = cell;
+                self.pending_wrap = false;
                 return;
             }
-            let row = self.cursor_y;
-            let col = self.cursor_x;
-            self.clear_wide_trailer(row, col);
-            let mut cell = attrs;
-            cell.ch = ' ';
-            cell.wide_continuation = false;
-            self.cells[row][col] = cell;
-            self.pending_wrap = false;
-            return;
+            // First char after suggestion-like SGR is not a space:
+            // this is not POSTDISPLAY — likely syntax highlighting.
+            // Clear the flag immediately so later spaces work normally.
+            self.postdisplay_leading_space = false;
         }
 
         if !self.ensure_cursor_fits(width) {
@@ -1479,8 +1524,9 @@ impl Screen {
                 col += 1;
                 continue;
             }
-            display_col += cell_display_width(row, col).max(1);
-            col += cell_display_width(row, col).max(1);
+            let w = cell_display_width(row, col).max(1);
+            display_col += w;
+            col += w;
         }
         display_col
     }
@@ -1514,14 +1560,13 @@ impl Screen {
     }
 
     fn cursor_step_right(&mut self, n: usize) {
-        let target = self.cursor_display_col().saturating_add(n);
+        let cur = self.cursor_display_col();
+        let target = cur.saturating_add(n);
         self.set_cursor_display_col(target);
     }
 
     fn normalize_cursor_x(&mut self) {
-        if self.cursor_x < self.cols
-            && self.cells[self.cursor_y][self.cursor_x].wide_continuation
-        {
+        if self.cursor_x < self.cols && self.cells[self.cursor_y][self.cursor_x].wide_continuation {
             self.cursor_x = (self.cursor_x + 1).min(self.cols.saturating_sub(1));
         }
     }
@@ -1697,7 +1742,10 @@ impl Screen {
         }
         let sb = self.visual_cache.len();
         if virtual_line < sb {
-            self.visual_wrapped.get(virtual_line).copied().unwrap_or(false)
+            self.visual_wrapped
+                .get(virtual_line)
+                .copied()
+                .unwrap_or(false)
         } else {
             self.wrapped
                 .get(virtual_line - sb)
@@ -1718,9 +1766,7 @@ impl Screen {
         if virtual_line < sb {
             self.visual_cache.get(virtual_line).map(|v| v.as_slice())
         } else if virtual_line < sb + self.rows {
-            self.cells
-                .get(virtual_line - sb)
-                .map(|r| r.as_slice())
+            self.cells.get(virtual_line - sb).map(|r| r.as_slice())
         } else {
             None
         }
@@ -1761,7 +1807,7 @@ impl Screen {
 
 impl TermHandler for Screen {
     fn print(&mut self, c: char) {
-        self.flush_pending_cr();
+        self.flush_pending_cr(true);
         self.suppress_extra_crlf_newline = false;
         if self.in_zsh_line_pad && c != ' ' {
             self.in_zsh_line_pad = false;
@@ -1782,35 +1828,39 @@ impl TermHandler for Screen {
 
     fn execute(&mut self, byte: u8) {
         match byte {
-            0x07 => {}                           // BEL - ignore
+            0x07 => {} // BEL - ignore
             0x08 => {
-                self.flush_pending_cr();
+                self.flush_pending_cr(false);
                 self.backspace();
             }
             0x7F => {
-                self.flush_pending_cr();
+                self.flush_pending_cr(false);
                 self.erase_left();
             }
             0x09 => {
-                self.flush_pending_cr();
+                self.flush_pending_cr(false);
                 self.advance_tabs();
             }
             0x0A | 0x0B | 0x0C => {
                 let preceded_by_cr = self.pending_cr;
+                let double_cr = self.pending_double_cr;
                 self.pending_cr = false;
+                self.pending_double_cr = false;
                 self.pending_wrap = false;
-                self.newline_from_lf(preceded_by_cr);
+                self.newline_from_lf(preceded_by_cr, double_cr);
             }
             0x0D => {
                 self.pending_wrap = false;
+                self.pending_double_cr = self.pending_cr;
                 self.pending_cr = true;
+                self.suppress_extra_crlf_newline = false;
             }
             0x0E => {
-                self.flush_pending_cr();
+                self.flush_pending_cr(false);
                 self.charset = 1;
             }
             0x0F => {
-                self.flush_pending_cr();
+                self.flush_pending_cr(false);
                 self.charset = 0;
             }
             _ => {}
@@ -1818,8 +1868,7 @@ impl TermHandler for Screen {
     }
 
     fn esc_dispatch(&mut self, intermediates: &[u8], final_byte: u8) {
-        self.flush_pending_cr();
-        // SS3 (ESC O x): same cursor motion as CSI ESC [ x
+        self.flush_pending_cr(false); // SS3 (ESC O x): same cursor motion as CSI ESC [ x
         if intermediates == [b'O'] {
             match final_byte {
                 b'A' | b'B' | b'C' | b'D' => {
@@ -1902,9 +1951,12 @@ impl TermHandler for Screen {
     }
 
     fn csi_dispatch(&mut self, params: &[i64], intermediates: &[u8], final_byte: u8) {
-        self.flush_pending_cr();
+        self.flush_pending_cr(false);
         let def = |i: usize, d: i64| -> i64 {
-            params.get(i).map(|&v| if v == 0 { d } else { v }).unwrap_or(d)
+            params
+                .get(i)
+                .map(|&v| if v == 0 { d } else { v })
+                .unwrap_or(d)
         };
 
         match final_byte {
@@ -1941,7 +1993,22 @@ impl TermHandler for Screen {
                     self.cursor_x = self.cursor_x.saturating_sub(n);
                     self.normalize_cursor_x();
                 } else {
-                    self.cursor_step_left(n);
+                    // On main screen, support reverse-wrap: when cursor is at
+                    // col 0 on a soft-wrapped line, CUB moves to the previous line.
+                    let mut remaining = n;
+                    while remaining > 0
+                        && self.cursor_y > 0
+                        && self.cursor_x == 0
+                        && self.wrapped.get(self.cursor_y).copied().unwrap_or(false)
+                    {
+                        self.cursor_y -= 1;
+                        self.cursor_x = self.cols.saturating_sub(1);
+                        self.normalize_cursor_x();
+                        remaining -= 1;
+                    }
+                    if remaining > 0 {
+                        self.cursor_step_left(remaining);
+                    }
                 }
             }
             b'E' => {
@@ -1987,7 +2054,12 @@ impl TermHandler for Screen {
                         for y in 0..self.cursor_y {
                             self.erase_cells_in_row(y, 0, self.cols, false);
                         }
-                        self.erase_cells_in_row(self.cursor_y, 0, self.cursor_x.saturating_add(1), false);
+                        self.erase_cells_in_row(
+                            self.cursor_y,
+                            0,
+                            self.cursor_x.saturating_add(1),
+                            false,
+                        );
                     }
                     2 => {
                         // Erase the visible display — reset to default rendition.
@@ -2168,14 +2240,12 @@ impl TermHandler for Screen {
                 match n {
                     5 => {
                         // Operating status - report OK
-                        self.outgoing
-                            .push(TermEvent::Response(b"\x1b[0n".to_vec()));
+                        self.outgoing.push(TermEvent::Response(b"\x1b[0n".to_vec()));
                     }
                     6 => {
                         // Cursor position report
                         let resp = format!("\x1b[{};{}R", self.cursor_y + 1, self.cursor_x + 1);
-                        self.outgoing
-                            .push(TermEvent::Response(resp.into_bytes()));
+                        self.outgoing.push(TermEvent::Response(resp.into_bytes()));
                     }
                     _ => {}
                 }
@@ -2268,13 +2338,11 @@ impl TermHandler for Screen {
                         let px_h = (self.rows * 16).max(1);
                         let px_w = (self.cols * 8).max(1);
                         let resp = format!("\x1b[4;{px_h};{px_w}t");
-                        self.outgoing
-                            .push(TermEvent::Response(resp.into_bytes()));
+                        self.outgoing.push(TermEvent::Response(resp.into_bytes()));
                     }
                     18 => {
                         let resp = format!("\x1b[8;{};{}t", self.rows, self.cols);
-                        self.outgoing
-                            .push(TermEvent::Response(resp.into_bytes()));
+                        self.outgoing.push(TermEvent::Response(resp.into_bytes()));
                     }
                     22 | 23 => {} // save/restore window title on stack (smcup/rmcup)
                     _ => {}
@@ -2285,12 +2353,12 @@ impl TermHandler for Screen {
     }
 
     fn dcs_dispatch(&mut self, data: &str) {
-        self.flush_pending_cr();
+        self.flush_pending_cr(false);
         self.handle_xtgettcap(data);
     }
 
     fn osc_dispatch(&mut self, data: &str) {
-        self.flush_pending_cr();
+        self.flush_pending_cr(false);
         if let Some(rest) = data.strip_prefix("0;") {
             self.title = rest.to_string();
         } else if let Some(rest) = data.strip_prefix("2;") {

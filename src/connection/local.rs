@@ -5,8 +5,8 @@ use std::time::Duration;
 use portable_pty::{CommandBuilder, MasterPty, PtySize};
 
 use crate::connection::{
-    emit_conn_data, pty_burst, winchg, ConnIn, ConnOut, ConnectionHandle, ConnectionState,
-    RepaintNotifier,
+    ConnIn, ConnOut, ConnectionHandle, ConnectionState, RepaintNotifier, emit_conn_data, pty_burst,
+    winchg,
 };
 use crate::settings::Profile;
 use crate::storage::types::SavedConnection;
@@ -28,19 +28,36 @@ fn signal_winch_if_needed(master: &dyn MasterPty, shell_pid: Option<u32>) {
     }
 }
 
-fn apply_pty_resize(
-    master: &dyn MasterPty,
-    rows: u16,
-    cols: u16,
-    shell_pid: Option<u32>,
-) {
+fn apply_pty_resize(master: &dyn MasterPty, rows: u16, cols: u16, shell_pid: Option<u32>) {
+    let _ = master.resize(pty_size(rows, cols));
+    signal_winch_if_needed(master, shell_pid);
     // Try TIOCSWINSZ first – the kernel will broadcast SIGWINCH to the foreground
     // process group on success.  Always send our own SIGWINCH as well because:
     //   - Some kernels/pty layers skip the automatic SIGWINCH when the size is the
     //     same (harmless extra signal).
     //   - portable-pty might fail TIOCSWINSZ (e.g. Windows ConPTY fallback).
-    let _ = master.resize(pty_size(rows, cols));
-    signal_winch_if_needed(master, shell_pid);
+    // Re-deliver SIGWINCH after a short delay: the shell may not have installed
+    // its handler when the first signal arrives during early startup.
+    #[cfg(unix)]
+    {
+        let master_fd = master.as_raw_fd();
+        let shell = shell_pid;
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            if let Some(fd) = master_fd {
+                if fd >= 0 {
+                    unsafe {
+                        let pgid = libc::tcgetpgrp(fd);
+                        if pgid > 0 {
+                            libc::kill(-pgid, libc::SIGWINCH);
+                        } else if let Some(pid) = shell {
+                            libc::kill(pid as i32, libc::SIGWINCH);
+                        }
+                    }
+                }
+            }
+        });
+    }
 }
 
 pub fn connect_local(
@@ -62,6 +79,10 @@ pub fn connect_local(
     let pair = sys
         .openpty(pty_size(rows, cols))
         .map_err(|e| format!("Failed to open PTY: {e}"))?;
+
+    // Ensure the PTY has the correct size before spawning the shell.
+    // Some setups lose the initial TIOCSWINSZ, so apply it explicitly.
+    let _ = pair.master.resize(pty_size(rows, cols));
 
     let mut cmd = CommandBuilder::new(&shell);
     // Login/interactive shell (Unix). Windows uses ConPTY + cmd/powershell without -l.
@@ -109,20 +130,21 @@ pub fn connect_local(
         loop {
             match reader.read(&mut buf) {
                 Ok(0) => {
-                    let _ = reader_from_tx
-                        .send(ConnIn::StateChanged(ConnectionState::Closed));
+                    let _ = reader_from_tx.send(ConnIn::StateChanged(ConnectionState::Closed));
                     return;
                 }
                 Ok(n) => {
                     let mut chunk = buf[..n].to_vec();
                     #[cfg(unix)]
                     if let Some(fd) = poll_fd {
-                        let _ = pty_burst::append_until_idle(fd, &mut *reader, &mut buf, &mut chunk);
+                        let _ =
+                            pty_burst::append_until_idle(fd, &mut *reader, &mut buf, &mut chunk);
                     }
                     emit_conn_data(&reader_from_tx, &reader_repaint, chunk);
                 }
                 Err(e) => {
-                    let _ = reader_from_tx.send(ConnIn::StateChanged(ConnectionState::Error(e.to_string())));
+                    let _ = reader_from_tx
+                        .send(ConnIn::StateChanged(ConnectionState::Error(e.to_string())));
                     return;
                 }
             }
@@ -160,8 +182,7 @@ pub fn connect_local(
                     signal_winch_if_needed(&*master, shell_pid);
                 }
                 Ok(ConnOut::Close) => {
-                    let _ = writer_from_tx
-                        .send(ConnIn::StateChanged(ConnectionState::Closed));
+                    let _ = writer_from_tx.send(ConnIn::StateChanged(ConnectionState::Closed));
                     return;
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
@@ -170,9 +191,13 @@ pub fn connect_local(
         }
     });
 
-    Ok(
-        ConnectionHandle::new(to_conn_tx, from_conn_rx, reader_thread, writer_thread, repaint)
-            .with_pty_child(child)
-            .with_blocking_resize(blocking_resize_tx),
+    Ok(ConnectionHandle::new(
+        to_conn_tx,
+        from_conn_rx,
+        reader_thread,
+        writer_thread,
+        repaint,
     )
+    .with_pty_child(child)
+    .with_blocking_resize(blocking_resize_tx))
 }
