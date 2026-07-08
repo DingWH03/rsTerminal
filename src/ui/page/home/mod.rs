@@ -1,17 +1,35 @@
+
+
+//! 首页 — 已保存连接的展示与操作入口。
+//!
+//! 提供连接卡片的渲染、筛选（按类型）、排序（收藏优先/最近使用/字母序）、
+//! 收藏切换、编辑、删除、SFTP 远程文件管理以及浮动操作按钮（FAB）等功能。
+
 pub mod recent;
 pub mod sidebar;
 
 use crate::storage::types::{ConnectionType, SavedConnection};
 use crate::ui::widget::style;
+use crate::ui::widget::components::card;
+use crate::ui::widget::components::empty_state::{self, EmptyStateConfig};
+use crate::ui::widget::components::filter_chips::{self, CONNECTION_TYPE_FILTERS};
+use crate::ui::widget::components::icon_widget;
 
-/// Direct actions from per-card toolbar icons (not context menus).
+/// 首页连接卡片的工具栏操作（来自卡片上的图标按钮，而非右键菜单）。
 #[derive(Default)]
 pub struct HomeCardMenuAction {
+    /// 打开本地文件管理器
     pub local_fm: bool,
+    /// 打开 SSH SFTP 远程文件管理器，值为连接 ID
     pub sftp_id: Option<String>,
+    /// 切换收藏状态，值为连接 ID
     pub toggle_favorite: Option<String>,
 }
 
+/// 渲染首页主界面。
+///
+/// 包含筛选标签（All/Local/SSH/Serial/BLE）、已保存连接卡片列表、
+/// 右键上下文菜单，以及底部的浮动操作按钮（FAB）。
 pub fn home_screen(
     ui: &mut egui::Ui,
     connections: &[SavedConnection],
@@ -26,59 +44,25 @@ pub fn home_screen(
 ) {
     let _ = settings_clicked;
 
-
-    // ── Filter chips ────────────────────────────────────────────────────────
-    let filter: Option<ConnectionType> =
-        ui.data(|d| d.get_temp(egui::Id::new("home_filter")))
-            .unwrap_or(None);
-    ui.horizontal(|ui| {
-        ui.style_mut().spacing.item_spacing.x = 4.0;
-        let all_sel = filter.is_none();
-        if ui.selectable_label(all_sel, "All").clicked() {
-            ui.data_mut(|d| d.insert_temp(egui::Id::new("home_filter"), None::<ConnectionType>));
-        }
-        for ct in [
-            ConnectionType::Local,
-            ConnectionType::Ssh,
-            ConnectionType::Serial,
-            ConnectionType::Ble,
-        ] {
-            let sel = filter.as_ref() == Some(&ct);
-            let short = match ct {
-                ConnectionType::Local => "Local",
-                ConnectionType::Ssh => "SSH",
-                ConnectionType::Serial => "Serial",
-                ConnectionType::Ble => "BLE",
-            };
-            if ui.selectable_label(sel, short).clicked() {
-                ui.data_mut(|d| d.insert_temp(egui::Id::new("home_filter"), Some(ct)));
-            }
-        }
-    });
+    // ── 筛选标签 ────────────────────────────────────────────────────────
+    let filter: Option<ConnectionType> = filter_chips::paint_filter_chips(
+        ui,
+        "home_filter",
+        CONNECTION_TYPE_FILTERS,
+    );
     ui.add_space(4.0);
 
-    // ── Saved connections section ───────────────────────────────────────────
+    // ── 已保存连接列表 ─────────────────────────────────────────────────
     if connections.is_empty() {
-        ui.add_space(32.0);
-        ui.vertical_centered(|ui| {
-            ui.label(
-                egui::RichText::new("\u{1F4CB}")
-                    .size(36.0),
-            );
-            ui.add_space(8.0);
-            ui.label(
-                egui::RichText::new(rust_i18n::t!("home_no_connections"))
-                    .size(15.0)
-                    .color(ui.visuals().weak_text_color()),
-            );
-            ui.add_space(4.0);
-            ui.label(
-                egui::RichText::new("Tap + to add your first connection")
-                    .size(12.0)
-                    .color(ui.visuals().weak_text_color()),
-            );
-        });
-        ui.add_space(8.0);
+        empty_state::paint_empty_state(
+            ui,
+            EmptyStateConfig {
+                icon: "\u{1F4CB}",
+                title: &rust_i18n::t!("home_no_connections"),
+                subtitle: Some("Tap + to add your first connection"),
+                ..Default::default()
+            },
+        );
     } else {
         // Filter + sort: favorites first, then recent, then alphabetically
         let mut sorted: Vec<&SavedConnection> = match filter {
@@ -149,8 +133,11 @@ pub fn home_screen(
     paint_fab(ui, fab_clicked);
 }
 
-// ─── FAB ──────────────────────────────────────────────────────────────────────
+// ─── 浮动操作按钮（FAB）────────────────────────────────────────────────
 
+/// 绘制右下角的浮动操作按钮（"+" 按钮）。
+///
+/// 包含阴影效果和悬停高亮，点击后触发 `fab_clicked` 标志。
 fn paint_fab(ui: &mut egui::Ui, fab_clicked: &mut bool) {
     let fab_size = 56.0;
     let shadow_offset = 2.0;
@@ -167,11 +154,11 @@ fn paint_fab(ui: &mut egui::Ui, fab_clicked: &mut bool) {
     if ui.is_rect_visible(fab_rect) {
         let painter = ui.painter_at(fab_rect);
 
-        // Shadow
+        // 阴影
         let shadow_rect = fab_rect.translate(egui::vec2(0.0, shadow_offset));
         painter.circle_filled(shadow_rect.center(), fab_size / 2.0, egui::Color32::from_black_alpha(60));
 
-        // Main circle
+        // 主圆形
         let bg = if fab_resp.hovered() {
             style::ACCENT.gamma_multiply(1.15)
         } else {
@@ -179,27 +166,18 @@ fn paint_fab(ui: &mut egui::Ui, fab_clicked: &mut bool) {
         };
         painter.circle_filled(fab_rect.center(), fab_size / 2.0, bg);
 
-        // Plus icon
-        let galley = ui.fonts_mut(|f| {
-            f.layout(
-                "+".to_string(),
-                egui::FontId::proportional(28.0),
-                egui::Color32::WHITE,
-                f32::INFINITY,
-            )
-        });
-        painter.galley(
-            egui::pos2(
-                fab_rect.center().x - galley.rect.width() / 2.0,
-                fab_rect.center().y - galley.rect.height() / 2.0,
-            ),
-            galley,
-            egui::Color32::WHITE,
-        );
+        // "+" 图标
+        icon_widget::paint_icon(ui, fab_rect, "+", 28.0, egui::Color32::WHITE);
     }
 }
 
-/// Build a subtitle line combining connection type and its key details.
+/// 构建连接副标题，组合连接类型和关键详细信息。
+///
+/// 根据连接类型显示不同的详细信息：
+/// - SSH：user@host:port
+/// - Serial：端口 @ 波特率
+/// - BLE：设备地址
+/// - Local：shell · 工作目录
 pub fn conn_subtitle(conn: &SavedConnection) -> String {
     let type_label = conn.conn_type.label();
     let detail = match conn.conn_type {
@@ -234,100 +212,28 @@ pub fn conn_subtitle(conn: &SavedConnection) -> String {
     format!("{type_label}  ·  {detail}")
 }
 
-// ─── Card constants ───────────────────────────────────────────────────────────
+// ─── 卡片常量 ───────────────────────────────────────────────────────────
 
+/// 卡片图标字体大小
 const CARD_ICON_FONT: f32 = 22.0;
+/// 收藏星标字体大小
 const STAR_ICON_FONT: f32 = 16.0;
 
+/// 文件管理器图标（📁）
 const FILE_ICON: &str = "\u{1F4C1}";
+/// 编辑图标（✎）
 const EDIT_ICON: &str = "\u{270E}";
+/// 收藏星标实心（★）
 const STAR_FILLED: &str = "\u{2605}";
+/// 收藏星标空心（☆）
 const STAR_EMPTY: &str = "\u{2606}";
 
-// ─── Icon helpers ─────────────────────────────────────────────────────────────
+// ─── 连接卡片渲染 ───────────────────────────────────────────────────────
 
-fn icon_color(ui: &egui::Ui, resp: &egui::Response) -> egui::Color32 {
-    if resp.hovered() {
-        ui.visuals().selection.stroke.color
-    } else {
-        ui.visuals().weak_text_color()
-    }
-}
-
-fn paint_icon(ui: &egui::Ui, rect: egui::Rect, icon: &str, color: egui::Color32) {
-    let galley = ui.fonts_mut(|f| {
-        f.layout(
-            icon.to_string(),
-            egui::FontId::proportional(CARD_ICON_FONT),
-            color,
-            f32::INFINITY,
-        )
-    });
-    ui.painter_at(rect).galley(
-        egui::pos2(
-            rect.center().x - galley.size().x / 2.0,
-            rect.center().y - galley.size().y / 2.0,
-        ),
-        galley,
-        color,
-    );
-}
-
-fn paint_edit_icon(ui: &mut egui::Ui, rect: egui::Rect, id: egui::Id) -> egui::Response {
-    let resp = ui.interact(rect, id, egui::Sense::click());
-    if ui.is_rect_visible(rect) {
-        paint_icon(ui, rect, EDIT_ICON, icon_color(ui, &resp));
-    }
-    resp
-}
-
-fn paint_file_icon(ui: &mut egui::Ui, rect: egui::Rect, id: egui::Id) -> egui::Response {
-    let resp = ui.interact(rect, id, egui::Sense::click());
-    if ui.is_rect_visible(rect) {
-        paint_icon(ui, rect, FILE_ICON, icon_color(ui, &resp));
-    }
-    resp
-}
-
-// ─── Card chrome ──────────────────────────────────────────────────────────────
-
-fn paint_card_chrome(
-    ui: &egui::Ui,
-    rect: egui::Rect,
-    fill: egui::Color32,
-    stroke: egui::Stroke,
-) {
-    let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, style::CORNER_RADIUS_SM, fill);
-    painter.rect_stroke(rect, style::CORNER_RADIUS_SM, stroke, egui::StrokeKind::Inside);
-}
-
-// ─── Local terminal card ──────────────────────────────────────────────────────
-
-/// Dynamic card background — works in both light and dark themes.
-fn card_fill(ui: &egui::Ui, selected: bool, hovered: bool) -> egui::Color32 {
-    if selected {
-        ui.visuals().selection.bg_fill.gamma_multiply(0.35)
-    } else if hovered {
-        ui.visuals().widgets.hovered.bg_fill
-    } else {
-        ui.visuals().extreme_bg_color
-    }
-}
-
-/// Dynamic card stroke — works in both light and dark themes.
-fn card_stroke(ui: &egui::Ui, selected: bool, hovered: bool) -> egui::Stroke {
-    if selected {
-        egui::Stroke::new(1.5, ui.visuals().selection.stroke.color)
-    } else if hovered {
-        egui::Stroke::new(1.0, ui.visuals().widgets.hovered.bg_stroke.color)
-    } else {
-        ui.visuals().widgets.noninteractive.bg_stroke
-    }
-}
-
-// ─── Connection card ──────────────────────────────────────────────────────────
-
+/// 渲染单个已保存连接的卡片。
+///
+/// 卡片包含：连接类型图标、连接名称、副标题、收藏星标、编辑和文件管理器按钮。
+/// 返回 (卡片响应, 文件按钮响应, 编辑按钮响应) 三元组。
 fn render_connection_card(
     ui: &mut egui::Ui,
     conn: &SavedConnection,
@@ -348,17 +254,17 @@ fn render_connection_card(
     let mut pencil_resp = noop;
 
     if ui.is_rect_visible(rect) {
-        paint_card_chrome(
+        card::paint_card_chrome(
             ui,
             rect,
-            card_fill(ui, selected, resp.hovered()),
-            card_stroke(ui, selected, resp.hovered()),
+            card::card_fill(ui, selected, resp.hovered()),
+            card::card_stroke(ui, selected, resp.hovered()),
         );
 
         let icon_x = rect.left() + 16.0;
         let icon_y = rect.center().y;
 
-        // Connection type icon
+        // 连接类型图标
         let icon = ui.fonts_mut(|f| {
             f.layout(
                 conn.conn_type.icon().to_string(),
@@ -377,7 +283,7 @@ fn render_connection_card(
         let name_top = rect.top() + 8.0;
         let sub_top = rect.top() + 27.0;
 
-        // Name
+        // 连接名称
         let name_g = ui.fonts_mut(|f| {
             f.layout(
                 conn.name.clone(),
@@ -392,7 +298,7 @@ fn render_connection_card(
             ui.visuals().text_color(),
         );
 
-        // Type + key detail (subtitle)
+        // 副标题（类型 + 关键信息）
         let toolbar_w = style::CardToolbar::reserved_width(show_file, true);
         let max_text_w = (rect.right() - text_left - toolbar_w).max(60.0);
         let sub_g = ui.fonts_mut(|f| {
@@ -409,7 +315,7 @@ fn render_connection_card(
             ui.visuals().weak_text_color(),
         );
 
-        // Star (favorite) icon — far right
+        // 收藏星标 — 最右侧
         let star_slot = style::ICON_SLOT;
         let star_x = rect.right() - style::TOOLBAR_MARGIN - star_slot;
         let star_rect = egui::Rect::from_center_size(
@@ -427,36 +333,33 @@ fn render_connection_card(
             } else {
                 (STAR_EMPTY, ui.visuals().weak_text_color())
             };
-            let star_g = ui.fonts_mut(|f| {
-                f.layout(
-                    star_char.to_string(),
-                    egui::FontId::proportional(STAR_ICON_FONT),
-                    star_color,
-                    f32::INFINITY,
-                )
-            });
-            ui.painter_at(star_rect).galley(
-                egui::pos2(
-                    star_rect.center().x - star_g.size().x / 2.0,
-                    star_rect.center().y - star_g.size().y / 2.0,
-                ),
-                star_g,
-                star_color,
-            );
+            icon_widget::paint_icon(ui, star_rect, star_char, STAR_ICON_FONT, star_color);
         }
 
-        // Toolbar icons (edit, file)
+        // 工具栏图标（编辑、文件管理器）
         let toolbar = style::CardToolbar::layout(rect, show_file, true);
 
         if let Some(edit_rect) = toolbar.edit {
-            pencil_resp = paint_edit_icon(ui, edit_rect, ui.id().with(("edit", &conn.id)));
+            pencil_resp = icon_widget::icon_button(
+                ui,
+                edit_rect,
+                ui.id().with(("edit", &conn.id)),
+                EDIT_ICON,
+                CARD_ICON_FONT,
+            );
             if pencil_resp.clicked() {
                 *edit_clicked = Some(conn.id.clone());
             }
         }
 
         if let Some(file_rect) = toolbar.file {
-            file_resp = paint_file_icon(ui, file_rect, ui.id().with(("file", &conn.id)));
+            file_resp = icon_widget::icon_button(
+                ui,
+                file_rect,
+                ui.id().with(("file", &conn.id)),
+                FILE_ICON,
+                CARD_ICON_FONT,
+            );
             if file_resp.clicked() {
                 match conn.conn_type {
                     ConnectionType::Local => card_menu.local_fm = true,

@@ -1,3 +1,8 @@
+//! 设置页面 — 管理应用配置、终端主题、键盘快捷键和行为设置。
+//!
+//! 提供全屏设置页（`settings_page`）和工作区侧面板（`settings_side_panel`）两种布局。
+//! 设置按标签页组织：通用、配置文件、外观、主题、行为、高级。
+
 use crate::config::{BellStyle, CursorStyle, TerminalTheme, TerminalType};
 use crate::fonts;
 use crate::i18n::Language;
@@ -5,15 +10,22 @@ use crate::settings::{AppSettings, Profile};
 use crate::ui::widget::keyboard::KeyboardMode;
 use crate::ui::widget::style;
 
-// ─── Tab identifiers ──────────────────────────────────────────────────────────
+// ─── 标签页标识 ─────────────────────────────────────────────────────────
 
+/// 设置页面的标签页枚举。
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum SettingsTab {
+    /// 通用设置（语言、UI 主题）
     General,
+    /// 配置文件管理
     Profiles,
+    /// 外观设置（字体、字号、光标样式）
     Appearance,
+    /// 主题颜色设置
     Theme,
+    /// 终端行为设置
     Behavior,
+    /// 高级设置（环境变量）
     Advanced,
 }
 
@@ -39,9 +51,9 @@ impl SettingsTab {
     }
 }
 
-// ─── Public entry points ──────────────────────────────────────────────────────
+// ─── 公开入口函数 ──────────────────────────────────────────────────────
 
-/// Home screen: full-page settings with Back.
+/// 全屏设置页（首页模式）：包含"返回"按钮，返回 `true` 表示关闭设置页。
 pub fn settings_page(ui: &mut egui::Ui, settings: &mut AppSettings) -> bool {
     let mut close = false;
     ui.horizontal(|ui| {
@@ -61,7 +73,7 @@ pub fn settings_page(ui: &mut egui::Ui, settings: &mut AppSettings) -> bool {
     close
 }
 
-/// Workspace: right-hand panel; returns `true` to close.
+/// 工作区右侧面板设置视图；返回 `true` 表示关闭面板。
 pub fn settings_side_panel(ui: &mut egui::Ui, settings: &mut AppSettings) -> bool {
     let mut close = false;
     ui.horizontal(|ui| {
@@ -90,11 +102,14 @@ pub fn settings_side_panel(ui: &mut egui::Ui, settings: &mut AppSettings) -> boo
     close
 }
 
-// ─── Internal layout ──────────────────────────────────────────────────────────
+// ─── 内部布局 ──────────────────────────────────────────────────────────
 
+/// 设置页面的布局模式。
 #[derive(Clone, Copy)]
 enum SettingsLayout {
+    /// 全屏首页模式
     Home,
+    /// 工作区侧面板模式
     Workspace,
 }
 
@@ -215,23 +230,33 @@ pub fn settings_page_body(ui: &mut egui::Ui, settings: &mut AppSettings) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  UNIFIED FORM LAYOUT
+//  统一表单布局系统
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/// 表单标签字体大小
 const FORM_LABEL_SIZE: f32 = 13.0;
+/// 表单分组标题字体大小
 const FORM_GROUP_SIZE: f32 = 12.0;
+/// 窄布局行间距
 const FORM_ROW_GAP_NARROW: f32 = 8.0;
 
+/// 表单布局模式（宽/窄）。
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum FormLayoutMode {
+    /// 宽布局：两列（标签 + 控件）
     Wide,
+    /// 窄布局：单列（标签在上，控件在下）
     Narrow,
 }
 
+/// 设置表单布局参数。
 #[derive(Clone, Copy)]
 struct SettingsFormLayout {
+    /// 可用宽度
     width: f32,
+    /// 布局模式
     mode: FormLayoutMode,
+    /// 标签列最大宽度
     label_col_max: f32,
 }
 
@@ -266,7 +291,7 @@ impl SettingsFormLayout {
         ui.available_width().max(48.0)
     }
 
-    /// Standard two-column form inside a section card.
+        /// 在区块卡片内使用标准两列表单网格（宽布局时）。
     fn with_form_grid(
         self,
         ui: &mut egui::Ui,
@@ -289,6 +314,7 @@ impl SettingsFormLayout {
         }
     }
 
+    /// 渲染一行表单：宽布局时两列（标签 + 控件），窄布局时单列堆叠。
     fn form_row(self, ui: &mut egui::Ui, label: &str, add_widget: impl FnOnce(&mut egui::Ui, Self)) {
         if self.is_wide() {
             ui.label(Self::form_label(label));
@@ -307,7 +333,7 @@ impl SettingsFormLayout {
         }
     }
 
-    /// Full-width divider between row groups (inside the same grid).
+    /// 行组之间的全宽分隔线（在同一网格内）。
     fn form_divider(self, ui: &mut egui::Ui) {
         if self.is_wide() {
             ui.label("");
@@ -320,7 +346,7 @@ impl SettingsFormLayout {
         }
     }
 
-    /// Subheading inside a form section (e.g. color groups).
+    /// 表单区块内的子标题（例如颜色分组）。
     fn form_group_heading(self, ui: &mut egui::Ui, text: &str) {
         if self.is_wide() {
             ui.label(egui::RichText::new(text).size(FORM_GROUP_SIZE).weak());
@@ -333,7 +359,7 @@ impl SettingsFormLayout {
         }
     }
 
-    /// Action buttons spanning the value column (duplicate / export / create).
+    /// 操作按钮行，跨越值列（复制/导出/创建等）。
     fn form_actions_row(self, ui: &mut egui::Ui, add_buttons: impl FnOnce(&mut egui::Ui)) {
         if self.is_wide() {
             ui.label("");
@@ -349,18 +375,19 @@ impl SettingsFormLayout {
     }
 }
 
-/// Width shared by every settings card in the current column.
+/// 当前列中所有设置卡片共享的宽度。
 fn page_content_width(ui: &egui::Ui) -> f32 {
     ui.available_width().max(1.0)
 }
 
+/// 将 UI 宽度设置为页面内容宽度。
 fn fill_page_width(ui: &mut egui::Ui) {
     let w = page_content_width(ui);
     ui.set_width(w);
     ui.set_max_width(w);
 }
 
-/// Allocate a full-width block so Frame + Grid cannot shrink narrower than siblings.
+/// 分配一个全宽区块外壳，确保 Frame + Grid 不会缩得比兄弟元素窄。
 fn section_shell(ui: &mut egui::Ui, title: &str, subtitle: &str, add_body: impl FnOnce(&mut egui::Ui)) {
     let outer_w = page_content_width(ui);
     ui.allocate_ui_with_layout(
@@ -401,6 +428,7 @@ fn section_shell(ui: &mut egui::Ui, title: &str, subtitle: &str, add_body: impl 
     );
 }
 
+/// 渲染一个设置区块卡片（标题 + 副标题 + 表单内容）。
 fn section_card(
     ui: &mut egui::Ui,
     title: &str,
@@ -413,7 +441,7 @@ fn section_card(
     });
 }
 
-/// Environment-variable card (simple row layout — no form grid).
+/// 环境变量卡片（简单行布局 — 不使用表单网格）。
 fn section_env_card(
     ui: &mut egui::Ui,
     title: &str,
@@ -426,7 +454,7 @@ fn section_env_card(
     });
 }
 
-/// Section whose body is entirely standard form rows in one grid.
+/// 区块内容完全由标准表单行组成的网格。
 fn section_form(
     ui: &mut egui::Ui,
     title: &str,
@@ -570,9 +598,10 @@ fn preset_combo_row(ui: &mut egui::Ui, layout: SettingsFormLayout, label: &str, 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  TAB CONTENT
+//  标签页内容
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/// 通用设置标签页：语言和 UI 主题选择。
 fn general_tab(ui: &mut egui::Ui, settings: &mut AppSettings) {
     section_form(ui, &rust_i18n::t!("settings_tab_general"), "", "general_main", |ui, layout| {
         layout.form_row(ui, &rust_i18n::t!("language"), |ui, _layout| {
@@ -611,6 +640,7 @@ fn general_tab(ui: &mut egui::Ui, settings: &mut AppSettings) {
     );
 }
 
+/// 配置文件标签页：管理终端配置文件（创建、选择、删除、设为默认）。
 fn profiles_tab(ui: &mut egui::Ui, settings: &mut AppSettings, state: &mut TabState) {
     section_card(
         ui,
@@ -634,6 +664,7 @@ fn profiles_tab(ui: &mut egui::Ui, settings: &mut AppSettings, state: &mut TabSt
     }
 }
 
+/// 配置文件详细信息行：名称、描述、主题预设、复制/导出操作。
 fn profile_detail_rows(
     ui: &mut egui::Ui,
     layout: SettingsFormLayout,
@@ -667,6 +698,7 @@ fn profile_detail_rows(
     });
 }
 
+/// 配置文件选择器列表：显示所有配置文件，支持选择、删除、设为默认和创建新配置。
 fn profile_selector(
     ui: &mut egui::Ui,
     layout: SettingsFormLayout,
@@ -786,6 +818,7 @@ fn profile_selector(
     });
 }
 
+/// 获取终端字体显示标签（自动检测时显示"自动"）。
 fn terminal_font_display_label(profile: &Profile) -> String {
     if profile.terminal_font.is_empty() {
         return rust_i18n::t!("settings_terminal_font_auto").into_owned();
@@ -797,6 +830,7 @@ fn terminal_font_display_label(profile: &Profile) -> String {
         .unwrap_or_else(|| profile.terminal_font.clone())
 }
 
+/// 终端字体选择行：加载等宽字体列表并支持选择。
 fn terminal_font_row(ui: &mut egui::Ui, layout: SettingsFormLayout, profile: &mut Profile) {
     layout.form_row(ui, &rust_i18n::t!("settings_terminal_font"), |ui, _| {
         match fonts::monospace_catalog_status() {
@@ -847,6 +881,7 @@ fn terminal_font_row(ui: &mut egui::Ui, layout: SettingsFormLayout, profile: &mu
     });
 }
 
+/// 外观设置标签页：字体、字号、行间距、单元格宽高比、光标样式、回滚行数和键盘模式。
 fn appearance_tab(ui: &mut egui::Ui, settings: &mut AppSettings, profile_idx: usize) {
     let Some(profile) = settings.profiles.get_mut(profile_idx) else {
         ui.colored_label(egui::Color32::YELLOW, rust_i18n::t!("settings_profile_not_found"));
@@ -903,6 +938,7 @@ fn appearance_tab(ui: &mut egui::Ui, settings: &mut AppSettings, profile_idx: us
     );
 }
 
+/// 主题设置标签页：主题预设和颜色自定义（基础色、标准色、亮色）。
 fn theme_tab(ui: &mut egui::Ui, settings: &mut AppSettings, profile_idx: usize) {
     let Some(profile) = settings.profiles.get_mut(profile_idx) else {
         ui.colored_label(egui::Color32::YELLOW, rust_i18n::t!("settings_profile_not_found"));
@@ -954,6 +990,7 @@ fn theme_color_rows(ui: &mut egui::Ui, layout: SettingsFormLayout, profile: &mut
     color_row(ui, layout, &rust_i18n::t!("theme_bright_white"), &mut profile.theme.bright_white);
 }
 
+/// 行为设置标签页：终端类型、响铃样式、括号粘贴、SGR 鼠标、自动换行和单词分隔符。
 fn behavior_tab(ui: &mut egui::Ui, settings: &mut AppSettings, profile_idx: usize) {
     let Some(profile) = settings.profiles.get_mut(profile_idx) else {
         ui.colored_label(egui::Color32::YELLOW, rust_i18n::t!("settings_profile_not_found"));
@@ -1005,6 +1042,7 @@ fn behavior_tab(ui: &mut egui::Ui, settings: &mut AppSettings, profile_idx: usiz
     );
 }
 
+/// 高级设置标签页：配置文件环境变量管理。
 fn advanced_tab(ui: &mut egui::Ui, settings: &mut AppSettings, profile_idx: usize) {
     let Some(profile) = settings.profiles.get_mut(profile_idx) else {
         ui.colored_label(egui::Color32::YELLOW, rust_i18n::t!("settings_profile_not_found"));
@@ -1020,10 +1058,10 @@ fn advanced_tab(ui: &mut egui::Ui, settings: &mut AppSettings, profile_idx: usiz
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  SHARED EDITORS
+//  共享编辑器
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Simple KEY = VALUE rows (fixed field widths, stays inside the card).
+/// 环境变量编辑器：KEY = VALUE 行（固定字段宽度，保持在卡片内）。
 fn env_var_editor(
     ui: &mut egui::Ui,
     scope_id: egui::Id,

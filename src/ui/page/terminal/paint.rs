@@ -1,4 +1,10 @@
-//! Cell-grid terminal painting: one glyph per column (stable grid), suggestion erase.
+//! 终端单元格网格绘制 — 每列一个字形（稳定网格），支持建议文本擦除。
+//!
+//! 核心功能：
+//! - 按行绘制终端单元格，支持 SGR 属性（加粗/斜体/下划线/反转/暗淡/删除线）
+//! - 背景色合并优化（相邻同色单元格合并为一个矩形）
+//! - 字形缓存避免重复布局计算
+//! - 支持 zsh 自动建议的幽灵文本擦除
 
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -11,7 +17,10 @@ use crate::config::TerminalTheme;
 use crate::fonts::terminal_font_id_for_char;
 use crate::terminal::screen::{cell_display_width, Cell, Color};
 
-/// Cache shaped single-glyph layouts keyed by character + visual attributes.
+/// 字形缓存 — 以字符 + 视觉属性为键，缓存已布局的字形。
+///
+/// 避免每帧重复布局相同字符，提高渲染性能。
+/// 超过 4096 条时自动清空。
 #[derive(Default)]
 pub struct RowGalleyCache {
     font_size: f32,
@@ -42,7 +51,7 @@ impl RowGalleyCache {
     }
 }
 
-/// Visual attributes that affect how a glyph is shaped (SGR / vim / zsh suggest).
+/// 影响字形渲染的视觉属性（SGR 转义序列 / vim / zsh 建议）。
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct RunAttrs {
     fg: Color,
@@ -69,7 +78,7 @@ impl RunAttrs {
         }
     }
 
-    /// zsh-autosuggestions / completion ghost text (not normal prompt colors).
+    /// 判断是否为 zsh 自动建议/补全的幽灵文本样式（非正常提示符颜色）。
     fn is_suggestion_style(self) -> bool {
         if self.dim {
             return true;
@@ -82,6 +91,9 @@ impl RunAttrs {
     }
 }
 
+/// 绘制终端的一行单元格。
+///
+/// 处理背景填充合并、字形渲染、下划线绘制、幽灵文本擦除等。
 pub fn paint_row(
     painter: &Painter,
     ui: &Ui,

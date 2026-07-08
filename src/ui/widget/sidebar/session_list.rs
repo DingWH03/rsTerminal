@@ -1,13 +1,22 @@
+//! 会话列表 — 在侧边栏中渲染所有活跃会话的行。
+//!
+//! 每行显示会话图标、标签，以及关闭和新窗口按钮。
+//! 长标签会自动截断并显示省略号。
+
 use crate::session::WorkspaceSession;
 use crate::ui::widget::style;
 
+/// 会话行操作结果。
 pub struct SessionRowAction {
+    /// 选择会话
     pub select_session: Option<String>,
+    /// 关闭会话
     pub close_session: Option<String>,
+    /// 在新窗口中打开
     pub new_window_session: Option<String>,
 }
 
-/// Paint all session rows inside a ScrollArea caller (no nested scroll).
+/// 在 ScrollArea 中绘制所有会话行（不嵌套滚动）。
 pub fn paint_session_rows(
     ui: &mut egui::Ui,
     sessions: &[WorkspaceSession],

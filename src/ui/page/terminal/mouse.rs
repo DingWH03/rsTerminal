@@ -1,4 +1,11 @@
-//! Map egui pointer / touch / wheel to xterm mouse reporting for the PTY.
+//! 鼠标事件处理 — 将 egui 指针/触摸/滚轮事件映射为 xterm 鼠标报告发送给 PTY。
+//!
+//! 功能包括：
+//! - 回滚滚动条渲染与交互
+//! - xterm SGR/传统鼠标编码
+//! - 触摸滚动（单指垂直拖动回滚）
+//! - 滚轮事件转发（鼠标跟踪模式或 alt-screen 箭头）
+//! - 鼠标按钮事件（左/右/中键）转发
 
 use egui::{CornerRadius, CursorIcon, PointerButton, Pos2, Rect, Response, Sense, TouchPhase, Ui};
 
@@ -6,11 +13,12 @@ use crate::config::TerminalTheme;
 use crate::terminal::screen::Screen;
 use crate::ui::page::terminal::selection::TerminalTouchState;
 
-/// Hit target width for the scrollback scrollbar (sits in the panel right margin).
+/// 回滚滚动条的点击目标宽度（位于面板右侧边距中）。
 pub const SCROLLBAR_HIT_WIDTH: f32 = 4.0;
-/// Visible thumb width, flush against the panel's right edge.
+/// 滚动条滑块的可见宽度，紧贴面板右边缘。
 pub const SCROLLBAR_THUMB_WIDTH: f32 = 2.0;
 
+/// 计算滚动条轨道矩形区域。
 pub fn scrollbar_track_rect(panel_rect: Rect, grid_rect: Rect) -> Rect {
     let right = panel_rect.right();
     Rect::from_min_max(
@@ -19,6 +27,7 @@ pub fn scrollbar_track_rect(panel_rect: Rect, grid_rect: Rect) -> Rect {
     )
 }
 
+/// 检查指针是否在滚动条区域内。
 pub fn pointer_in_scrollbar(pos: Pos2, panel_rect: Rect, grid_rect: Rect) -> bool {
     scrollbar_track_rect(panel_rect, grid_rect).contains(pos)
 }
@@ -39,7 +48,7 @@ fn scroll_offset_from_pointer_y(
         .clamp(0.0, max_scroll_offset as f32) as usize
 }
 
-/// Interactive scrollback scrollbar (thumb at bottom = live tail / offset 0).
+/// 交互式回滚滚动条（滑块在底部 = 实时尾部 / 偏移量为 0）。
 pub fn process_terminal_scrollbar(
     ui: &Ui,
     theme: &TerminalTheme,
@@ -98,13 +107,13 @@ pub fn process_terminal_scrollbar(
     changed
 }
 
-/// Encode xterm SGR mouse report (`CSI < Cb ; Cx ; Cy M|m`).
+/// 编码 xterm SGR 鼠标报告（`CSI < Cb ; Cx ; Cy M|m`）。
 pub fn encode_sgr_mouse(button: u8, col: usize, row: usize, release: bool) -> Vec<u8> {
     let suffix = if release { 'm' } else { 'M' };
     format!("\x1b[<{button};{};{}{}", col + 1, row + 1, suffix).into_bytes()
 }
 
-/// Legacy xterm mouse encoding (`CSI M` + 3 bytes).
+/// 传统 xterm 鼠标编码（`CSI M` + 3 字节）。
 pub fn encode_legacy_mouse(button: u8, col: usize, row: usize, release: bool) -> Vec<u8> {
     let mut b = button;
     if release {
@@ -116,6 +125,7 @@ pub fn encode_legacy_mouse(button: u8, col: usize, row: usize, release: bool) ->
     vec![0x1b, b'M', cb, cx, cy]
 }
 
+/// 根据终端设置自动选择 SGR 或传统鼠标编码。
 pub fn encode_mouse(
     screen: &Screen,
     button: u8,
@@ -162,7 +172,7 @@ fn viewport_cell(
     Some((col, row))
 }
 
-/// Send pointer events to the PTY when xterm mouse tracking is enabled.
+/// 当 xterm 鼠标跟踪启用时，将指针事件发送到 PTY。
 pub fn process_terminal_mouse(
     ui: &Ui,
     term_resp: &Response,
@@ -279,11 +289,10 @@ pub fn process_terminal_mouse(
     }
 }
 
-/// Touch-screen: one-finger vertical drag scrolls terminal scrollback.
+/// 触摸屏：单指垂直拖动滚动终端回滚缓冲区。
 ///
-/// Text selection on touch devices is deliberately gated by `touch_select_mode`
-/// so a normal finger drag can behave like a mobile scroll view instead of
-/// immediately selecting text.
+/// 触摸设备上的文本选择由 `touch_select_mode` 控制，
+/// 以便普通手指拖动能像移动端滚动视图一样工作，而不是立即选择文本。
 pub fn process_touch_scroll(
     ui: &Ui,
     term_resp: &Response,
@@ -374,7 +383,8 @@ pub fn process_touch_scroll(
     did_scroll
 }
 
-/// Wheel: SGR buttons 64/65 when mouse tracking is on; else arrows in alt-screen apps.
+/// 滚轮事件处理：鼠标跟踪模式下发送 SGR 按钮 64/65；
+/// alt-screen 应用中发送箭头键；否则滚动回滚缓冲区。
 pub fn process_terminal_wheel(
     term_resp: &Response,
     grid_rect: Rect,

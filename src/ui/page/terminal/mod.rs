@@ -1,3 +1,15 @@
+//! 终端仿真页面 — 核心 UI 模块。
+//!
+//! 该模块实现了完整的终端仿真器界面，包括：
+//! - 终端网格渲染（`paint`）
+//! - 键盘输入路由（`input`）
+//! - 鼠标事件处理（`mouse`）
+//! - 文本选择（`selection`）
+//! - 网格大小同步（`grid`）
+//!
+//! 核心结构 `ActiveSession` 管理单个终端会话的所有状态，
+//! `connection_view` 是主要的渲染入口函数。
+
 pub mod grid;
 pub mod input;
 pub mod mouse;
@@ -22,9 +34,10 @@ use crate::ui::widget::clipboard::{read_text, write_text};
 use crate::ui::widget::keyboard::VirtualKeyboard;
 use crate::ui::widget::sidebar::Sidebar;
 use crate::ui::widget::style;
+use crate::ui::widget::components::toolbar_button::toolbar_button;
 use crate::ui::page::terminal::input::{
-    allocate_terminal_surface, lock_terminal_focus, process_keyboard_input,
-    terminal_widget_id, TERMINAL_GRID_MARGIN,
+    allocate_terminal_surface, has_any_keyboard_input, lock_terminal_focus,
+    process_keyboard_input, terminal_widget_id, TERMINAL_GRID_MARGIN,
 };
 #[cfg(target_os = "android")]
 use crate::ui::page::terminal::input::{
@@ -40,20 +53,35 @@ use crate::ui::page::terminal::selection::{
     touch_long_press_selection_from_pos, update_terminal_selection,
 };
 
+/// 单个端口（多路复用连接中的子通道）的 UI 状态。
+///
+/// 用于 BLE 多 UART 等支持多路复用传输的场景，
+/// 每个端口拥有独立的终端仿真器、滚动偏移和选择状态。
 pub struct PortUiState {
+    /// 端口号（0-based）
     pub port: u8,
+    /// 端口显示标签
     pub label: String,
+    /// 端口类型（如 UART、SPI 等）
     pub kind: ConnectionPortKind,
+    /// 该端口的终端仿真器
     pub terminal: Terminal,
+    /// 当前滚动偏移量
     pub scroll_offset: usize,
+    /// 当前文本选择
     pub selection: Option<TerminalSelection>,
+    /// 选择锚点指针位置
     pub selection_pointer: Option<CellPos>,
+    /// 触摸交互状态
     pub touch_state: TerminalTouchState,
+    /// 行字形缓存（避免重复布局）
     pub row_galley_cache: RowGalleyCache,
+    /// 上次鼠标运动位置（用于去重）
     pub mouse_motion_last: Option<(usize, usize)>,
 }
 
 impl PortUiState {
+    /// 创建新的端口 UI 状态，初始化终端仿真器。
     fn new(
         port: u8,
         label: impl Into<String>,
@@ -79,69 +107,88 @@ impl PortUiState {
     }
 }
 
+/// 活跃终端会话 — 管理单个终端标签页的所有状态。
+///
+/// 包含终端仿真器、连接句柄、滚动、选择、触摸状态、
+/// 多端口支持（BLE 多 UART）以及字体/网格尺寸管理。
 pub struct ActiveSession {
+    /// 会话唯一标识
     pub id: String,
+    /// 连接类型（Local/SSH/Serial/BLE）
     pub conn_type: ConnectionType,
-    /// Set when the link fails or drops; shown in the terminal panel until the user closes the tab.
+    /// 连接断开时的错误消息，显示在终端面板中直到用户关闭标签页
     pub disconnect_message: Option<String>,
-    /// Source saved connection (for SSH「新窗口」); local may be absent.
+    /// 源已保存连接 ID（用于 SSH「新窗口」功能）；本地连接可能为空
     pub saved_conn_id: Option<String>,
-    /// Saved connection display name (serial/BLE tab title).
+    /// 已保存连接的显示名称（Serial/BLE 标签页标题）
     pub name: String,
-    /// Idle tab label for local / SSH (`user@host`).
+    /// 空闲标签页标签（Local/SSH 显示为 `user@host`）
     pub user_at_host: String,
+    /// 底层连接句柄，用于收发数据
     pub handle: crate::connection::ConnectionHandle,
+    /// 活跃端口的终端仿真器
     pub terminal: Terminal,
-    /// Active logical port for multiplexed transports such as BLE multi-UART.
+    /// 当前活跃的逻辑端口号（用于 BLE 多 UART 等多路复用传输）
     pub active_port: u8,
-    /// Ports advertised by the transport. Empty means classic single-stream connection.
+    /// 传输层通告的端口列表。空列表表示经典单流连接。
     pub ports: Vec<ConnectionPort>,
-    /// Terminal state for non-active ports. The active port stays in `terminal` and related fields.
+    /// 非活跃端口的终端状态。活跃端口的状态保存在 `terminal` 及相关字段中。
     pub inactive_port_states: BTreeMap<u8, PortUiState>,
-    /// Byte counters for ports that received data while inactive.
+    /// 非活跃端口收到的字节计数器（用于显示未读标记）
     pub port_unread: BTreeMap<u8, usize>,
+    /// 回滚缓冲区行数
     pub scrollback_lines: usize,
+    /// 当前回滚滚动偏移量
     pub scroll_offset: usize,
+    /// 当前文本选择
     pub selection: Option<TerminalSelection>,
+    /// 选择锚点指针位置
     pub selection_pointer: Option<CellPos>,
-    /// Android touch state for scrollback drag, long-press selection mode, and gesture cleanup.
+    /// Android 触摸状态：回滚拖动、长按选择模式和手势清理
     pub touch_state: TerminalTouchState,
-    /// Request keyboard focus on the terminal surface once after connect / click.
+    /// 连接/点击后请求终端区域获得键盘焦点
     pub want_terminal_focus: bool,
-    /// Previous frame: terminal area had keyboard focus (for shortcut routing).
+    /// 上一帧终端区域是否拥有键盘焦点（用于快捷键路由）
     pub terminal_had_focus: bool,
+    /// 行字形缓存（避免重复布局计算）
     pub row_galley_cache: RowGalleyCache,
-    /// Last font size used for grid layout (detect A+/A− and reflow immediately).
+    /// 上次布局使用的字体大小（检测 A+/A− 变化并立即重排）
     pub layout_font_size: f32,
-    /// Last size pushed to the PTY (skip redundant resizes).
+    /// 上次推送给 PTY 的行数（避免冗余调整大小）
     pub last_pty_rows: u16,
+    /// 上次推送给 PTY 的列数
     pub last_pty_cols: u16,
-    /// Grid size shown in the transient resize overlay (`cols×rows`).
+    /// 尺寸叠加层显示的网格尺寸（`cols×rows`）
     pub size_label_dims: (usize, usize),
-    /// Hide overlay at this time after dimensions stop changing.
+    /// 尺寸稳定后隐藏叠加层的时间点
     pub size_label_hide_at: Option<Instant>,
-    /// True after the user has resized at least once (suppress overlay on connect).
+    /// 用户是否至少调整过一次尺寸（连接时抑制叠加层显示）
     pub size_label_active: bool,
-    /// Emulator grid rows/cols (matches PTY after first layout pass).
+    /// 仿真器网格行数（第一次布局后与 PTY 匹配）
     pub grid_rows: usize,
+    /// 仿真器网格列数
     pub grid_cols: usize,
-    /// Last cell reported for xterm mouse motion (dedupe).
+    /// 上次报告的鼠标位置（用于 xterm 鼠标运动去重）
     pub mouse_motion_last: Option<(usize, usize)>,
-    /// Last applied [`fonts::font_generation`] (clears glyph cache when fonts change).
+    /// 上次应用的字体生成号（字体变化时清除字形缓存）
     pub font_generation: u32,
 }
 
+/// 终端连接视图的操作结果枚举。
 pub enum ConnectionViewAction {
+    /// 无操作
     None,
-    /// Close the session currently shown in the terminal panel.
+    /// 关闭当前显示的终端会话
     CloseSession,
-    /// Reconnect the current SSH session using the given saved-connection id.
+    /// 使用给定的已保存连接 ID 重新连接 SSH 会话
     Reconnect(String),
 }
 
-/// A workspace tab: either a terminal emulator or a file manager.
+/// 工作区标签页：可以是终端仿真器或文件管理器。
 pub enum WorkspaceSession {
+    /// 终端仿真会话
     Terminal(ActiveSession),
+    /// 文件管理器会话
     FileManager(FileManagerSession),
 }
 
@@ -339,6 +386,16 @@ impl ActiveSession {
     }
 }
 
+/// 终端连接视图的主渲染函数。
+///
+/// 处理完整的终端 UI 渲染流程：
+/// 1. 标题栏（汉堡菜单、端口切换、工具栏按钮）
+/// 2. 网格尺寸测量和 PTY 大小同步
+/// 3. 连接数据排空和处理
+/// 4. 连接状态/错误显示
+/// 5. 终端表面（键盘焦点、触摸长按选择、右键菜单）
+/// 6. 终端网格绘制（行渲染、光标、选择高亮、滚动条）
+/// 7. 虚拟键盘
 pub fn connection_view(
     ui: &mut egui::Ui,
     mut session: Option<&mut ActiveSession>,
@@ -758,9 +815,23 @@ pub fn connection_view(
         .map(|s| s.terminal.screen.application_cursor_keys())
         .unwrap_or(false);
     let modifiers = ctx.input(|i| i.modifiers);
+
+    // 自动聚焦：当终端未聚焦但用户开始输入时，自动将焦点还给终端
+    // 注意：request_focus 在下一帧生效，但当前帧的事件会被 process_keyboard_input 消费
+    let needs_focus = !term_focused && has_any_keyboard_input(&ctx);
+    if needs_focus {
+        term_resp.request_focus();
+        #[cfg(target_os = "android")]
+        {
+            keyboard.terminal_ime_enabled = true;
+            show_android_terminal_ime(ui.ctx(), grid_rect);
+        }
+    }
+
     process_keyboard_input(
         &ctx,
-        term_focused,
+        // 如果本帧需要聚焦，假装终端已聚焦以消费事件
+        term_focused || needs_focus,
         has_selection,
         modifiers,
         keyboard.ctrl_active(),
@@ -787,8 +858,13 @@ pub fn connection_view(
         for text in paste_texts {
             paste_to_session(session, &text, &ctx, &mut action);
         }
-        for bytes in pending_input {
-            session.send_active(bytes);
+        if !pending_input.is_empty() {
+            // 用户输入了内容（打字/回车/退格等），自动回到实时尾部
+            session.scroll_offset = 0;
+            session.size_label_active = false;
+            for bytes in pending_input {
+                session.send_active(bytes);
+            }
         }
     }
 
@@ -1130,7 +1206,9 @@ pub fn connection_view(
     action
 }
 
-/// Show `cols×rows` while the grid is changing, then for one second after it stabilizes.
+/// 判断是否显示网格尺寸叠加层（`cols×rows`）。
+///
+/// 在网格尺寸变化时显示，稳定后继续显示 1 秒后隐藏。
 fn size_label_visible(
     session: &mut ActiveSession,
     cols: usize,
@@ -1159,7 +1237,7 @@ fn size_label_visible(
     session.size_label_hide_at.is_some_and(|deadline| now < deadline)
 }
 
-/// Header control: clickable but not in keyboard focus navigation (Tab/arrows).
+/// 终端右键菜单操作（复制/粘贴/清除选择）。
 #[derive(Default, Clone, Copy)]
 struct TerminalMenuAction {
     copy: bool,
@@ -1167,6 +1245,7 @@ struct TerminalMenuAction {
     clear_selection: bool,
 }
 
+/// 安装终端右键上下文菜单（桌面右键 + 触摸长按弹出）。
 fn install_terminal_context_menu(
     ui: &egui::Ui,
     resp: &egui::Response,
@@ -1195,6 +1274,7 @@ fn install_terminal_context_menu(
         });
 }
 
+/// 终端上下文菜单内容：复制、粘贴、清除选择。
 fn terminal_context_menu_contents(
     ui: &mut egui::Ui,
     has_selection: bool,
@@ -1220,6 +1300,7 @@ fn terminal_context_menu_contents(
     }
 }
 
+/// 应用终端上下文菜单的操作结果。
 fn apply_terminal_menu_action(
     session: &mut ActiveSession,
     ctx: &egui::Context,
@@ -1244,6 +1325,7 @@ fn apply_terminal_menu_action(
     }
 }
 
+/// 将当前选择复制到系统剪贴板并清除选择状态。
 fn copy_selection_to_clipboard(session: &mut ActiveSession, ctx: &egui::Context) {
     if let Some(ref sel) = session.selection {
         let text = sel.text(&session.terminal.screen);
@@ -1258,6 +1340,7 @@ fn copy_selection_to_clipboard(session: &mut ActiveSession, ctx: &egui::Context)
     session.touch_state.touch_select_mode = false;
 }
 
+/// 应用触摸双指缩放手势来调整终端字体大小。
 fn apply_touch_pinch_zoom(ctx: &egui::Context, font_size: &mut f32) -> bool {
     let zoom_delta = ctx.input(|i| i.zoom_delta());
     if !zoom_delta.is_finite() || (zoom_delta - 1.0).abs() < 0.01 {
@@ -1271,17 +1354,11 @@ fn apply_touch_pinch_zoom(ctx: &egui::Context, font_size: &mut f32) -> bool {
     true
 }
 
-fn toolbar_button(ui: &mut egui::Ui, label: impl Into<egui::WidgetText>) -> egui::Response {
-    ui.add(
-        egui::Button::new(label.into())
-            .fill(egui::Color32::TRANSPARENT)
-            .stroke(egui::Stroke::NONE)
-            .corner_radius(style::CORNER_RADIUS_XS)
-            .min_size(egui::vec2(26.0, 22.0)),
-    )
-}
+// toolbar_button 已迁移到 crate::ui::widget::components::toolbar_button
 
-/// Paste into the PTY. Use raw bytes at the shell prompt (immediate echo); bracketed only in alt-screen apps.
+/// 向 PTY 粘贴文本。
+///
+/// 在 shell 提示符下使用原始字节（立即回显）；仅在 alt-screen 应用中启用括号粘贴模式。
 pub fn paste_to_session(
     session: &mut ActiveSession,
     text: &str,
@@ -1295,7 +1372,10 @@ pub fn paste_to_session(
     ctx.request_repaint();
 }
 
-/// Read pending bytes from the connection and apply them to the terminal emulator.
+/// 从连接中读取待处理的字节并应用到终端仿真器。
+///
+/// 处理数据帧、端口变化、状态变更（错误/断开/关闭/连接中/已连接）以及终端事件响应。
+/// 返回 `true` 表示有数据被处理。
 pub(crate) fn drain_connection(session: &mut ActiveSession, action: &mut ConnectionViewAction) -> bool {
     let mut updated = false;
     let mut pty_data = Vec::new();
@@ -1336,6 +1416,8 @@ pub(crate) fn drain_connection(session: &mut ActiveSession, action: &mut Connect
     }
     if !pty_data.is_empty() {
         session.terminal.write(&pty_data);
+        // 收到新数据时，如果当前在实时尾部（offset=0），保持尾部；
+        // 如果用户正在回滚查看历史，不要抢走控制权
         updated = true;
     }
     session.handle.repaint.clear_repaint_pending();

@@ -1,9 +1,15 @@
+//! 新建/编辑连接对话框。
+//!
+//! 支持四种连接类型（Local、SSH、Serial、BLE）的创建和编辑。
+//! 包含自动扫描串口设备和 BLE 设备的功能。
+
 use std::sync::mpsc;
 
 use crate::storage::types::{ConnectionType, SavedConnection};
 use crate::connection::enumeration::{enumerate_serial_ports, scan_ble_devices_blocking};
 use crate::ui::widget::style;
 
+/// 新建/编辑连接对话框的状态。
 pub struct NewConnectionDialog {
     pub open: bool,
     /// When set, dialog edits an existing connection (preserves id on save).
@@ -56,6 +62,7 @@ impl Default for NewConnectionDialog {
 }
 
 impl NewConnectionDialog {
+    /// 打开新建连接对话框，并预填本地连接的默认值。
     pub fn open_new(&mut self) {
         *self = Self::default();
         self.open = true;
@@ -66,6 +73,7 @@ impl NewConnectionDialog {
             .unwrap_or_default();
     }
 
+    /// 打开编辑连接对话框，用已有连接数据填充表单。
     pub fn open_edit(&mut self, conn: &SavedConnection) {
         *self = Self::default();
         self.open = true;
@@ -86,6 +94,7 @@ impl NewConnectionDialog {
         self.ble_device = conn.ble_device.clone().unwrap_or_default();
     }
 
+    /// 获取当前平台支持的连接类型列表。
     fn available_types() -> Vec<ConnectionType> {
         let mut types = Vec::new();
         if crate::platform::get().supports_local_terminal() {
@@ -103,6 +112,7 @@ impl NewConnectionDialog {
         types
     }
 
+    /// 确保当前连接类型在当前平台受支持，否则切换到第一个可用类型。
     fn ensure_conn_type_supported(&mut self) {
         let types = Self::available_types();
         if types.is_empty() {
@@ -113,6 +123,7 @@ impl NewConnectionDialog {
         }
     }
 
+    /// 显示对话框并处理用户交互。返回 `Some(SavedConnection)` 表示保存操作。
     pub fn show(&mut self, ctx: &egui::Context) -> Option<SavedConnection> {
         if !self.open {
             return None;

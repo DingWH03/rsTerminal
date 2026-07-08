@@ -1,12 +1,19 @@
+//! 侧边栏视图 — 主侧边栏和连接管理侧边栏。
+//!
+//! `main_sidebar`：主视图，包含品牌标识、连接管理入口、会话列表和设置按钮。
+//! `connections_sidebar`：连接列表视图，包含筛选和连接操作。
+
 use crate::session::WorkspaceSession;
 use crate::storage::types::{ConnectionType, SavedConnection};
 use crate::ui::widget::sidebar::Sidebar;
 use crate::ui::widget::sidebar::common::{nav_button, sidebar_brand_row};
 use crate::ui::widget::sidebar::session_list::paint_session_rows;
+use crate::ui::widget::components::filter_chips::{self, CONNECTION_TYPE_FILTERS};
 use crate::ui::widget::style;
 
-// ─── Main view (connection management + sessions + settings) ──────────────────
+// ─── 主视图（连接管理 + 会话 + 设置）────────────────────────────────
 
+/// 主侧边栏操作结果。
 pub struct MainSidebarAction {
     pub select_session: Option<String>,
     pub close_session: Option<String>,
@@ -15,10 +22,10 @@ pub struct MainSidebarAction {
     pub settings_toggled: bool,
 }
 
-/// Render the main sidebar with three sections:
-///   top:    brand + [ 📋 Connection Management ]
-///   middle: active sessions (scrollable, fills remaining space)
-///   bottom: [ ⚙ Settings ] (pinned)
+/// 渲染主侧边栏，包含三个区域：
+///   顶部：品牌标识 + [ 📋 连接管理 ]
+///   中间：活跃会话列表（可滚动，填充剩余空间）
+///   底部：[ ⚙ 设置 ]（固定在底部）
 pub fn main_sidebar(
     ui: &mut egui::Ui,
     sidebar: &mut Sidebar,
@@ -78,19 +85,25 @@ pub fn main_sidebar(
     action
 }
 
-// ─── Connections list view (inside sidebar) ───────────────────────────────────
+// ─── 连接列表视图（侧边栏内）────────────────────────────────────────
 
+/// 连接侧边栏操作结果。
 pub struct ConnectionsSidebarAction {
+    /// 返回按钮
     pub go_back: bool,
+    /// 新建连接
     pub new_connection: bool,
+    /// 连接操作（连接 ID）
     pub connect_connection: Option<String>,
+    /// 打开文件管理器（连接 ID）
     pub open_file_mgr: Option<String>,
+    /// 编辑连接（连接 ID）
     pub edit_connection: Option<String>,
+    /// 删除连接（连接 ID）
     pub delete_connection: Option<String>,
 }
 
-/// Full connection list rendered inside the sidebar with a back button,
-/// filter chips, and scrollable connection rows.
+/// 在侧边栏内渲染完整连接列表，包含返回按钮、筛选标签和可滚动的连接行。
 pub fn connections_sidebar(
     ui: &mut egui::Ui,
     connections: &[SavedConnection],
@@ -167,37 +180,15 @@ pub fn connections_sidebar(
     }
     ui.add_space(4.0);
 
-    // ── Filter chips ────────────────────────────────────────────────────────
-    let filter: Option<ConnectionType> =
-        ui.data(|d| d.get_temp(egui::Id::new("sidebar_conn_filter")))
-            .unwrap_or(None);
-
-    ui.horizontal(|ui| {
-        ui.style_mut().spacing.item_spacing.x = 4.0;
-        if ui.selectable_label(filter.is_none(), "All").clicked() {
-            ui.data_mut(|d| d.insert_temp(egui::Id::new("sidebar_conn_filter"), None::<ConnectionType>));
-        }
-        for ct in [
-            ConnectionType::Local,
-            ConnectionType::Ssh,
-            ConnectionType::Serial,
-            ConnectionType::Ble,
-        ] {
-            let sel = filter.as_ref() == Some(&ct);
-            let short = match ct {
-                ConnectionType::Local => "Local",
-                ConnectionType::Ssh => "SSH",
-                ConnectionType::Serial => "Serial",
-                ConnectionType::Ble => "BLE",
-            };
-            if ui.selectable_label(sel, short).clicked() {
-                ui.data_mut(|d| d.insert_temp(egui::Id::new("sidebar_conn_filter"), Some(ct)));
-            }
-        }
-    });
+    // ── 筛选标签 ────────────────────────────────────────────────────────
+    let filter: Option<ConnectionType> = filter_chips::paint_filter_chips(
+        ui,
+        "sidebar_conn_filter",
+        CONNECTION_TYPE_FILTERS,
+    );
     ui.add_space(4.0);
 
-    // ── Connection list ─────────────────────────────────────────────────────
+    // ── 连接列表 ─────────────────────────────────────────────────────────
     let mut sorted: Vec<&SavedConnection> = match filter {
         Some(ref ft) => connections.iter().filter(|c| c.conn_type == *ft).collect(),
         None => connections.iter().collect(),

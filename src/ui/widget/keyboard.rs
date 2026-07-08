@@ -1,17 +1,31 @@
+//! 虚拟键盘 — 提供特殊键和全键盘两种模式。
+//!
+//! 特殊键模式：显示 Esc、F1-F12、方向键、Tab 等常用功能键。
+//! 全键盘模式：完整的字母数字键盘，带 Shift/Ctrl/Symbols 切换和 Fn 层。
+//!
+//! 主要用于移动设备（Android）和桌面触屏用户。
+
 use serde::{Deserialize, Serialize};
 
+/// 虚拟键盘模式。
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum KeyboardMode {
+    /// 特殊键模式：仅显示功能键和方向键
     Special,
+    /// 全键盘模式：完整的字母数字键盘
     Full,
 }
 
+/// 键盘层。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Layer {
+    /// 字母层
     Alpha,
+    /// 符号层
     Symbols,
 }
 
+/// 按键动作定义。
 #[derive(Clone, Copy)]
 enum KeyAction {
     /// Send fixed escape sequence (Tab, Esc, arrows, …).
@@ -27,12 +41,14 @@ enum KeyAction {
     FKey(u8),
 }
 
+/// 按键定义：标签、动作、宽度比例。
 struct KeyDef {
     label: &'static str,
     action: KeyAction,
     width: f32,
 }
 
+/// 键盘按键度量参数。
 struct KeyMetrics {
     key_w: f32,
     key_h: f32,
@@ -42,6 +58,7 @@ struct KeyMetrics {
     frame_pad: f32,
 }
 
+/// 虚拟键盘 — 管理可见性、模式切换、Shift/Ctrl/Fn 状态和按键输出。
 pub struct VirtualKeyboard {
     pub visible: bool,
     pub mode: KeyboardMode,
@@ -57,6 +74,7 @@ pub struct VirtualKeyboard {
 }
 
 impl VirtualKeyboard {
+    /// 创建新的虚拟键盘实例。
     pub fn new(mode: KeyboardMode) -> Self {
         Self {
             visible: false,
@@ -70,20 +88,22 @@ impl VirtualKeyboard {
         }
     }
 
-    /// Layout mode used for sizing and painting.
+    /// 获取用于尺寸计算和绘制的有效键盘模式。
     pub fn effective_mode(&self) -> KeyboardMode {
         self.mode
     }
 
-    /// Sticky Ctrl from the on-screen keyboard (used with system IME on Android).
+    /// 屏幕键盘的粘性 Ctrl 状态（与 Android 系统 IME 配合使用）。
     pub fn ctrl_active(&self) -> bool {
         self.ctrl
     }
 
+    /// 切换键盘可见性。
     pub fn toggle(&mut self) {
         self.visible = !self.visible;
     }
 
+    /// 在特殊键模式和全键盘模式之间切换。
     pub fn toggle_mode(&mut self) {
         self.mode = match self.mode {
             KeyboardMode::Special => KeyboardMode::Full,
@@ -91,7 +111,7 @@ impl VirtualKeyboard {
         };
     }
 
-    /// Total vertical space for keyboard + separator above it (matches layout in `connection_view`).
+    /// 键盘 + 上方分隔线的总垂直空间（与 `connection_view` 中的布局匹配）。
     pub fn reserved_height(&self, avail_w: f32) -> f32 {
         if !self.visible {
             return 0.0;
@@ -99,7 +119,7 @@ impl VirtualKeyboard {
         self.content_height(avail_w) + Self::SEPARATOR_ABOVE
     }
 
-    /// Keyboard body height only (must match rows drawn in `show_*`).
+    /// 仅键盘主体高度（必须与 `show_*` 中绘制的行数匹配）。
     pub fn content_height(&self, avail_w: f32) -> f32 {
         let compact = self.effective_mode() == KeyboardMode::Full;
         let m = KeyMetrics::for_width(avail_w, self.layout_row_units(), compact);
@@ -138,6 +158,7 @@ impl VirtualKeyboard {
         }
     }
 
+    /// 渲染虚拟键盘并返回按键输出的字节序列。
     pub fn show(&mut self, ui: &mut egui::Ui) -> Vec<Vec<u8>> {
         if !self.visible {
             return Vec::new();

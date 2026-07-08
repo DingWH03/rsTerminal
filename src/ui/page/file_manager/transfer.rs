@@ -1,3 +1,8 @@
+//! 文件传输 — 后台线程执行文件复制/移动/上传/下载操作。
+//!
+//! 支持本地到本地、本地到远程、远程到本地的文件传输，
+//! 使用 `ByteProgress` 跟踪进度并在 UI 中显示。
+
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -9,10 +14,14 @@ use crate::fs::sftp::{join_remote, SftpClient};
 use crate::fs::transfer_progress::ByteProgress;
 use crate::session::{FileClipboard, FileClipboardMode, FileTransferState, TransferSnapshot};
 
+/// 粘贴目标面板。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PasteTarget {
+    /// 右侧本地面板
     LocalRight,
+    /// 左侧本地面板
     LocalLeft,
+    /// 远程 SFTP 面板
     Remote,
 }
 
@@ -107,15 +116,22 @@ impl FileTransferState {
     }
 }
 
+/// 传输完成结果。
 #[derive(Default)]
 pub struct TransferDone {
+    /// 状态消息
     pub status: Option<String>,
+    /// 是否清除剪贴板
     pub clear_clipboard: bool,
+    /// 是否刷新远程面板
     pub refresh_remote: bool,
+    /// 是否刷新右侧本地面板
     pub refresh_local_right: bool,
+    /// 是否刷新左侧本地面板
     pub refresh_local_left: bool,
 }
 
+/// 在后台线程中执行粘贴作业（复制/移动/上传/下载）。
 fn run_paste_job(
     cancel: Arc<AtomicBool>,
     snapshot: Arc<Mutex<TransferSnapshot>>,
@@ -345,6 +361,7 @@ fn finish_error(snapshot: &Arc<Mutex<TransferSnapshot>>, msg: String) {
     }
 }
 
+/// 应用传输完成结果：刷新面板、清除剪贴板、更新状态。
 pub fn apply_transfer_done(session: &mut crate::session::FileManagerSession, done: TransferDone) {
     if let Some(msg) = done.status {
         session.status = Some(msg);

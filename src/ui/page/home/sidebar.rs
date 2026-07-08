@@ -1,19 +1,32 @@
+//! 首页侧边栏 — 品牌标识、导航按钮（首页/设置）和会话列表。
+
 use crate::session::WorkspaceSession;
 use crate::ui::widget::sidebar::Sidebar;
 use crate::ui::widget::sidebar::common::{nav_button, sidebar_brand_row, sidebar_sessions_panel, SidebarSessionAction};
 
+/// 首页侧边栏的渲染结果。
 pub struct HomeSidebarResult {
+    /// 导航操作（首页/设置）
     pub nav: HomeSidebarAction,
+    /// 会话列表操作（选择/关闭/新窗口）
     pub sessions: SidebarSessionAction,
 }
 
+/// 首页侧边栏导航操作枚举。
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum HomeSidebarAction {
+    /// 无操作
     None,
+    /// 跳转到首页
     Home,
+    /// 跳转到设置
     Settings,
 }
 
+/// 渲染首页侧边栏。
+///
+/// 包含品牌标题行、导航按钮（首页/设置）、分隔线和当前会话列表。
+/// `in_overlay` 参数控制是否为浮动覆盖模式（窄屏时使用）。
 pub fn paint_home_sidebar(
     ui: &mut egui::Ui,
     sidebar: &mut Sidebar,

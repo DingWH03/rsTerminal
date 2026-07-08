@@ -1,6 +1,13 @@
+//! 系统剪贴板读写封装。
+//!
+//! 提供跨平台（桌面和 Android）的剪贴板文本读写功能。
+//! 桌面使用 `arboard` crate，Android 使用 JNI 调用原生 API。
+
 use log::warn;
 
-/// Read plain text from the system clipboard.
+/// 从系统剪贴板读取纯文本。
+///
+/// 返回 `None` 表示剪贴板为空或读取失败。
 pub fn read_text() -> Option<String> {
     match read_text_result() {
         Ok(Some(text)) if !text.is_empty() => Some(text),
@@ -12,7 +19,7 @@ pub fn read_text() -> Option<String> {
     }
 }
 
-/// Write plain text to the system clipboard.
+/// 将纯文本写入系统剪贴板。返回 `true` 表示写入成功。
 pub fn write_text(text: &str) -> bool {
     if text.is_empty() {
         return false;

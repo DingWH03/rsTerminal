@@ -1,3 +1,9 @@
+//! 文件管理器页面 — 本地和远程 SFTP 文件浏览与管理。
+//!
+//! 支持双面板布局（本地-本地或本地-远程），
+//! 提供文件复制、移动、删除、重命名、信息查看等操作，
+//! 以及后台文件传输（上传/下载）支持。
+
 pub mod transfer;
 
 use std::collections::HashSet;
@@ -17,12 +23,16 @@ use crate::session::{
 use crate::ui::page::file_manager::transfer::{apply_transfer_done, PasteTarget};
 use crate::ui::widget::sidebar::Sidebar;
 use crate::ui::widget::style;
+use crate::ui::widget::components::toolbar_button::toolbar_button;
 
+/// 文件管理器操作结果。
 #[derive(Default)]
 pub struct FileManagerAction {
+    /// 是否关闭文件管理器
     pub close: bool,
 }
 
+/// 面板操作集合。
 #[derive(Default)]
 struct PaneOps {
     go_up: bool,
@@ -38,9 +48,12 @@ struct PaneOps {
     info_index: Option<usize>,
 }
 
+/// 底部操作栏高度
 const BOTTOM_BAR_H: f32 = 40.0;
+/// 上下文菜单最小宽度
 const CONTEXT_MENU_MIN_WIDTH: f32 = 140.0;
-/// Right-click and touch long-press both open the same context menu.
+
+/// 安装右键上下文菜单（同时支持触摸长按）。
 fn install_context_menu(
     _ui: &egui::Ui,
     resp: &egui::Response,
@@ -64,6 +77,9 @@ fn install_context_menu(
         });
 }
 
+/// 文件管理器主视图渲染入口。
+///
+/// 处理刷新、传输轮询、标题栏、双面板布局、键盘快捷键（F5 传输）等。
 pub fn file_manager_view(
     ui: &mut egui::Ui,
     session: &mut FileManagerSession,
@@ -229,7 +245,7 @@ pub fn file_manager_view(
     action
 }
 
-/// Fixed-size column so the left pane cannot overlap the right pane and steal clicks.
+/// 固定大小的列容器，确保左面板不会重叠右面板并窃取点击事件。
 fn paint_pane_column<R>(ui: &mut egui::Ui, size: egui::Vec2, body: impl FnOnce(&mut egui::Ui) -> R) -> R {
     let rect = egui::Rect::from_min_size(ui.cursor().min, size);
     let _ = ui.allocate_exact_size(size, egui::Sense::hover());
@@ -237,14 +253,9 @@ fn paint_pane_column<R>(ui: &mut egui::Ui, size: egui::Vec2, body: impl FnOnce(&
         .inner
 }
 
-fn toolbar_button(ui: &mut egui::Ui, label: impl Into<egui::WidgetText>) -> egui::Response {
-    ui.add(
-        egui::Button::new(label)
-            .frame(false)
-            .corner_radius(style::CORNER_RADIUS_XS),
-    )
-}
+// toolbar_button 已迁移到 crate::ui::widget::components::toolbar_button
 
+/// 获取当前面板的对侧面板。
 fn opposite_pane(active: FileActivePane, mode: FileManagerMode) -> FileActivePane {
     match mode {
         FileManagerMode::SshSftp => match active {
@@ -258,6 +269,7 @@ fn opposite_pane(active: FileActivePane, mode: FileManagerMode) -> FileActivePan
     }
 }
 
+/// 将当前面板的文件传输到对侧面板（F5 快捷键）。
 fn transfer_to_opposite_pane(session: &mut FileManagerSession) {
     let active = session.active_pane;
     copy_from_pane(session, active);
@@ -266,6 +278,7 @@ fn transfer_to_opposite_pane(session: &mut FileManagerSession) {
     session.status = Some("Transferred to opposite pane".into());
 }
 
+/// 从指定面板复制选中的文件路径到剪贴板。
 fn copy_from_pane(session: &mut FileManagerSession, pane: FileActivePane) {
     let clip = match pane {
         FileActivePane::Remote => session.remote.as_ref().map(|remote| {
@@ -296,6 +309,7 @@ fn copy_from_pane(session: &mut FileManagerSession, pane: FileActivePane) {
     }
 }
 
+/// 将剪贴板内容粘贴到指定面板（启动文件传输）。
 fn paste_into_pane(session: &mut FileManagerSession, pane: FileActivePane) {
     let Some(clip) = session.clipboard.clone() else {
         session.status = Some("Clipboard is empty".into());
@@ -343,6 +357,7 @@ fn paste_into_pane(session: &mut FileManagerSession, pane: FileActivePane) {
     }
 }
 
+/// 如果需要，刷新文件管理器面板的内容。
 fn refresh_if_needed(session: &mut FileManagerSession) {
     if let Some(remote) = session.remote.as_mut() {
         if remote.loading {
@@ -369,6 +384,7 @@ fn refresh_if_needed(session: &mut FileManagerSession) {
     refresh_local_pane(&mut session.right);
 }
 
+/// 刷新本地面板的文件列表。
 fn refresh_local_pane(pane: &mut PaneState) {
     if !pane.loading {
         return;
@@ -383,6 +399,7 @@ fn refresh_local_pane(pane: &mut PaneState) {
     }
 }
 
+/// 渲染远程 SFTP 面板：工具栏、文件列表、底部操作栏。
 fn paint_remote_pane(
     ui: &mut egui::Ui,
     remote: &mut RemotePane,
@@ -457,6 +474,7 @@ fn paint_remote_pane(
     (list_clicked, ops)
 }
 
+/// 渲染本地面板：工具栏、文件列表、底部操作栏。
 fn paint_local_pane(
     ui: &mut egui::Ui,
     pane: &mut PaneState,

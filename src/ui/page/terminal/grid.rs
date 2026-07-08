@@ -1,5 +1,11 @@
+//! 终端网格尺寸同步 — 管理仿真器网格和 PTY 终端尺寸的协调。
+//!
+//! 确保 egui 布局尺寸变化时，终端仿真器和底层 PTY 的尺寸保持一致。
+//! 在 alt-screen 模式下，先调整仿真器再调整 PTY；普通模式下先调整 PTY 再调整仿真器。
+
 use crate::ui::page::terminal::{ActiveSession, ConnectionViewAction};
 
+/// 同步仿真器网格尺寸。如果尺寸或字体未变化则跳过。
 pub fn sync_emulator_grid(session: &mut ActiveSession, rows: usize, cols: usize, font_size: f32) {
     let rows = rows.max(1);
     let cols = cols.max(1);
@@ -22,6 +28,7 @@ pub fn sync_emulator_grid(session: &mut ActiveSession, rows: usize, cols: usize,
     session.scroll_offset = 0;
 }
 
+/// 同步 PTY 终端尺寸。如果尺寸未变化则跳过。
 pub fn sync_pty_size(session: &mut ActiveSession, rows: usize, cols: usize) {
     let rows = rows.max(1) as u16;
     let cols = cols.max(1) as u16;
@@ -33,6 +40,7 @@ pub fn sync_pty_size(session: &mut ActiveSession, rows: usize, cols: usize) {
     session.handle.resize(rows, cols);
 }
 
+/// 应用尺寸调整。在 alt-screen 模式下先调仿真器再调 PTY，否则顺序相反。
 pub fn apply_resize(
     session: &mut ActiveSession,
     rows: usize,
@@ -49,7 +57,9 @@ pub fn apply_resize(
     }
 }
 
-/// Drain pending PTY data after a grid-size change.
+/// 网格尺寸变化后排空待处理的 PTY 数据。
+///
+/// 在 alt-screen 模式下，排空后发送 WINCH 信号并再次排空。
 pub fn drain_after_resize(
     session: &mut ActiveSession,
     action: &mut ConnectionViewAction,

@@ -1,11 +1,25 @@
+//! 最近连接视图 — 在侧边栏中显示最近使用的连接列表。
+//!
+//! 按最后连接时间排序，最多显示 `MAX_RECENT_CONNECTIONS` 条，
+//! 每条显示连接图标、名称和类型详情，底部提供"查看全部"按钮跳转到首页。
+
 use crate::storage::types::SavedConnection;
 use crate::ui::widget::sidebar::Sidebar;
+use crate::ui::widget::components::empty_state::{self, EmptyStateConfig};
 
+/// 最近连接最大显示数量
 const MAX_RECENT_CONNECTIONS: usize = 20;
+/// 每行高度
 const RECENT_ROW_HEIGHT: f32 = 34.0;
+/// 行间距
 const RECENT_ROW_GAP: f32 = 2.0;
+/// 底部"查看全部"按钮区域高度
 const RECENT_FOOTER_HEIGHT: f32 = 30.0;
 
+/// 渲染最近连接列表视图。
+///
+/// 按 `last_connected` 降序排列，每行显示连接类型图标、名称和副标题。
+/// 点击行触发连接，点击"查看全部"跳转到首页完整列表。
 pub fn recent_connections_view(
     ui: &mut egui::Ui,
     sidebar: &mut Sidebar,
@@ -45,22 +59,15 @@ pub fn recent_connections_view(
     ui.add_space(4.0);
 
     if recent.is_empty() {
-        ui.add_space(40.0);
-        ui.vertical_centered(|ui| {
-            ui.label(egui::RichText::new("\u{1F4CB}").size(36.0));
-            ui.add_space(8.0);
-            ui.label(
-                egui::RichText::new(rust_i18n::t!("home_no_connections"))
-                    .size(15.0)
-                    .color(ui.visuals().weak_text_color()),
-            );
-            ui.add_space(4.0);
-            ui.label(
-                egui::RichText::new(rust_i18n::t!("open_terminal_hint"))
-                    .size(12.0)
-                    .color(ui.visuals().weak_text_color()),
-            );
-        });
+        empty_state::paint_empty_state(
+            ui,
+            EmptyStateConfig {
+                icon: "\u{1F4CB}",
+                title: &rust_i18n::t!("home_no_connections"),
+                subtitle: Some(&rust_i18n::t!("open_terminal_hint")),
+                ..Default::default()
+            },
+        );
         return;
     }
 

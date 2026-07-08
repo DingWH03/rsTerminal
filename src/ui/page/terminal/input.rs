@@ -1,19 +1,25 @@
-//! Keyboard routing for the terminal surface (PTY shortcuts vs egui defaults).
+//! 终端键盘输入路由 — 将键盘事件路由到 PTY，防止 egui 默认导航键劫持终端焦点。
+//!
+//! 核心功能：
+//! - 将 egui 键盘事件转换为 PTY 字节序列
+//! - 管理终端焦点锁，防止方向键/Tab/Esc 移走焦点
+//! - 处理 Android IME 软键盘的显示/隐藏/位置更新
+//! - 支持 Ctrl/Alt/Shift 修饰键和 SS3 应用光标键模式
 
 use egui::{Context, Event, EventFilter, Id, Key, Modifiers, Sense, Ui, Vec2};
 
 use crate::ui::widget::clipboard::read_text;
 use crate::ui::widget::keyboard::ctrl_byte_for_char;
 
-/// Stable focus id (must not depend on parent `Ui` id).
+/// 稳定的小部件 ID（不依赖父 `Ui` 的 ID）。
 pub fn terminal_widget_id() -> Id {
     Id::new("rsTerminal_terminal_surface")
 }
 
-/// Inset between the panel edge and the cell grid (PTY size uses the inner area too).
+/// 面板边缘与单元格网格之间的间距（PTY 尺寸也使用内部区域）。
 pub const TERMINAL_GRID_MARGIN: f32 = 4.0;
 
-/// Prevent arrow/tab/escape from moving egui focus away from the terminal.
+/// 阻止方向键/Tab/Esc 将 egui 焦点移出终端区域的事件过滤器。
 pub fn terminal_event_filter() -> EventFilter {
     EventFilter {
         tab: true,
@@ -23,10 +29,9 @@ pub fn terminal_event_filter() -> EventFilter {
     }
 }
 
-/// Reserve the full panel, place the cell grid centered inside it, and return both rects.
+/// 分配终端面板区域，将单元格网格居中放置，并返回面板矩形、网格矩形和交互响应。
 ///
-/// `allocate_exact_size` alone uses an auto-generated id, so `set_focus_lock_filter` would
-/// never match the focused widget and arrow keys steal focus after the first press.
+/// 使用固定的 `terminal_widget_id()` 而非自动生成的 ID，确保焦点锁过滤器能正确匹配。
 pub fn allocate_terminal_surface(
     ui: &mut Ui,
     available: Vec2,
@@ -50,12 +55,10 @@ pub fn allocate_terminal_surface(
     (panel_rect, grid_rect, response)
 }
 
-/// Open the Android soft keyboard for the terminal canvas.
+/// 为终端画布打开 Android 软键盘。
 ///
-/// The terminal grid is not an egui `TextEdit`, so egui/winit does not always
-/// reopen the native IME after the user dismisses it with Android Back. Keep all
-/// terminal-specific IME control in these helpers instead of scattering direct
-/// Activity calls through the UI code.
+/// 终端网格不是 egui 的 `TextEdit`，所以 egui/winit 在用户通过 Android 返回键关闭键盘后
+/// 不会自动重新打开原生 IME。将所有终端特定的 IME 控制集中在此辅助函数中。
 #[cfg(target_os = "android")]
 pub fn show_android_terminal_ime(ctx: &Context, ime_area: egui::Rect) {
     use egui::viewport::{IMEPurpose, ViewportCommand};
@@ -65,15 +68,14 @@ pub fn show_android_terminal_ime(ctx: &Context, ime_area: egui::Rect) {
     crate::platform::android_ime::show_soft_input();
 }
 
-/// Update only the IME cursor/target rectangle. This must not force-show the
-/// keyboard every frame; otherwise Android Back would immediately reopen it.
+/// 仅更新 IME 光标/目标矩形。不能每帧强制显示键盘，
+/// 否则 Android 返回键关闭键盘后会立即重新打开。
 #[cfg(target_os = "android")]
 pub fn update_android_terminal_ime_rect(ctx: &Context, ime_area: egui::Rect) {
     ctx.send_viewport_cmd(egui::viewport::ViewportCommand::IMERect(ime_area));
 }
 
-/// Close the Android soft keyboard for terminal-specific UI states such as
-/// selection handles or rsTerminal's own virtual keyboard.
+/// 关闭 Android 软键盘，用于终端选择手柄或 rsTerminal 自有虚拟键盘等 UI 状态。
 #[cfg(target_os = "android")]
 pub fn hide_android_terminal_ime(ctx: &Context) {
     ctx.send_viewport_cmd(egui::viewport::ViewportCommand::IMEAllowed(false));
@@ -87,14 +89,78 @@ pub fn update_android_terminal_ime_rect(_ctx: &Context, _ime_area: egui::Rect) {
 #[cfg(not(target_os = "android"))]
 pub fn hide_android_terminal_ime(_ctx: &Context) {}
 
-/// Keep arrow/tab/escape on the terminal (egui focus navigation runs in `begin_pass`).
+/// 锁定终端焦点，确保方向键/Tab/Esc 事件留在终端而非被 egui 导航劫持。
 pub fn lock_terminal_focus(ctx: &Context) {
     ctx.memory_mut(|mem| {
         mem.set_focus_lock_filter(terminal_widget_id(), terminal_event_filter());
     });
 }
 
-/// Route keys to the PTY and remove them from egui's queue so focus/nav cannot eat repeats.
+/// 检查当前帧是否有任何"主动输入"事件（打字、回车、退格等）。
+///
+/// 用于自动聚焦决策：当用户开始输入时，自动聚焦终端。
+/// 注意：排除方向键，因为在回滚历史中方向键用于滚动浏览。
+pub fn has_any_keyboard_input(ctx: &Context) -> bool {
+    ctx.input(|i| {
+        i.events.iter().any(|event| {
+            match event {
+                // 文本输入 — 用户正在打字
+                Event::Text(text) => {
+                    !text.is_empty() && !text.chars().all(|c| c.is_ascii_control())
+                }
+                // IME 提交 — 输入法确认
+                Event::Ime(egui::ImeEvent::Commit(text)) => !text.is_empty(),
+                // 按键事件 — 排除方向键/功能键/修饰键
+                Event::Key { key, pressed: true, .. } => {
+                    matches!(key,
+                        Key::Enter | Key::Backspace | Key::Tab | Key::Space
+                        | Key::A | Key::B | Key::C | Key::D | Key::E | Key::F | Key::G
+                        | Key::H | Key::I | Key::J | Key::K | Key::L | Key::M
+                        | Key::N | Key::O | Key::P | Key::Q | Key::R | Key::S
+                        | Key::T | Key::U | Key::V | Key::W | Key::X | Key::Y | Key::Z
+                    )
+                }
+                _ => false,
+            }
+        })
+    })
+}
+
+/// 检查当前帧是否有任何会向 PTY 发送数据的按键事件。
+///
+/// 用于"输入时自动回到实时尾部"的决策。
+/// 这比 `has_any_keyboard_input` 范围更广，包含方向键等（因为方向键在
+/// 非回滚模式下也会发送 ANSI 转义序列到 PTY）。
+pub fn has_terminal_bound_key(ctx: &Context) -> bool {
+    ctx.input(|i| {
+        i.events.iter().any(|event| {
+            match event {
+                Event::Text(text) => {
+                    !text.is_empty() && !text.chars().all(|c| c.is_ascii_control())
+                }
+                Event::Ime(egui::ImeEvent::Commit(text)) => !text.is_empty(),
+                Event::Key { key, pressed: true, .. } => {
+                    // 所有会被 key_to_pty 映射为字节序列的键
+                    matches!(key,
+                        Key::Enter | Key::Backspace | Key::Tab | Key::Escape | Key::Space
+                        | Key::A | Key::B | Key::C | Key::D | Key::E | Key::F | Key::G
+                        | Key::H | Key::I | Key::J | Key::K | Key::L | Key::M
+                        | Key::N | Key::O | Key::P | Key::Q | Key::R | Key::S
+                        | Key::T | Key::U | Key::V | Key::W | Key::X | Key::Y | Key::Z
+                        | Key::ArrowUp | Key::ArrowDown | Key::ArrowLeft | Key::ArrowRight
+                        | Key::Home | Key::End | Key::PageUp | Key::PageDown
+                        | Key::Insert | Key::Delete
+                        | Key::F1 | Key::F2 | Key::F3 | Key::F4 | Key::F5
+                        | Key::F6 | Key::F7 | Key::F8 | Key::F9 | Key::F10 | Key::F11 | Key::F12
+                    )
+                }
+                _ => false,
+            }
+        })
+    })
+}
+
+/// 将键盘事件路由到 PTY 并从 egui 事件队列中移除，防止焦点/导航吞噬重复按键。
 pub fn process_keyboard_input(
     ctx: &Context,
     term_focused: bool,
@@ -107,6 +173,7 @@ pub fn process_keyboard_input(
     paste_texts: &mut Vec<String>,
 ) {
     if !term_focused {
+        // 未聚焦时，只检查复制事件（跨窗口复制）
         ctx.input(|i| {
             for event in &i.events {
                 if let Event::Copy = event {
@@ -193,6 +260,7 @@ pub fn process_keyboard_input(
 }
 
 
+/// 将文本事件路由到终端：Ctrl 组合键转换为控制字节，普通文本直接发送。
 fn route_text_to_terminal(
     text: &str,
     modifiers: Modifiers,
@@ -223,7 +291,9 @@ fn route_text_to_terminal(
     }
 }
 
-/// Map egui keys to bytes for the PTY.
+/// 将 egui 按键映射为 PTY 字节序列。
+///
+/// 支持 Ctrl 组合键、SS3 应用光标键模式、功能键和编辑键。
 pub fn key_to_pty(key: Key, modifiers: Modifiers, app_cursor_keys: bool) -> Option<Vec<u8>> {
     let ctrl = modifiers.ctrl || modifiers.command;
     let shift = modifiers.shift;

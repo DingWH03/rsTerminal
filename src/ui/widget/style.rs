@@ -1,65 +1,74 @@
-//! Modern UI design system — shared colours, helpers, and constants.
+//! 现代 UI 设计系统 — 共享颜色、辅助函数和常量。
 //!
-//! All UI chrome should reference these values for a consistent modern look.
+//! 所有 UI 元素应引用这些值以实现一致的现代外观。
 
 use egui::{Color32, CornerRadius, Frame, Margin, Stroke, Vec2};
 
-// ─── Accent palette ───────────────────────────────────────────────────────────
+// ─── 强调色板 ───────────────────────────────────────────────────────────
 
-/// Primary accent — a vibrant, modern blue.
+/// 主强调色 — 鲜艳的现代蓝色。
 pub const ACCENT: Color32 = Color32::from_rgb(74, 158, 255);
-/// Accent colour at a lower opacity for hover / selection backgrounds.
+/// 低透明度强调色，用于悬停/选择背景。
 pub const ACCENT_BG: Color32 = Color32::from_rgba_premultiplied(74, 158, 255, 40);
-/// Accent at very low opacity for subtle highlights.
+/// 极低透明度强调色，用于微妙高亮。
 pub const ACCENT_BG_SUBTLE: Color32 = Color32::from_rgba_premultiplied(74, 158, 255, 18);
 
-/// Success / online green.
+/// 成功/在线绿色。
 pub const GREEN: Color32 = Color32::from_rgb(61, 220, 132);
-/// Green at low opacity.
+/// 低透明度绿色。
 pub const GREEN_BG: Color32 = Color32::from_rgba_premultiplied(61, 220, 132, 25);
 
-/// Destructive / close red.
+/// 破坏性/关闭红色。
 pub const RED: Color32 = Color32::from_rgb(255, 82, 82);
-/// Red at low opacity.
+/// 低透明度红色。
 pub const RED_BG: Color32 = Color32::from_rgba_premultiplied(255, 82, 82, 20);
 
-/// Warning amber.
+/// 警告琥珀色。
 pub const AMBER: Color32 = Color32::from_rgb(255, 215, 64);
 
-// ─── Surface / background hierarchy (dark theme) ────────────────────────────
+// ─── 表面/背景层级（深色主题）────────────────────────────────────────
 
-/// Deepest background (window level).
+/// 最深背景（窗口级别）。
 pub const SURFACE_0: Color32 = Color32::from_rgb(13, 13, 15);
-/// Elevated surface (panel / sidebar).
+/// 抬高表面（面板/侧边栏）。
 pub const SURFACE_1: Color32 = Color32::from_rgb(19, 19, 23);
-/// Card / section background.
+/// 卡片/区块背景。
 pub const SURFACE_2: Color32 = Color32::from_rgb(26, 26, 32);
-/// Hovered surface.
+/// 悬停表面。
 pub const SURFACE_3: Color32 = Color32::from_rgb(32, 32, 40);
-/// Active / selected surface.
+/// 激活/选择表面。
 pub const SURFACE_4: Color32 = Color32::from_rgb(38, 38, 48);
 
-/// Subtle border for frames.
+/// 微妙边框。
 pub const BORDER_SUBTLE: Color32 = Color32::from_rgba_premultiplied(255, 255, 255, 12);
-/// Standard border for interactive elements.
+/// 标准交互元素边框。
 pub const BORDER: Color32 = Color32::from_rgba_premultiplied(255, 255, 255, 20);
-/// Accent border for selected / focused elements.
+/// 选中/聚焦元素的强调边框。
 pub const BORDER_ACCENT: Color32 = Color32::from_rgba_premultiplied(74, 158, 255, 80);
 
-// ─── Text colours ────────────────────────────────────────────────────────────
+// ─── 文字颜色 ──────────────────────────────────────────────────────────
 
+/// 主要文字色
 pub const TEXT_PRIMARY: Color32 = Color32::from_rgb(232, 232, 236);
+/// 次要文字色
 pub const TEXT_SECONDARY: Color32 = Color32::from_rgb(158, 158, 166);
+/// 第三级文字色
 pub const TEXT_TERTIARY: Color32 = Color32::from_rgb(120, 120, 130);
+/// 强调文字色
 pub const TEXT_ACCENT: Color32 = ACCENT;
 
-// ─── Geometry ────────────────────────────────────────────────────────────────
+// ─── 几何常量 ──────────────────────────────────────────────────────────
 
+/// 大圆角（10px）
 pub const CORNER_RADIUS: CornerRadius = CornerRadius::same(10);
+/// 小圆角（6px）
 pub const CORNER_RADIUS_SM: CornerRadius = CornerRadius::same(6);
+/// 极小圆角（4px）
 pub const CORNER_RADIUS_XS: CornerRadius = CornerRadius::same(4);
 
+/// 卡片高度
 pub const CARD_HEIGHT: f32 = 60.0;
+/// 卡片间距
 pub const CARD_SPACING: f32 = 8.0;
 
 // ─── Frame helpers ───────────────────────────────────────────────────────────

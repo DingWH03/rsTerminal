@@ -1,8 +1,18 @@
+//! 终端文本选择 — 支持鼠标和触摸的文本选择、高亮和手柄绘制。
+//!
+//! 功能包括：
+//! - 鼠标拖动选择（支持 Shift 扩展选择）
+//! - 触摸长按选择单词
+//! - 选择边缘自动滚动
+//! - 选择高亮渲染和手柄绘制
+//! - 选择文本提取和括号粘贴模式粘贴
+
 use egui::{Context, Painter, Pos2, Rect, Response, TouchPhase, Ui};
 
 use crate::config::TerminalTheme;
 use crate::terminal::screen::{cell_display_width, Screen};
 
+/// 终端中的单元格位置（回滚感知的行号和列号）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CellPos {
     /// Scrollback-aware line index (see [`Screen::line_at_virtual`]).
@@ -10,9 +20,12 @@ pub struct CellPos {
     pub col: usize,
 }
 
+/// 终端文本选择 — 由锚点和光标两个位置定义。
 #[derive(Debug, Clone)]
 pub struct TerminalSelection {
+    /// 选择起始位置
     pub anchor: CellPos,
+    /// 选择结束位置
     pub cursor: CellPos,
 }
 
@@ -40,6 +53,9 @@ impl TerminalSelection {
 }
 
 
+/// 终端触摸交互状态。
+///
+/// 管理触摸选择模式、滚动位置、长按检测和选择手柄显示。
 #[derive(Debug, Clone, Default)]
 pub struct TerminalTouchState {
     /// The current direct touch drag should select text instead of scrolling.
@@ -63,6 +79,7 @@ pub struct TerminalTouchState {
 }
 
 
+/// 从触摸长按位置选择一个单词。
 pub fn touch_long_press_selection_from_pos(
     pos: Pos2,
     screen: &Screen,
@@ -132,6 +149,7 @@ fn is_touch_selectable_word_char(ch: char) -> bool {
     !ch.is_whitespace() && ch != '\0'
 }
 
+/// 获取光标的虚拟位置（考虑回滚缓冲区）。
 pub fn cursor_virtual_pos(screen: &Screen) -> CellPos {
     if screen.in_alternate_screen() {
         CellPos {
@@ -257,7 +275,7 @@ fn extend_selection_to(
     }
 }
 
-/// Update text selection from mouse or touch pointer (press / drag / release).
+/// 更新文本选择（鼠标或触摸按下/拖动/释放）。
 pub fn update_terminal_selection(
     selection: &mut Option<TerminalSelection>,
     selection_pointer: &mut Option<CellPos>,
@@ -463,6 +481,7 @@ fn finish_pointer_selection(
     }
 }
 
+/// 将屏幕坐标转换为终端单元格位置（考虑回滚偏移）。
 pub fn pointer_to_cell(
     pos: Pos2,
     rect: Rect,
@@ -490,6 +509,7 @@ pub fn pointer_to_cell(
     Some(CellPos { line, col })
 }
 
+/// 提取选择范围内的文本，处理换行和宽字符。
 pub fn extract_range_text(screen: &Screen, (start, end): (CellPos, CellPos)) -> String {
     let mut out = String::new();
     for line in start.line..=end.line {
@@ -534,6 +554,7 @@ fn line_slice_text(cells: &[crate::terminal::screen::Cell], start_col: usize, en
     out.trim_end().to_string()
 }
 
+/// 绘制选择高亮区域。
 pub fn paint_selection(
     painter: &Painter,
     screen: &Screen,
@@ -630,11 +651,10 @@ pub fn is_pos_in_selection(
     true
 }
 
-/// Paint floating selection handles (markers at the start and end of the selection).
+/// 绘制浮动选择手柄（选择起始和结束位置的标记）。
 ///
-/// These are drawn as small filled circles — the start handle on the left edge of the
-/// first cell and the end handle on the right edge of the last cell.  Only rendered when
-/// the selection was made via touch interaction (`show_handles` on `TerminalTouchState`).
+/// 绘制为小的实心圆 — 起始手柄在第一个单元格的左边缘，结束手柄在最后一个单元格的右边缘。
+/// 仅在通过触摸交互进行选择时渲染（`TerminalTouchState` 的 `show_handles` 标志）。
 pub fn paint_selection_handles(
     painter: &Painter,
     screen: &Screen,
@@ -713,10 +733,12 @@ pub fn paint_selection_handles(
     }
 }
 
+/// 规范化粘贴文本：将 `\r\n` 替换为 `\n`，将 `\r` 替换为 `\n`。
 pub fn normalize_paste_text(text: &str) -> String {
     text.replace("\r\n", "\n").replace('\r', "\n")
 }
 
+/// 构造粘贴负载：如果启用括号粘贴模式，包裹 `\x1b[200~` / `\x1b[201~`。
 pub fn paste_payload(text: &str, bracketed: bool) -> Vec<u8> {
     let normalized = normalize_paste_text(text);
     if bracketed {

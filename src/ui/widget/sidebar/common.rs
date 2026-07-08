@@ -1,9 +1,13 @@
+//! 侧边栏通用组件 — 导航按钮、品牌行、会话面板。
+//!
+//! 提供侧边栏中常用的共享 UI 元素。
+
 use crate::session::WorkspaceSession;
 use crate::ui::widget::sidebar::Sidebar;
 use crate::ui::widget::sidebar::session_list::paint_session_rows;
 use crate::ui::widget::style;
 
-/// Shared sidebar navigation button (icon + label, highlighted when selected).
+/// 共享侧边栏导航按钮（图标 + 标签，选中时高亮）。
 pub fn nav_button(ui: &mut egui::Ui, icon: &str, label: &str, selected: bool) -> egui::Response {
     let height = 30.0;
     let width = ui.available_width();
@@ -40,9 +44,13 @@ pub fn nav_button(ui: &mut egui::Ui, icon: &str, label: &str, selected: bool) ->
     resp
 }
 
+/// 侧边栏会话操作结果。
 pub struct SidebarSessionAction {
+    /// 选择会话（会话 ID）
     pub select_session: Option<String>,
+    /// 关闭会话（会话 ID）
     pub close_session: Option<String>,
+    /// 在新窗口中打开会话（会话 ID）
     pub new_window_session: Option<String>,
 }
 
@@ -56,6 +64,7 @@ impl SidebarSessionAction {
     }
 }
 
+/// 渲染侧边栏品牌标识行（"rsTerminal" 标题 + 可选汉堡菜单）。
 pub fn sidebar_brand_row(
     ui: &mut egui::Ui,
     sidebar: &mut Sidebar,
@@ -74,7 +83,7 @@ pub fn sidebar_brand_row(
     });
 }
 
-/// Thin wrapper (kept for backward compat with dead code; reuses `session_list`).
+/// 渲染侧边栏会话面板（薄封装，复用了 `session_list` 模块）。
 pub fn sidebar_sessions_panel(
     ui: &mut egui::Ui,
     sessions: &[WorkspaceSession],
