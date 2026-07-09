@@ -16,7 +16,13 @@ pub mod components;
 pub mod dialogs;
 /// 虚拟键盘（特殊键模式 + 全键盘模式）。
 pub mod keyboard;
-/// 响应式侧边栏（宽屏停靠/窄屏覆盖）。
+/// 遗留侧边栏别名（请使用 function_pane）。
 pub mod sidebar;
+/// 可拖拽分割条。
+pub mod split_handle;
 /// 设计系统 — 颜色、圆角、卡片、按钮等共享样式常量。
 pub mod style;
+/// Spring 动画工具。
+pub mod animation;
+/// 矢量图标（非字体）。
+pub mod vector_icons;

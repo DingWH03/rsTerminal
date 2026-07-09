@@ -11,13 +11,16 @@ use egui::{Context, Event, EventFilter, Id, Key, Modifiers, Sense, Ui, Vec2};
 use crate::ui::widget::clipboard::read_text;
 use crate::ui::widget::keyboard::ctrl_byte_for_char;
 
-/// 稳定的小部件 ID（不依赖父 `Ui` 的 ID）。
-pub fn terminal_widget_id() -> Id {
-    Id::new("rsTerminal_terminal_surface")
+/// 每个窗格使用独立 ID，避免多分屏时 First/Second use 冲突。
+pub fn terminal_widget_id(pane: u64) -> Id {
+    Id::new(("rsTerminal_terminal_surface", pane))
 }
 
-/// 面板边缘与单元格网格之间的间距（PTY 尺寸也使用内部区域）。
-pub const TERMINAL_GRID_MARGIN: f32 = 4.0;
+/// 单窗格布局的默认 ID（兼容旧调用）。
+pub fn default_terminal_widget_id() -> Id {
+    terminal_widget_id(0)
+}
+
 
 /// 阻止方向键/Tab/Esc 将 egui 焦点移出终端区域的事件过滤器。
 pub fn terminal_event_filter() -> EventFilter {
@@ -29,30 +32,24 @@ pub fn terminal_event_filter() -> EventFilter {
     }
 }
 
-/// 分配终端面板区域，将单元格网格居中放置，并返回面板矩形、网格矩形和交互响应。
-///
-/// 使用固定的 `terminal_widget_id()` 而非自动生成的 ID，确保焦点锁过滤器能正确匹配。
+/// 分配终端面板区域：按字符网格精确尺寸绘制黑框，并在可用区域内居中。
 pub fn allocate_terminal_surface(
     ui: &mut Ui,
     available: Vec2,
     grid_size: Vec2,
     sense: Sense,
+    widget_id: Id,
 ) -> (egui::Rect, egui::Rect, egui::Response) {
-    let id = terminal_widget_id();
-    let (_, panel_rect) = ui.allocate_space(available);
-    let inner = panel_rect.shrink2(egui::vec2(
-        TERMINAL_GRID_MARGIN,
-        TERMINAL_GRID_MARGIN,
-    ));
+    let (_, container) = ui.allocate_space(available);
     let grid_size = Vec2::new(
-        grid_size.x.min(inner.width()),
-        grid_size.y.min(inner.height()),
+        grid_size.x.min(container.width()),
+        grid_size.y.min(container.height()),
     );
-    // Top-align like a real terminal (centering left a gap and clipped the first row in TUIs).
-    let x = inner.left() + ((inner.width() - grid_size.x) * 0.5).max(0.0);
-    let grid_rect = egui::Rect::from_min_size(egui::pos2(x, inner.top()), grid_size);
-    let response = ui.interact(grid_rect, id, sense);
-    (panel_rect, grid_rect, response)
+    let x = container.left() + ((container.width() - grid_size.x) * 0.5).max(0.0);
+    let y = container.top() + ((container.height() - grid_size.y) * 0.5).max(0.0);
+    let grid_rect = egui::Rect::from_min_size(egui::pos2(x, y), grid_size);
+    let response = ui.interact(grid_rect, widget_id, sense);
+    (grid_rect, grid_rect, response)
 }
 
 /// 为终端画布打开 Android 软键盘。
@@ -90,9 +87,9 @@ pub fn update_android_terminal_ime_rect(_ctx: &Context, _ime_area: egui::Rect) {
 pub fn hide_android_terminal_ime(_ctx: &Context) {}
 
 /// 锁定终端焦点，确保方向键/Tab/Esc 事件留在终端而非被 egui 导航劫持。
-pub fn lock_terminal_focus(ctx: &Context) {
+pub fn lock_terminal_focus(ctx: &Context, widget_id: Id) {
     ctx.memory_mut(|mem| {
-        mem.set_focus_lock_filter(terminal_widget_id(), terminal_event_filter());
+        mem.set_focus_lock_filter(widget_id, terminal_event_filter());
     });
 }
 
@@ -163,6 +160,7 @@ pub fn has_terminal_bound_key(ctx: &Context) -> bool {
 /// 将键盘事件路由到 PTY 并从 egui 事件队列中移除，防止焦点/导航吞噬重复按键。
 pub fn process_keyboard_input(
     ctx: &Context,
+    widget_id: Id,
     term_focused: bool,
     has_selection: bool,
     modifiers: Modifiers,
@@ -186,7 +184,7 @@ pub fn process_keyboard_input(
         return;
     }
 
-    lock_terminal_focus(ctx);
+    lock_terminal_focus(ctx, widget_id);
 
     ctx.input_mut(|i| {
         i.events.retain(|event| {

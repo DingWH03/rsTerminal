@@ -1,11 +1,12 @@
 //! 最近连接视图 — 在侧边栏中显示最近使用的连接列表。
-//!
-//! 按最后连接时间排序，最多显示 `MAX_RECENT_CONNECTIONS` 条，
-//! 每条显示连接图标、名称和类型详情，底部提供"查看全部"按钮跳转到首页。
 
 use crate::storage::types::SavedConnection;
-use crate::ui::widget::sidebar::Sidebar;
+use crate::ui::function_pane::FunctionPane;
 use crate::ui::widget::components::empty_state::{self, EmptyStateConfig};
+use crate::ui::widget::components::toolbar_button::{
+    icon_toolbar_button, icon_toolbar_danger,
+};
+use crate::ui::widget::vector_icons::Icon;
 
 /// 最近连接最大显示数量
 const MAX_RECENT_CONNECTIONS: usize = 20;
@@ -16,16 +17,21 @@ const RECENT_ROW_GAP: f32 = 2.0;
 /// 底部"查看全部"按钮区域高度
 const RECENT_FOOTER_HEIGHT: f32 = 30.0;
 
+/// 分屏空窗格顶栏操作。
+pub struct SplitPaneChrome<'a> {
+    pub hide_pane: Option<&'a mut bool>,
+    pub close_pane: Option<&'a mut bool>,
+}
+
 /// 渲染最近连接列表视图。
-///
-/// 按 `last_connected` 降序排列，每行显示连接类型图标、名称和副标题。
-/// 点击行触发连接，点击"查看全部"跳转到首页完整列表。
 pub fn recent_connections_view(
     ui: &mut egui::Ui,
-    sidebar: &mut Sidebar,
+    function_pane: &mut FunctionPane,
     connections: &[SavedConnection],
     connect_clicked: &mut Option<String>,
     more_clicked: &mut bool,
+    in_split: bool,
+    split_chrome: Option<SplitPaneChrome<'_>>,
 ) {
     let mut recent: Vec<&SavedConnection> = connections.iter().collect();
     recent.sort_by(|a, b| {
@@ -41,11 +47,14 @@ pub fn recent_connections_view(
 
     // ── Header bar ──────────────────────────────────────────────────────
     ui.horizontal(|ui| {
-        ui.style_mut().spacing.button_padding = egui::vec2(4.0, 1.0);
-        ui.style_mut().spacing.item_spacing.x = 4.0;
+        ui.style_mut().spacing.button_padding = egui::vec2(2.0, 1.0);
+        ui.style_mut().spacing.item_spacing.x = 2.0;
 
-        if sidebar.show_content_hamburger() && sidebar.hamburger(ui).clicked() {
-            sidebar.hamburger_click();
+        let show_hamburger = !in_split && function_pane.show_content_hamburger();
+        if show_hamburger {
+            if icon_toolbar_button(ui, ui.id().with("recent_menu"), Icon::Hamburger).clicked() {
+                function_pane.hamburger_click();
+            }
         }
 
         ui.label(
@@ -54,9 +63,31 @@ pub fn recent_connections_view(
                 .strong()
                 .color(ui.visuals().text_color()),
         );
+
+        if let Some(chrome) = split_chrome {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.style_mut().spacing.item_spacing.x = 2.0;
+                if let Some(close) = chrome.close_pane {
+                    if icon_toolbar_danger(ui, ui.id().with("recent_close"), Icon::Close)
+                        .on_hover_text(rust_i18n::t!("close_pane"))
+                        .clicked()
+                    {
+                        *close = true;
+                    }
+                }
+                if let Some(hide) = chrome.hide_pane {
+                    if icon_toolbar_button(ui, ui.id().with("recent_hide"), Icon::Minimize)
+                        .on_hover_text(rust_i18n::t!("minimize_pane"))
+                        .clicked()
+                    {
+                        *hide = true;
+                    }
+                }
+            });
+        }
     });
 
-    ui.add_space(4.0);
+    ui.add_space(2.0);
 
     if recent.is_empty() {
         empty_state::paint_empty_state(
@@ -163,7 +194,6 @@ pub fn recent_connections_view(
             }
         });
 
-    // ── More button ──────────────────────────────────────────────────────
     ui.add_space(4.0);
     ui.horizontal(|ui| {
         ui.add_space(8.0);

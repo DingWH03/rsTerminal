@@ -55,6 +55,10 @@ connection_mgmt: "连接管理"
 sidebar_home: "首页"
 sidebar_connections: "连接"
 sidebar_no_sessions: "无活动会话"
+empty_pane: "空窗格"
+minimize_pane: "最小化窗格"
+close_pane: "关闭窗格"
+background_session: "后台运行"
 
 # ---- 最近连接 ----
 recent_connections: "最近连接"
@@ -275,3 +279,10 @@ settings_env_vars_desc: "终端会话中注入的环境变量"
 # ---- 主题预设 ----
 settings_theme_preset: "主题预设"
 settings_theme_preset_desc: "一键应用内置配色方案"
+
+# ---- 分屏窗格颜色 ----
+settings_pane_colors: "分屏窗格颜色"
+settings_pane_colors_desc: "左侧会话列表与右侧窗格边框使用相同颜色标注"
+settings_pane_colors_theme: "使用当前主题配色"
+settings_pane_colors_reset: "恢复默认"
+settings_pane_color: "颜色"

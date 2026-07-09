@@ -55,6 +55,10 @@ sidebar_title: "Connections"
 sidebar_home: "Home"
 sidebar_connections: "Connections"
 sidebar_no_sessions: "No active sessions"
+empty_pane: "Empty pane"
+minimize_pane: "Minimize pane"
+close_pane: "Close pane"
+background_session: "Running in background"
 
 # ---- Recent Connections ----
 recent_connections: "Recent Connections"
@@ -275,3 +279,10 @@ settings_env_vars_desc: "Environment variables injected into the terminal sessio
 # ---- Theme Presets ----
 settings_theme_preset: "Theme Preset"
 settings_theme_preset_desc: "Apply a built-in color scheme"
+
+# ---- Split pane colors ----
+settings_pane_colors: "Split Pane Colors"
+settings_pane_colors_desc: "Sidebar labels match the accent border on each workspace pane"
+settings_pane_colors_theme: "Use theme palette"
+settings_pane_colors_reset: "Reset to default"
+settings_pane_color: "Color"

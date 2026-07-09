@@ -21,12 +21,12 @@ use crate::session::{
     InfoDialog, PaneState, RemotePane, RenameDialog,
 };
 use crate::ui::page::file_manager::transfer::{apply_transfer_done, PasteTarget};
-use crate::ui::widget::sidebar::Sidebar;
+use crate::ui::function_pane::FunctionPane;
 use crate::ui::widget::style;
 use crate::ui::widget::components::toolbar_button::toolbar_button;
 
 /// 文件管理器操作结果。
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct FileManagerAction {
     /// 是否关闭文件管理器
     pub close: bool,
@@ -83,7 +83,8 @@ fn install_context_menu(
 pub fn file_manager_view(
     ui: &mut egui::Ui,
     session: &mut FileManagerSession,
-    sidebar: &mut Sidebar,
+    function_pane: &mut FunctionPane,
+    in_split: bool,
 ) -> FileManagerAction {
     refresh_if_needed(session);
     if let Some(done) = session.transfer.poll(ui.ctx()) {
@@ -97,10 +98,11 @@ pub fn file_manager_view(
     let transfer_ui = session.transfer.read_ui();
 
     ui.horizontal(|ui| {
-        if sidebar.show_content_hamburger()
-            && sidebar.hamburger(ui).clicked()
+        if !in_split
+            && function_pane.show_content_hamburger()
+            && function_pane.hamburger(ui).clicked()
         {
-            sidebar.hamburger_click();
+            function_pane.hamburger_click();
         }
         ui.label(
             egui::RichText::new(&session.title)

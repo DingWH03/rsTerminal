@@ -2,77 +2,54 @@ use crate::connection::{ble, serial, ssh};
 #[cfg(not(target_os = "android"))]
 use crate::connection::local;
 use crate::fonts;
-use crate::settings::{AppSettings, save_settings};
+use crate::settings::{save_settings, AppSettings};
 use crate::storage;
 use crate::storage::types::{ConnectionType, SavedConnection};
 use crate::terminal::{DEFAULT_GRID_COLS, DEFAULT_GRID_ROWS};
 use crate::terminal::Terminal;
 use crate::session::{FileManagerMode, FileManagerSession, WorkspaceSession};
+use crate::ui::function_pane::pages::FunctionPage;
 use crate::ui::page::terminal::{
-    drain_connection, ActiveSession, ConnectionViewAction, connection_view,
+    drain_connection, ActiveSession, ConnectionViewAction,
 };
-use crate::ui::page::file_manager::{file_manager_view, FileManagerAction};
-use crate::ui::page::home::recent::recent_connections_view;
+use crate::ui::shell::coordinator::ShellCoordinator;
+use crate::ui::shell::AppShell;
 use crate::ui::widget::dialogs::{LocalTerminalSettingsDialog, NewConnectionDialog};
 use crate::ui::widget::keyboard::VirtualKeyboard;
-use crate::ui::page::settings::{settings_page, settings_side_panel};
-use crate::ui::widget::sidebar::{Sidebar, DOCK_WIDTH};
 use crate::ui::widget::style;
-use crate::ui::widget::sidebar::sidebars::{main_sidebar, connections_sidebar, MainSidebarAction, ConnectionsSidebarAction};
 use log::info;
-
-#[derive(Clone, Copy, PartialEq)]
-enum SidebarMode {
-    Main,
-    Connections,
-}
 
 pub struct RsTerminalApp {
     settings: AppSettings,
     saved_connections: Vec<SavedConnection>,
     sessions: Vec<WorkspaceSession>,
-    active_session_id: Option<String>,
+    shell: AppShell,
     virtual_keyboard: VirtualKeyboard,
     new_conn_dialog: NewConnectionDialog,
     local_term_dialog: LocalTerminalSettingsDialog,
     live_font_size: f32,
-    sidebar: Sidebar,
-    sidebar_mode: SidebarMode,
-    /// Central panel: full-page settings (narrow layout).
-    workspace_settings: bool,
-    /// Right panel: settings (wide layout only).
-    settings_open: bool,
-    /// Immediate connect failure (serial open, SSH config, etc.) before a session is opened.
     connection_notice: Option<String>,
-    /// User confirmed exit while sessions were still open.
     quit_after_close: bool,
-    /// Show「仍有会话，是否退出」dialog.
     show_quit_dialog: bool,
-    /// First frame flag – ignore stale close_requested from Android lifecycle.
     first_frame: bool,
 }
 
 impl Default for RsTerminalApp {
     fn default() -> Self {
         let settings = crate::settings::load_settings();
-        // Apply the saved language preference on startup.
         settings.language.apply();
         let live_font_size = settings.font_size();
         let kbd_mode = settings.default_profile().keyboard_mode;
         let saved = storage::load_connections();
         Self {
+            shell: AppShell::from_settings(&settings),
             settings,
             saved_connections: saved,
             sessions: Vec::new(),
-            active_session_id: None,
             virtual_keyboard: VirtualKeyboard::new(kbd_mode),
             new_conn_dialog: NewConnectionDialog::default(),
             local_term_dialog: LocalTerminalSettingsDialog::default(),
             live_font_size,
-            sidebar: Sidebar::new(),
-            sidebar_mode: SidebarMode::Main,
-            workspace_settings: false,
-            settings_open: false,
             connection_notice: None,
             quit_after_close: false,
             first_frame: true,
@@ -183,8 +160,8 @@ impl RsTerminalApp {
 
     fn push_session(&mut self, session: WorkspaceSession) {
         let id = session.id().to_string();
-        self.active_session_id = Some(id);
         self.sessions.push(session);
+        ShellCoordinator::assign_new_session(&mut self.shell.layout, id);
     }
 
     fn open_file_manager_ssh(&mut self, conn_id: &str) {
@@ -200,26 +177,6 @@ impl RsTerminalApp {
 
     fn open_file_manager_local(&mut self) {
         self.push_session(WorkspaceSession::FileManager(FileManagerSession::open_local()));
-    }
-
-    #[cfg(not(target_os = "android"))]
-    fn connect_local(&mut self) {
-        let Some(config) = self
-            .saved_connections
-            .iter()
-            .find(|c| c.conn_type == ConnectionType::Local)
-            .cloned()
-        else {
-            self.connection_notice = Some(
-                "No saved Local Terminal connection. Add one via the + button.".into(),
-            );
-            return;
-        };
-        let profile = self.settings.default_profile().clone();
-        match local::connect_local(&config, &profile, 24, 80) {
-            Ok(handle) => self.open_session(handle, &config, profile.scrollback_lines),
-            Err(e) => self.connection_notice = Some(e),
-        }
     }
 
     #[cfg(not(target_os = "android"))]
@@ -251,6 +208,60 @@ impl RsTerminalApp {
         }
     }
 
+    #[cfg(not(target_os = "android"))]
+    fn connect_local(&mut self) {
+        let Some(config) = self
+            .saved_connections
+            .iter()
+            .find(|c| c.conn_type == ConnectionType::Local)
+            .cloned()
+        else {
+            self.connection_notice = Some(
+                "No saved Local Terminal connection. Add one via the + button.".into(),
+            );
+            return;
+        };
+        let profile = self.settings.default_profile().clone();
+        match local::connect_local(&config, &profile, 24, 80) {
+            Ok(handle) => self.open_session(handle, &config, profile.scrollback_lines),
+            Err(e) => self.connection_notice = Some(e),
+        }
+    }
+
+    fn duplicate_session(&mut self, session_id: &str) {
+        enum DupPlan {
+            #[cfg(not(target_os = "android"))]
+            TerminalLocal,
+            TerminalSsh(String),
+            FileSsh(String),
+            FileLocal,
+        }
+        let plan = self.sessions.iter().find(|s| s.id() == session_id).and_then(|s| {
+            match s {
+                WorkspaceSession::Terminal(term) => match term.conn_type {
+                    #[cfg(not(target_os = "android"))]
+                    ConnectionType::Local => Some(DupPlan::TerminalLocal),
+                    #[cfg(target_os = "android")]
+                    ConnectionType::Local => None,
+                    ConnectionType::Ssh => term.saved_conn_id.clone().map(DupPlan::TerminalSsh),
+                    ConnectionType::Serial | ConnectionType::Ble => None,
+                },
+                WorkspaceSession::FileManager(fm) => match fm.mode {
+                    FileManagerMode::SshSftp => fm.saved_conn_id.clone().map(DupPlan::FileSsh),
+                    FileManagerMode::LocalDual => Some(DupPlan::FileLocal),
+                },
+            }
+        });
+        match plan {
+            #[cfg(not(target_os = "android"))]
+            Some(DupPlan::TerminalLocal) => self.connect_local(),
+            Some(DupPlan::TerminalSsh(id)) => self.connect_to(&id),
+            Some(DupPlan::FileSsh(id)) => self.open_file_manager_ssh(&id),
+            Some(DupPlan::FileLocal) => self.open_file_manager_local(),
+            None => {}
+        }
+    }
+
     fn apply_local_terminal_settings(
         &mut self,
         apply: crate::ui::widget::dialogs::LocalTerminalSettingsApply,
@@ -278,6 +289,10 @@ impl RsTerminalApp {
     }
 
     fn connect_to(&mut self, conn_id: &str) {
+        self.connect_to_pane(conn_id, self.shell.layout.workspace.focused_pane);
+    }
+
+    fn connect_to_pane(&mut self, conn_id: &str, pane: crate::ui::shell::layout_state::PaneId) {
         let config = match self.saved_connections.iter().find(|c| c.id == conn_id) {
             Some(c) => c.clone(),
             None => return,
@@ -293,7 +308,7 @@ impl RsTerminalApp {
             ConnectionType::Ble => ble::connect_ble(&config),
         };
         match result {
-            Ok(handle) => self.open_session(handle, &config, profile.scrollback_lines),
+            Ok(handle) => self.open_session_in_pane(handle, &config, profile.scrollback_lines, pane),
             Err(e) => self.connection_notice = Some(e),
         }
     }
@@ -303,6 +318,21 @@ impl RsTerminalApp {
         handle: crate::connection::ConnectionHandle,
         config: &SavedConnection,
         scrollback_lines: usize,
+    ) {
+        self.open_session_in_pane(
+            handle,
+            config,
+            scrollback_lines,
+            self.shell.layout.workspace.focused_pane,
+        );
+    }
+
+    fn open_session_in_pane(
+        &mut self,
+        handle: crate::connection::ConnectionHandle,
+        config: &SavedConnection,
+        scrollback_lines: usize,
+        pane: crate::ui::shell::layout_state::PaneId,
     ) {
         let profile = self.settings.default_profile();
         let mut terminal = Terminal::new(DEFAULT_GRID_ROWS, DEFAULT_GRID_COLS);
@@ -320,8 +350,9 @@ impl RsTerminalApp {
             _ => String::new(),
         };
 
-        self.push_session(WorkspaceSession::Terminal(ActiveSession {
-            id: uuid::Uuid::new_v4().to_string(),
+        let id = uuid::Uuid::new_v4().to_string();
+        self.sessions.push(WorkspaceSession::Terminal(ActiveSession {
+            id: id.clone(),
             conn_type: config.conn_type.clone(),
             saved_conn_id: Some(config.id.clone()),
             name: config.name.clone(),
@@ -352,6 +383,7 @@ impl RsTerminalApp {
             font_generation: crate::fonts::font_generation(),
             disconnect_message: None,
         }));
+        ShellCoordinator::assign_session_to_pane(&mut self.shell.layout, pane, id);
     }
 
     fn has_open_sessions(&self) -> bool {
@@ -365,6 +397,22 @@ impl RsTerminalApp {
         }
     }
 
+    fn close_pane_and_maybe_session(&mut self, pane: crate::ui::shell::layout_state::PaneId) {
+        let sid = self
+            .shell
+            .layout
+            .workspace
+            .panes
+            .get(&pane)
+            .and_then(|p| p.session_id.clone());
+        if self.shell.layout.workspace.pane_count() > 1 {
+            self.shell.layout.workspace.close_pane(pane);
+        }
+        if let Some(id) = sid {
+            self.close_session(&id);
+        }
+    }
+
     fn close_session(&mut self, id: &str) {
         if let Some(pos) = self.sessions.iter().position(|s| s.id() == id) {
             if let WorkspaceSession::Terminal(s) = &mut self.sessions[pos] {
@@ -372,11 +420,8 @@ impl RsTerminalApp {
             }
             self.sessions.remove(pos);
         }
-        if self.active_session_id.as_deref() == Some(id) {
-            self.active_session_id = self.sessions.last().map(|s| s.id().to_string());
-        }
+        ShellCoordinator::on_sessions_closed(&mut self.shell.layout, id);
         if self.sessions.is_empty() {
-            self.active_session_id = None;
             self.save_profile_tweaks();
         }
     }
@@ -395,7 +440,7 @@ impl RsTerminalApp {
     }
 
     fn drain_inactive_sessions(&mut self) {
-        let active = self.active_session_id.as_deref();
+        let active = self.shell.focused_session_id();
         for session in &mut self.sessions {
             if active == Some(session.id()) {
                 continue;
@@ -407,67 +452,10 @@ impl RsTerminalApp {
         }
     }
 
-    fn open_new_window_for_session(&mut self, session_id: &str) {
-        enum DupPlan {
-            #[cfg(not(target_os = "android"))]
-            TerminalLocal,
-            TerminalSsh(String),
-            FileSsh(String),
-            FileLocal,
-        }
-        let plan = self.sessions.iter().find(|s| s.id() == session_id).and_then(|s| {
-            match s {
-                WorkspaceSession::Terminal(term) => match term.conn_type {
-                    #[cfg(not(target_os = "android"))]
-                    ConnectionType::Local => Some(DupPlan::TerminalLocal),
-                    #[cfg(target_os = "android")]
-                    ConnectionType::Local => None,
-                    ConnectionType::Ssh => term
-                        .saved_conn_id
-                        .clone()
-                        .map(DupPlan::TerminalSsh),
-                    ConnectionType::Serial | ConnectionType::Ble => None,
-                },
-                WorkspaceSession::FileManager(fm) => match fm.mode {
-                    FileManagerMode::SshSftp => fm
-                        .saved_conn_id
-                        .clone()
-                        .map(DupPlan::FileSsh),
-                    FileManagerMode::LocalDual => Some(DupPlan::FileLocal),
-                },
-            }
-        });
-        match plan {
-            #[cfg(not(target_os = "android"))]
-            Some(DupPlan::TerminalLocal) => self.connect_local(),
-            Some(DupPlan::TerminalSsh(id)) => self.connect_to(&id),
-            Some(DupPlan::FileSsh(id)) => self.open_file_manager_ssh(&id),
-            Some(DupPlan::FileLocal) => self.open_file_manager_local(),
-            None => {}
-        }
-    }
-
-    fn apply_session_panel_action(
-        &mut self,
-        action: crate::ui::widget::sidebar::common::SidebarSessionAction,
-        in_overlay: bool,
-    ) {
-        if let Some(id) = action.select_session {
-            self.active_session_id = Some(id);
-            self.workspace_settings = false;
-            if in_overlay {
-                self.sidebar.close_overlay();
-            }
-        }
-        if let Some(id) = action.close_session {
-            self.close_session(&id);
-        }
-        if let Some(id) = action.new_window_session {
-            self.open_new_window_for_session(&id);
-            if in_overlay {
-                self.sidebar.close_overlay();
-            }
-        }
+    fn focused_session_index(&self) -> Option<usize> {
+        self.shell
+            .focused_session_id()
+            .and_then(|id| self.sessions.iter().position(|s| s.id() == id))
     }
 
     fn handle_back_navigation(&mut self, ctx: &egui::Context) -> bool {
@@ -486,24 +474,16 @@ impl RsTerminalApp {
             self.local_term_dialog = LocalTerminalSettingsDialog::default();
             return true;
         }
-        // In connections management mode → go back to main sidebar
-        if self.sidebar_mode == SidebarMode::Connections {
-            self.sidebar_mode = SidebarMode::Main;
+        if self.shell.layout.function_page == FunctionPage::Connections {
+            self.shell.layout.function_page = FunctionPage::Workspace;
             return true;
         }
-        if self.sidebar.overlay_visible() {
-            self.sidebar.close_overlay();
+        if self.shell.function_pane.overlay_visible() {
+            self.shell.function_pane.close_overlay();
             return true;
         }
-        if self.workspace_settings {
-            self.workspace_settings = false;
-            save_settings(&self.settings);
-            self.live_font_size = self.settings.font_size();
-            self.reload_terminal_fonts(ctx);
-            return true;
-        }
-        if self.settings_open {
-            self.settings_open = false;
+        if self.shell.layout.settings_overlay {
+            self.shell.layout.settings_overlay = false;
             save_settings(&self.settings);
             self.live_font_size = self.settings.font_size();
             self.reload_terminal_fonts(ctx);
@@ -519,12 +499,11 @@ impl RsTerminalApp {
 
     fn request_app_exit(&mut self, ctx: &egui::Context) {
         self.save_profile_tweaks();
+        self.settings.function_pane_width = Some(self.shell.layout.function_width);
+        save_settings(&self.settings);
 
         #[cfg(target_os = "android")]
         {
-            // Do not destroy NativeActivity for a normal Back-at-root exit.
-            // Moving the task to the background avoids recreating eframe/winit
-            // in the same process, which caused the next launch to crash.
             if crate::platform::android_back::move_task_to_back() {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             } else {
@@ -549,19 +528,10 @@ impl RsTerminalApp {
             self.request_app_exit(ctx);
         }
     }
-
-    fn active_session_index(&self) -> Option<usize> {
-        self.active_session_id
-            .as_ref()
-            .and_then(|id| self.sessions.iter().position(|s| s.id() == id))
-    }
 }
-
-
 
 impl eframe::App for RsTerminalApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Ignore stale close_requested + BrowserBack on the first frame.
         if self.first_frame {
             self.first_frame = false;
             if ctx.input(|i| i.viewport().close_requested()) {
@@ -580,12 +550,10 @@ impl eframe::App for RsTerminalApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
 
-        // Android back button.
         #[cfg(target_os = "android")]
         {
             use crate::platform::android_back;
 
-            // Path A: JNI signal from onBackPressed / OnBackInvokedCallback.
             android_back::consume_back_pressed(|| {
                 if self.handle_back_navigation(&ctx) {
                     true
@@ -595,27 +563,27 @@ impl eframe::App for RsTerminalApp {
                 }
             });
 
-            // Path B: KEYCODE_BACK → egui::Key::BrowserBack from AInputQueue.
-            if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::BrowserBack))
-            {
+            if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::BrowserBack)) {
                 if !self.handle_back_navigation(&ctx) {
                     self.request_app_exit(&ctx);
                 }
             }
         }
-        // Apply UI theme on every frame (cheap — only changes if setting changed).
+
         self.settings.ui_theme.apply(&ctx);
-        self.sidebar.sync_width(ctx.content_rect().width());
+        self.shell.sync_width(ctx.content_rect().width());
 
         show_connection_notice(&ctx, &mut self.connection_notice);
 
-        // Android status‑bar inset (0 on desktop).
         let top_inset: f32 = {
-            #[cfg(target_os = "android")] {
+            #[cfg(target_os = "android")]
+            {
                 crate::platform::get().top_inset_points(&ctx)
             }
             #[cfg(not(target_os = "android"))]
-            { 0.0 }
+            {
+                0.0
+            }
         };
 
         let session_count = self.sessions.len();
@@ -627,180 +595,48 @@ impl eframe::App for RsTerminalApp {
 
         self.drain_inactive_sessions();
 
-        let on_settings = self.workspace_settings
-            || (self.sidebar.wide && self.settings_open);
-
-        let mut sidebar_action = MainSidebarAction {
-            select_session: None,
-            close_session: None,
-            new_window_session: None,
-            open_connection_mgmt: false,
-            settings_toggled: false,
-        };
-        let mut conn_action = ConnectionsSidebarAction {
-            go_back: false,
-            new_connection: false,
-            connect_connection: None,
-            open_file_mgr: None,
-            edit_connection: None,
-            delete_connection: None,
-        };
-
-        // ── Sidebar + content layout (responsive) ────────────────────────────
-        let show_sidebar = if self.sidebar.wide {
-            self.sidebar.docked_visible()
-        } else {
-            self.sidebar.overlay_visible()
-        };
-
-        // Sidebar panel (hide when settings open on narrow)
-        let is_wide = self.sidebar.wide;
-        if show_sidebar && !(self.workspace_settings && !is_wide) {
-            if is_wide {
-                egui::Panel::left("main_sidebar")
-                    .min_size(DOCK_WIDTH)
-                    .max_size(280.0)
-                    .resizable(true)
-                    .show_inside(ui, |ui| {
-                        ui.add_space(top_inset);
-                        match self.sidebar_mode {
-                            SidebarMode::Main => {
-                                sidebar_action = main_sidebar(ui, &mut self.sidebar, &self.sessions, self.active_session_id.as_deref(), on_settings);
-                            }
-                            SidebarMode::Connections => {
-                                conn_action = connections_sidebar(ui, &self.saved_connections);
-                            }
-                        }
-                    });
-            } else {
-                egui::Panel::left("main_sidebar_narrow")
-                    .min_size(ui.available_width())
-                    .resizable(false)
-                    .show_inside(ui, |ui| {
-                        ui.add_space(top_inset);
-                        match self.sidebar_mode {
-                            SidebarMode::Main => {
-                                sidebar_action = main_sidebar(ui, &mut self.sidebar, &self.sessions, self.active_session_id.as_deref(), on_settings);
-                            }
-                            SidebarMode::Connections => {
-                                conn_action = connections_sidebar(ui, &self.saved_connections);
-                            }
-                        }
-                    });
+        if let Some(idx) = self.focused_session_index() {
+            if let WorkspaceSession::Terminal(term) = &mut self.sessions[idx] {
+                term.handle.repaint.set_context(ctx.clone());
             }
         }
 
-        // Right settings panel (wide only)
-        if self.sidebar.wide && self.settings_open && !self.workspace_settings {
-            let mut close_settings = false;
-            egui::Panel::right("settings_panel")
-                .min_size(300.0)
-                .max_size(420.0)
-                .resizable(true)
-                .show_inside(ui, |ui| {
-                    close_settings = settings_side_panel(ui, &mut self.settings);
-                });
-            if close_settings {
-                self.settings_open = false;
-                self.reload_terminal_fonts(&ctx);
-            }
+        let render = self.shell.render(
+            ui,
+            top_inset,
+            &mut self.sessions,
+            &mut self.settings,
+            &self.saved_connections,
+            &mut self.virtual_keyboard,
+            &mut self.live_font_size,
+        );
+
+        self.shell.sync_focus_change(&mut self.sessions);
+
+        if render.settings_closed {
+            self.shell.layout.settings_overlay = false;
+            save_settings(&self.settings);
+            self.live_font_size = self.settings.font_size();
+            self.reload_terminal_fonts(&ctx);
         }
 
-        // Settings toggle (after sidebar rendering so the action is captured)
-        if sidebar_action.settings_toggled {
-            if self.sidebar.wide {
-                self.settings_open = !self.settings_open;
-                self.workspace_settings = false;
-                self.sidebar_mode = SidebarMode::Main;
-            } else {
-                self.workspace_settings = true;
-                self.settings_open = false;
-                self.sidebar.close_overlay();
-                self.sidebar_mode = SidebarMode::Main;
-            }
-        }
+        let fa = &render.function_action;
+        let wa = &render.workspace_action;
 
-        // ── Recent-connections / empty-state actions ────────────────────────
-        let mut center_connect_clicked: Option<String> = None;
-        let mut center_more_clicked = false;
-
-        // Central content (wide: always; narrow: only when sidebar hidden or settings open)
-        let mut view_action = ConnectionViewAction::None;
-        let mut fm_action = FileManagerAction::default();
-        if self.sidebar.wide || !show_sidebar || self.workspace_settings {
-            if let Some(idx) = self.active_session_index() {
-                if let WorkspaceSession::Terminal(term) = &mut self.sessions[idx] {
-                    term.handle.repaint.set_context(ctx.clone());
-                }
-            }
-
-            egui::CentralPanel::default().show_inside(ui, |ui| {
-                ui.add_space(top_inset);
-                if self.workspace_settings {
-                    if settings_page(ui, &mut self.settings) {
-                        self.workspace_settings = false;
-                        save_settings(&self.settings);
-                        self.live_font_size = self.settings.font_size();
-                        self.reload_terminal_fonts(ui.ctx());
-                    }
-                } else if let Some(idx) = self.active_session_index() {
-                    match &mut self.sessions[idx] {
-                        WorkspaceSession::Terminal(term) => {
-                            let theme = self.settings.theme();
-                            let cursor_style = self.settings.cursor_style();
-                            let cell_width_scale = self.settings.default_profile().cell_width_scale;
-                            view_action = connection_view(
-                                ui,
-                                Some(term),
-                                &mut self.virtual_keyboard,
-                                theme,
-                                cursor_style,
-                                &mut self.live_font_size,
-                                cell_width_scale,
-                                &mut self.sidebar,
-                            );
-                        }
-                        WorkspaceSession::FileManager(fm) => {
-                            fm_action = file_manager_view(ui, fm, &mut self.sidebar);
-                        }
-                    }
-                } else {
-                    recent_connections_view(
-                        ui,
-                        &mut self.sidebar,
-                        &self.saved_connections,
-                        &mut center_connect_clicked,
-                        &mut center_more_clicked,
-                    );
-                }
-            });
+        if fa.open_connection_mgmt {
+            self.shell.layout.function_page = FunctionPage::Connections;
         }
-
-        // ── Post-frame actions ────────────────────────────────────────────────
-        if sidebar_action.open_connection_mgmt {
-            self.sidebar_mode = SidebarMode::Connections;
+        if fa.go_back {
+            self.shell.layout.function_page = FunctionPage::Workspace;
         }
-        if let Some(ref id) = center_connect_clicked {
-            self.connect_to(id);
-        }
-        if center_more_clicked {
-            if !self.sidebar.wide {
-                self.sidebar.open_overlay();
-            }
-            self.sidebar_mode = SidebarMode::Connections;
-        }
-        if conn_action.go_back {
-            self.sidebar_mode = SidebarMode::Main;
-        }
-        if conn_action.new_connection {
+        if fa.new_connection {
             self.new_conn_dialog.open_new();
         }
-        if let Some(ref id) = conn_action.connect_connection {
+        if let Some(ref id) = fa.connect_connection {
             self.connect_to(id);
-            self.sidebar_mode = SidebarMode::Main;
-            self.sidebar.close_overlay();
+            self.shell.layout.function_page = FunctionPage::Workspace;
         }
-        if let Some(ref id) = conn_action.open_file_mgr {
+        if let Some(ref id) = fa.open_file_mgr {
             if let Some(conn) = self.saved_connections.iter().find(|c| c.id == *id) {
                 match conn.conn_type {
                     ConnectionType::Local => self.open_file_manager_local(),
@@ -808,26 +644,48 @@ impl eframe::App for RsTerminalApp {
                     _ => {}
                 }
             }
-            self.sidebar_mode = SidebarMode::Main;
-            self.sidebar.close_overlay();
+            self.shell.layout.function_page = FunctionPage::Workspace;
         }
-        if let Some(ref id) = conn_action.edit_connection {
+        if let Some(ref id) = fa.edit_connection {
             if let Some(conn) = self.saved_connections.iter().find(|c| c.id == *id) {
                 self.new_conn_dialog.open_edit(conn);
             }
         }
-        if let Some(ref id) = conn_action.delete_connection {
+        if let Some(ref id) = fa.delete_connection {
             self.saved_connections.retain(|c| c.id != *id);
             storage::save_connections(&self.saved_connections);
         }
+        if let Some(ref id) = fa.close_session {
+            self.close_session(id);
+        }
+        if let Some(ref id) = fa.duplicate_session {
+            self.duplicate_session(id);
+            if self.shell.function_pane.overlay_visible() {
+                self.shell.function_pane.close_overlay();
+            }
+        }
+
+        if let Some(req) = wa.connect_from_empty.clone() {
+            self.connect_to_pane(&req.connection_id, req.pane);
+        }
+        if let Some(pane) = wa.open_connections_from_empty {
+            self.shell.layout.workspace.focused_pane = pane;
+            if !self.shell.function_pane.wide {
+                self.shell.function_pane.open_overlay();
+            }
+            self.shell.layout.function_page = FunctionPage::Connections;
+        }
+
         if let Some(apply) = self.local_term_dialog.show(&ctx, &self.saved_connections) {
             self.apply_local_terminal_settings(apply);
         }
-        if self.workspace_settings || self.settings_open || sidebar_action.settings_toggled {
+
+        if fa.toggle_settings || render.settings_closed {
             save_settings(&self.settings);
             self.live_font_size = self.settings.font_size();
             self.reload_terminal_fonts(&ctx);
         }
+
         if let Some(new_conn) = self.new_conn_dialog.show(&ctx) {
             if let Some(pos) = self
                 .saved_connections
@@ -841,45 +699,55 @@ impl eframe::App for RsTerminalApp {
             storage::save_connections(&self.saved_connections);
         }
 
-        self.apply_session_panel_action(
-            crate::ui::widget::sidebar::common::SidebarSessionAction {
-                select_session: sidebar_action.select_session,
-                close_session: sidebar_action.close_session,
-                new_window_session: sidebar_action.new_window_session,
-            },
-            self.sidebar.overlay_visible(),
-        );
-        if matches!(view_action, ConnectionViewAction::CloseSession) || fm_action.close {
-            if let Some(id) = self.active_session_id.clone() {
-                self.close_session(&id);
-            }
+        if let Some(pane) = wa.close_pane_session {
+            self.close_pane_and_maybe_session(pane);
         }
-        if let ConnectionViewAction::Reconnect(ref conn_id) = view_action {
-            if let Some(idx) = self.active_session_index() {
-                if let WorkspaceSession::Terminal(session) = &mut self.sessions[idx] {
-                    if matches!(session.conn_type, ConnectionType::Ssh) {
-                        if let Some(config) =
-                            self.saved_connections.iter().find(|c| c.id == *conn_id)
-                        {
-                            match ssh::connect_ssh(
-                                config,
-                                &self.settings.ssh_env_vars,
-                                24,
-                                80,
-                            ) {
-                                Ok(new_handle) => {
-                                    session.handle = new_handle;
-                                    session.disconnect_message = None;
-                                    session.want_terminal_focus = true;
+
+        if matches!(wa.terminal, ConnectionViewAction::CloseSession) || wa.file_manager.close {
+            let pane = wa
+                .terminal_pane
+                .unwrap_or(self.shell.layout.workspace.focused_pane);
+            self.close_pane_and_maybe_session(pane);
+        }
+        if let ConnectionViewAction::Reconnect(ref conn_id) = wa.terminal {
+            let pane = wa
+                .terminal_pane
+                .unwrap_or(self.shell.layout.workspace.focused_pane);
+            if let Some(sid) = self
+                .shell
+                .layout
+                .workspace
+                .panes
+                .get(&pane)
+                .and_then(|p| p.session_id.clone())
+            {
+                if let Some(idx) = self.sessions.iter().position(|s| s.id() == sid) {
+                    if let WorkspaceSession::Terminal(session) = &mut self.sessions[idx] {
+                        if matches!(session.conn_type, ConnectionType::Ssh) {
+                            if let Some(config) =
+                                self.saved_connections.iter().find(|c| c.id == *conn_id)
+                            {
+                                match ssh::connect_ssh(
+                                    config,
+                                    &self.settings.ssh_env_vars,
+                                    24,
+                                    80,
+                                ) {
+                                    Ok(new_handle) => {
+                                        session.handle = new_handle;
+                                        session.disconnect_message = None;
+                                        session.want_terminal_focus = true;
+                                    }
+                                    Err(e) => self.connection_notice = Some(e),
                                 }
-                                Err(e) => self.connection_notice = Some(e),
                             }
                         }
                     }
                 }
             }
         }
+
+        self.settings.function_pane_width = Some(self.shell.layout.function_width);
         ctx.request_repaint_after(std::time::Duration::from_millis(400));
     }
 }
-

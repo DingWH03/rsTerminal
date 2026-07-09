@@ -117,6 +117,12 @@ pub struct AppSettings {
     /// UI theme (light/dark/system).
     #[serde(default)]
     pub ui_theme: UiTheme,
+    /// Left function pane width (pixels).
+    #[serde(default)]
+    pub function_pane_width: Option<f32>,
+    /// Accent colors for split panes (RGB). Empty = theme default palette.
+    #[serde(default)]
+    pub pane_accent_colors: Vec<[u8; 3]>,
 }
 
 impl Default for AppSettings {
@@ -132,6 +138,8 @@ impl Default for AppSettings {
             default_local_connection_id: None,
             language: Language::default(),
             ui_theme: UiTheme::default(),
+            function_pane_width: None,
+            pane_accent_colors: Vec::new(),
         }
     }
 }

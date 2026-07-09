@@ -561,6 +561,86 @@ fn text_row(ui: &mut egui::Ui, layout: SettingsFormLayout, label: &str, value: &
     });
 }
 
+fn pane_colors_section(ui: &mut egui::Ui, layout: SettingsFormLayout, settings: &mut AppSettings) {
+    use crate::ui::pane_colors::palette_for_theme;
+
+    layout.form_row(ui, &rust_i18n::t!("settings_pane_colors"), |ui, _| {
+        ui.vertical(|ui| {
+            ui.label(
+                egui::RichText::new(rust_i18n::t!("settings_pane_colors_desc"))
+                    .size(11.0)
+                    .color(ui.visuals().weak_text_color()),
+            );
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                if ui
+                    .button(rust_i18n::t!("settings_pane_colors_theme"))
+                    .clicked()
+                {
+                    settings.pane_accent_colors = palette_for_theme(settings.ui_theme);
+                }
+                if ui
+                    .button(rust_i18n::t!("settings_pane_colors_reset"))
+                    .clicked()
+                {
+                    settings.pane_accent_colors.clear();
+                }
+            });
+            if settings.pane_accent_colors.is_empty() {
+                ui.horizontal(|ui| {
+                    for c in palette_for_theme(settings.ui_theme) {
+                        let (rect, _) =
+                            ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::hover());
+                        if ui.is_rect_visible(rect) {
+                            ui.painter().rect_filled(
+                                rect,
+                                3.0,
+                                egui::Color32::from_rgb(c[0], c[1], c[2]),
+                            );
+                        }
+                    }
+                });
+            } else {
+                let mut remove_at = None;
+                for (i, rgb) in settings.pane_accent_colors.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        ui.label(format!(
+                            "{} {}",
+                            rust_i18n::t!("settings_pane_color"),
+                            i + 1
+                        ));
+                        let mut floats = [
+                            rgb[0] as f32 / 255.0,
+                            rgb[1] as f32 / 255.0,
+                            rgb[2] as f32 / 255.0,
+                        ];
+                        if ui.color_edit_button_rgb(&mut floats).changed() {
+                            *rgb = [
+                                (floats[0] * 255.0) as u8,
+                                (floats[1] * 255.0) as u8,
+                                (floats[2] * 255.0) as u8,
+                            ];
+                        }
+                        if ui.small_button("✕").clicked() {
+                            remove_at = Some(i);
+                        }
+                    });
+                }
+                if let Some(i) = remove_at {
+                    settings.pane_accent_colors.remove(i);
+                }
+                if settings.pane_accent_colors.len() < 12
+                    && ui.button(rust_i18n::t!("add")).clicked()
+                {
+                    let theme = palette_for_theme(settings.ui_theme);
+                    let pick = theme[settings.pane_accent_colors.len() % theme.len()];
+                    settings.pane_accent_colors.push(pick);
+                }
+            }
+        });
+    });
+}
+
 fn color_row(ui: &mut egui::Ui, layout: SettingsFormLayout, label: &str, color: &mut egui::Color32) {
     layout.form_row(ui, label, |ui, _| {
         ui.horizontal(|ui| {
@@ -629,6 +709,8 @@ fn general_tab(ui: &mut egui::Ui, settings: &mut AppSettings) {
             |theme| theme.label(),
             "ui_theme_selector",
         );
+
+        pane_colors_section(ui, layout, settings);
     });
 
     section_env_card(

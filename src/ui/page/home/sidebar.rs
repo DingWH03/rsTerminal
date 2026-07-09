@@ -1,63 +1,65 @@
-//! 首页侧边栏 — 品牌标识、导航按钮（首页/设置）和会话列表。
+//! Legacy home sidebar — use [`crate::ui::function_pane`] instead.
 
 use crate::session::WorkspaceSession;
-use crate::ui::widget::sidebar::Sidebar;
-use crate::ui::widget::sidebar::common::{nav_button, sidebar_brand_row, sidebar_sessions_panel, SidebarSessionAction};
+use crate::ui::function_pane::common::{brand_row, nav_button};
+use crate::ui::function_pane::session_list::paint_session_rows;
+use crate::ui::function_pane::FunctionPane;
 
-/// 首页侧边栏的渲染结果。
 pub struct HomeSidebarResult {
-    /// 导航操作（首页/设置）
     pub nav: HomeSidebarAction,
-    /// 会话列表操作（选择/关闭/新窗口）
-    pub sessions: SidebarSessionAction,
+    pub sessions: SessionRowAction,
 }
 
-/// 首页侧边栏导航操作枚举。
-#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum HomeSidebarAction {
-    /// 无操作
     None,
-    /// 跳转到首页
     Home,
-    /// 跳转到设置
     Settings,
 }
 
-/// 渲染首页侧边栏。
-///
-/// 包含品牌标题行、导航按钮（首页/设置）、分隔线和当前会话列表。
-/// `in_overlay` 参数控制是否为浮动覆盖模式（窄屏时使用）。
+pub struct SessionRowAction {
+    pub select_session: Option<String>,
+    pub close_session: Option<String>,
+    pub new_window_session: Option<String>,
+}
+
 pub fn paint_home_sidebar(
     ui: &mut egui::Ui,
-    sidebar: &mut Sidebar,
-    in_overlay: bool,
-    on_home: bool,
-    on_settings: bool,
+    pane: &mut FunctionPane,
     sessions: &[WorkspaceSession],
-    active_session_id: Option<&str>,
+    active_id: Option<&str>,
+    on_settings: bool,
 ) -> HomeSidebarResult {
-    let show_ham = in_overlay && !sidebar.wide;
-    sidebar_brand_row(ui, sidebar, show_ham);
-    ui.add_space(8.0);
-
     let mut nav_action = HomeSidebarAction::None;
 
-    ui.add_space(2.0);
-    if nav_button(ui, "\u{2302}", &rust_i18n::t!("sidebar_home"), on_home).clicked() {
+    brand_row(ui, pane, false);
+    if nav_button(ui, None, "Home", false).clicked() {
         nav_action = HomeSidebarAction::Home;
     }
-    if nav_button(ui, "\u{2699}", &rust_i18n::t!("settings"), on_settings).clicked() {
+    if nav_button(
+        ui,
+        Some(crate::ui::widget::vector_icons::Icon::Settings),
+        &rust_i18n::t!("settings"),
+        on_settings,
+    )
+    .clicked()
+    {
         nav_action = HomeSidebarAction::Settings;
     }
 
-    ui.add_space(8.0);
-    ui.separator();
-    ui.add_space(4.0);
-
-    let sessions_action = sidebar_sessions_panel(ui, sessions, active_session_id);
+    let empty_accents = std::collections::HashMap::new();
+    let ctx = crate::ui::function_pane::session_list::SessionListContext {
+        split_enabled: false,
+        visible_sessions: &std::collections::HashSet::new(),
+        session_accents: &empty_accents,
+    };
+    let sess = paint_session_rows(ui, sessions, active_id, &ctx);
 
     HomeSidebarResult {
         nav: nav_action,
-        sessions: sessions_action,
+        sessions: SessionRowAction {
+            select_session: sess.select_session,
+            close_session: sess.close_session,
+            new_window_session: None,
+        },
     }
 }

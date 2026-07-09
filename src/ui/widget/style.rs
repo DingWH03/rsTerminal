@@ -45,6 +45,10 @@ pub const BORDER_SUBTLE: Color32 = Color32::from_rgba_premultiplied(255, 255, 25
 pub const BORDER: Color32 = Color32::from_rgba_premultiplied(255, 255, 255, 20);
 /// 选中/聚焦元素的强调边框。
 pub const BORDER_ACCENT: Color32 = Color32::from_rgba_premultiplied(74, 158, 255, 80);
+/// 分屏窗格彩色边框宽度（描边，与内容内边距解耦）。
+pub const PANE_BORDER_WIDTH: f32 = 2.0;
+/// 分屏窗格内容区与窗格边缘的内边距（小于边框宽度以收紧布局）。
+pub const PANE_INSET: f32 = 1.0;
 
 // ─── 文字颜色 ──────────────────────────────────────────────────────────
 

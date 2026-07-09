@@ -32,12 +32,14 @@ use crate::ui::page::terminal::grid::{apply_resize, drain_after_resize};
 use crate::ui::widget::clipboard::{read_text, write_text};
 
 use crate::ui::widget::keyboard::VirtualKeyboard;
-use crate::ui::widget::sidebar::Sidebar;
-use crate::ui::widget::style;
-use crate::ui::widget::components::toolbar_button::toolbar_button;
+use crate::ui::function_pane::FunctionPane;
+use crate::ui::widget::components::toolbar_button::{
+    icon_toolbar_button, icon_toolbar_danger, icon_toolbar_toggle, text_toolbar_button,
+};
+use crate::ui::widget::vector_icons::Icon;
 use crate::ui::page::terminal::input::{
     allocate_terminal_surface, has_any_keyboard_input, lock_terminal_focus,
-    process_keyboard_input, terminal_widget_id, TERMINAL_GRID_MARGIN,
+    process_keyboard_input, terminal_widget_id,
 };
 #[cfg(target_os = "android")]
 use crate::ui::page::terminal::input::{
@@ -175,13 +177,22 @@ pub struct ActiveSession {
 }
 
 /// 终端连接视图的操作结果枚举。
+#[derive(Debug)]
 pub enum ConnectionViewAction {
     /// 无操作
     None,
     /// 关闭当前显示的终端会话
     CloseSession,
+    /// 分屏模式下隐藏（最小化）当前窗格
+    MinimizePane,
     /// 使用给定的已保存连接 ID 重新连接 SSH 会话
     Reconnect(String),
+}
+
+impl Default for ConnectionViewAction {
+    fn default() -> Self {
+        Self::None
+    }
 }
 
 /// 工作区标签页：可以是终端仿真器或文件管理器。
@@ -404,9 +415,14 @@ pub fn connection_view(
     cursor_style: CursorStyle,
     font_size: &mut f32,
     cell_width_scale: f32,
-    sidebar: &mut Sidebar,
+    function_pane: &mut FunctionPane,
+    pane_id: u64,
+    is_focused_pane: bool,
+    pane_focus_click: &mut bool,
+    in_split: bool,
 ) -> ConnectionViewAction {
     let ctx = ui.ctx().clone();
+    let term_widget_id = terminal_widget_id(pane_id);
     let mut action = ConnectionViewAction::None;
 
     if let Some(session) = session.as_ref() {
@@ -418,6 +434,8 @@ pub fn connection_view(
     let mut paste_texts: Vec<String> = Vec::new();
     let mut terminal_menu_action = TerminalMenuAction::default();
 
+    let show_hamburger = !in_split && function_pane.show_content_hamburger();
+
     // 1. Header bar — ☰ + title + selection-action bar + toolbar
     let show_actions = session
         .as_ref()
@@ -428,14 +446,14 @@ pub fn connection_view(
     let show_title = header_total_w > 320.0 && !show_actions;
 
     ui.horizontal(|ui| {
-        // Compact header: tight spacing throughout
-        ui.style_mut().spacing.button_padding = egui::vec2(4.0, 1.0);
-        ui.style_mut().spacing.item_spacing.x = 4.0;
+        ui.style_mut().spacing.button_padding = egui::vec2(2.0, 1.0);
+        ui.style_mut().spacing.item_spacing.x = 2.0;
 
-        if sidebar.show_content_hamburger()
-            && sidebar.hamburger(ui).clicked()
-        {
-            sidebar.hamburger_click();
+        if show_hamburger {
+            if icon_toolbar_button(ui, ui.id().with(("hdr_menu", pane_id)), Icon::Hamburger).clicked()
+            {
+                function_pane.hamburger_click();
+            }
         }
 
         if show_actions {
@@ -513,57 +531,84 @@ pub fn connection_view(
         }
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.style_mut().spacing.button_padding = egui::vec2(4.0, 1.0);
+            ui.style_mut().spacing.item_spacing.x = 2.0;
 
-            // ── Close — rightmost, red accent hover ────────────────────────
-            ui.scope(|ui| {
-                ui.style_mut().visuals.widgets.hovered.bg_fill = style::RED_BG;
-                ui.style_mut().visuals.widgets.active.bg_fill = style::RED_BG;
-                if toolbar_button(ui, egui::RichText::new("✕").size(12.0).color(style::RED)).clicked() {
+            if in_split {
+                if icon_toolbar_danger(ui, ui.id().with(("hdr_close", pane_id)), Icon::Close)
+                    .on_hover_text(rust_i18n::t!("close_pane"))
+                    .clicked()
+                {
                     action = ConnectionViewAction::CloseSession;
                 }
-            });
+                if icon_toolbar_button(ui, ui.id().with(("hdr_hide", pane_id)), Icon::Minimize)
+                    .on_hover_text(rust_i18n::t!("minimize_pane"))
+                    .clicked()
+                {
+                    action = ConnectionViewAction::MinimizePane;
+                }
+            } else {
+                if icon_toolbar_danger(ui, ui.id().with(("hdr_close", pane_id)), Icon::Close)
+                    .on_hover_text(rust_i18n::t!("close_pane"))
+                    .clicked()
+                {
+                    action = ConnectionViewAction::CloseSession;
+                }
 
-            // ── Keyboard mode toggle ───────────────────────────────────────
-            #[cfg(not(target_os = "android"))]
-            let show_mode_toggle = true;
-            #[cfg(target_os = "android")]
-            let show_mode_toggle = true;
-            if show_mode_toggle {
                 let mode_label = match keyboard.mode {
                     crate::ui::widget::keyboard::KeyboardMode::Special => "Sp",
                     crate::ui::widget::keyboard::KeyboardMode::Full => "Full",
                 };
-                if toolbar_button(ui, mode_label).clicked() {
+                if text_toolbar_button(ui, ui.id().with(("hdr_kbmode", pane_id)), mode_label)
+                    .on_hover_text(rust_i18n::t!("settings_default_keyboard"))
+                    .clicked()
+                {
                     keyboard.toggle_mode();
                 }
-            }
 
-            // ── Keyboard toggle ────────────────────────────────────────────
-            let kb_icon = if keyboard.visible { "⌨✓" } else { "⌨" };
-            if toolbar_button(ui, kb_icon).clicked() {
-                keyboard.toggle();
-                #[cfg(target_os = "android")]
-                if keyboard.visible {
-                    keyboard.terminal_ime_enabled = false;
-                    hide_android_terminal_ime(ui.ctx());
+                if icon_toolbar_toggle(
+                    ui,
+                    ui.id().with(("hdr_kb", pane_id)),
+                    Icon::Keyboard,
+                    keyboard.visible,
+                )
+                .on_hover_text(rust_i18n::t!("settings_default_keyboard"))
+                .clicked()
+                {
+                    keyboard.toggle();
+                    #[cfg(target_os = "android")]
+                    if keyboard.visible {
+                        keyboard.terminal_ime_enabled = false;
+                        hide_android_terminal_ime(ui.ctx());
+                    }
                 }
-            }
 
-            // ── Font size quick controls (desktop only) ────────────────────
-            #[cfg(not(target_os = "android"))]
-            {
-                if toolbar_button(ui, "A-").clicked() {
-                    *font_size = (*font_size - 1.0).max(8.0);
-                }
-                if toolbar_button(ui, "A+").clicked() {
-                    *font_size = (*font_size + 1.0).min(32.0);
+                #[cfg(not(target_os = "android"))]
+                {
+                    if icon_toolbar_button(
+                        ui,
+                        ui.id().with(("hdr_font_dec", pane_id)),
+                        Icon::FontSmaller,
+                    )
+                    .on_hover_text("A-")
+                    .clicked()
+                    {
+                        *font_size = (*font_size - 1.0).max(8.0);
+                    }
+                    if icon_toolbar_button(
+                        ui,
+                        ui.id().with(("hdr_font_inc", pane_id)),
+                        Icon::FontLarger,
+                    )
+                    .on_hover_text("A+")
+                    .clicked()
+                    {
+                        *font_size = (*font_size + 1.0).min(32.0);
+                    }
                 }
             }
         });
     });
-    // Compact separator
-    ui.add(egui::Separator::default().spacing(4.0));
+    ui.add(egui::Separator::default().spacing(2.0));
 
     // 2. Measure and resize terminal
     let available = ui.available_size();
@@ -571,13 +616,18 @@ pub fn connection_view(
     let ime_inset = crate::platform::get().bottom_inset_points(ui.ctx());
     #[cfg(not(target_os = "android"))]
     let ime_inset = 0.0;
-    let kb_total = keyboard.reserved_height(available.x);
-    let term_w = (available.x - 2.0 * TERMINAL_GRID_MARGIN).max(1.0);
-    let term_h = (available.y - kb_total - ime_inset - 2.0 * TERMINAL_GRID_MARGIN).max(1.0);
+    let kb_enabled = !in_split;
+    let kb_total = if kb_enabled {
+        keyboard.reserved_height(available.x)
+    } else {
+        0.0
+    };
+    let area_w = available.x.max(1.0);
+    let area_h = (available.y - kb_total - ime_inset).max(1.0);
 
     let (cell_w, cell_h) = measure_cell(ui, *font_size, cell_width_scale);
-    let desired_cols = (term_w / cell_w).floor().max(1.0) as usize;
-    let desired_rows = (term_h / cell_h).floor().max(1.0) as usize;
+    let desired_cols = (area_w / cell_w).floor().max(1.0) as usize;
+    let desired_rows = (area_h / cell_h).floor().max(1.0) as usize;
     let mut resize_applied = false;
 
     if let Some(session) = session.as_mut() {
@@ -623,9 +673,9 @@ pub fn connection_view(
             egui::Frame::new()
                 .fill(egui::Color32::from_rgba_unmultiplied(20, 20, 20, 240))
                 .show(ui, |ui| {
-                    ui.set_min_size(egui::vec2(term_w, term_h));
+                    ui.set_min_size(egui::vec2(area_w, area_h));
                     ui.vertical_centered(|ui| {
-                        ui.add_space(term_h * 0.25);
+                        ui.add_space(area_h * 0.25);
                         ui.label(
                             egui::RichText::new(title)
                                 .size(18.0)
@@ -663,9 +713,9 @@ pub fn connection_view(
             egui::Frame::new()
                 .fill(egui::Color32::from_rgba_unmultiplied(20, 20, 20, 200))
                 .show(ui, |ui| {
-                    ui.set_min_size(egui::vec2(term_w, term_h));
+                    ui.set_min_size(egui::vec2(area_w, area_h));
                     ui.vertical_centered(|ui| {
-                        ui.add_space(term_h * 0.35);
+                        ui.add_space(area_h * 0.35);
                         ui.label(egui::RichText::new("Connecting…").size(16.0).weak());
                     });
                 });
@@ -674,13 +724,13 @@ pub fn connection_view(
     }
 
     // 4. Terminal surface (keyboard focus target; stable id for focus-lock filter)
-    let panel_size = egui::vec2(term_w, term_h);
     let grid_size = egui::vec2(grid_cols as f32 * cell_w, grid_rows as f32 * cell_h);
     let (panel_rect, grid_rect, mut term_resp) = allocate_terminal_surface(
         ui,
-        panel_size,
+        egui::vec2(area_w, area_h),
         grid_size,
         egui::Sense::click_and_drag() | egui::Sense::FOCUSABLE,
+        term_widget_id,
     );
     if resize_applied {
         term_resp.mark_changed();
@@ -695,21 +745,28 @@ pub fn connection_view(
     }
     if term_resp.clicked() && !term_resp.long_touched() {
         term_resp.request_focus();
+        if !is_focused_pane {
+            *pane_focus_click = true;
+        }
         #[cfg(target_os = "android")]
         {
             keyboard.terminal_ime_enabled = true;
             show_android_terminal_ime(ui.ctx(), grid_rect);
         }
     }
-    if session.as_ref().is_some_and(|s| s.want_terminal_focus) {
-        ui.ctx().memory_mut(|mem| mem.request_focus(terminal_widget_id()));
+    if is_focused_pane && session.as_ref().is_some_and(|s| s.want_terminal_focus) {
+        ui.ctx()
+            .memory_mut(|mem| mem.request_focus(term_widget_id));
     }
-    // Reclaim focus if navigation stole it (only the terminal should be keyboard-focusable here).
-    if session.as_ref().is_some_and(|s| s.terminal_had_focus) && !term_resp.has_focus() {
+    // Reclaim focus if navigation stole it (only the focused pane's terminal).
+    if is_focused_pane
+        && session.as_ref().is_some_and(|s| s.terminal_had_focus)
+        && !term_resp.has_focus()
+    {
         term_resp.request_focus();
     }
-    let term_focused = term_resp.has_focus()
-        || session.as_ref().is_some_and(|s| s.terminal_had_focus);
+    let term_focused = is_focused_pane
+        && (term_resp.has_focus() || session.as_ref().is_some_and(|s| s.terminal_had_focus));
 
     // Touch long-press behaviour (works on any device with a touch screen):
     //
@@ -818,7 +875,7 @@ pub fn connection_view(
 
     // 自动聚焦：当终端未聚焦但用户开始输入时，自动将焦点还给终端
     // 注意：request_focus 在下一帧生效，但当前帧的事件会被 process_keyboard_input 消费
-    let needs_focus = !term_focused && has_any_keyboard_input(&ctx);
+    let needs_focus = is_focused_pane && !term_focused && has_any_keyboard_input(&ctx);
     if needs_focus {
         term_resp.request_focus();
         #[cfg(target_os = "android")]
@@ -830,6 +887,7 @@ pub fn connection_view(
 
     process_keyboard_input(
         &ctx,
+        term_widget_id,
         // 如果本帧需要聚焦，假装终端已聚焦以消费事件
         term_focused || needs_focus,
         has_selection,
@@ -1164,7 +1222,7 @@ pub fn connection_view(
     }
 
     // 6. Virtual keyboard — fixed-height bottom strip so rows are not pushed/clipped
-    if keyboard.visible {
+    if kb_enabled && keyboard.visible {
         ui.separator();
         let kb_h = keyboard.content_height(ui.available_width());
         let kbd_output = ui
@@ -1187,10 +1245,14 @@ pub fn connection_view(
     }
 
     if let Some(session) = session.as_mut() {
-        session.terminal_had_focus = term_resp.has_focus();
+        if is_focused_pane {
+            session.terminal_had_focus = term_resp.has_focus();
+        } else {
+            session.terminal_had_focus = false;
+        }
     }
-    if term_resp.has_focus() {
-        lock_terminal_focus(ui.ctx());
+    if is_focused_pane && term_resp.has_focus() {
+        lock_terminal_focus(ui.ctx(), term_widget_id);
     }
     #[cfg(target_os = "android")]
     {
