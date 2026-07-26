@@ -29,14 +29,14 @@ use crate::terminal::cursor::paint_cursor;
 use crate::terminal::metrics::measure_cell;
 use crate::terminal::{Terminal, DEFAULT_GRID_COLS, DEFAULT_GRID_ROWS};
 use crate::ui::page::terminal::grid::{apply_resize, drain_after_resize};
-use crate::ui::widget::clipboard::{read_text, write_text};
+use crate::ui::uiframe::clipboard::{read_text, write_text};
 
-use crate::ui::widget::keyboard::VirtualKeyboard;
+use crate::ui::uiframe::keyboard::VirtualKeyboard;
 use crate::ui::function_pane::FunctionPane;
-use crate::ui::widget::components::toolbar_button::{
+use crate::ui::uiframe::components::toolbar_button::{
     icon_toolbar_button, icon_toolbar_danger, icon_toolbar_toggle, text_toolbar_button,
 };
-use crate::ui::widget::vector_icons::Icon;
+use crate::ui::uiframe::vector_icons::Icon;
 use crate::ui::page::terminal::input::{
     allocate_terminal_surface, has_any_keyboard_input, lock_terminal_focus,
     process_keyboard_input, terminal_widget_id,
@@ -555,8 +555,8 @@ pub fn connection_view(
                 }
 
                 let mode_label = match keyboard.mode {
-                    crate::ui::widget::keyboard::KeyboardMode::Special => "Sp",
-                    crate::ui::widget::keyboard::KeyboardMode::Full => "Full",
+                    crate::ui::uiframe::keyboard::KeyboardMode::Special => "Sp",
+                    crate::ui::uiframe::keyboard::KeyboardMode::Full => "Full",
                 };
                 if text_toolbar_button(ui, ui.id().with(("hdr_kbmode", pane_id)), mode_label)
                     .on_hover_text(rust_i18n::t!("settings_default_keyboard"))
@@ -1416,7 +1416,7 @@ fn apply_touch_pinch_zoom(ctx: &egui::Context, font_size: &mut f32) -> bool {
     true
 }
 
-// toolbar_button 已迁移到 crate::ui::widget::components::toolbar_button
+// toolbar_button 已迁移到 crate::ui::uiframe::components::toolbar_button
 
 /// 向 PTY 粘贴文本。
 ///

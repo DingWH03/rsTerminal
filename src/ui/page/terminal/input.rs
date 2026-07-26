@@ -8,8 +8,8 @@
 
 use egui::{Context, Event, EventFilter, Id, Key, Modifiers, Sense, Ui, Vec2};
 
-use crate::ui::widget::clipboard::read_text;
-use crate::ui::widget::keyboard::ctrl_byte_for_char;
+use crate::ui::uiframe::clipboard::read_text;
+use crate::ui::uiframe::keyboard::ctrl_byte_for_char;
 
 /// 每个窗格使用独立 ID，避免多分屏时 First/Second use 冲突。
 pub fn terminal_widget_id(pane: u64) -> Id {

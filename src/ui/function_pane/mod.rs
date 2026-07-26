@@ -1,7 +1,8 @@
-//! Left function pane — session list, connection management, settings entry.
+//! Left function pane — sessions, connections, and sidebar files.
 
 pub mod common;
 pub mod connections;
+pub mod files_view;
 pub mod pages;
 pub mod session_list;
 pub mod workspace_view;
@@ -9,9 +10,11 @@ pub mod workspace_view;
 use crate::session::WorkspaceSession;
 use crate::settings::AppSettings;
 use crate::storage::types::SavedConnection;
+use crate::ui::function_pane::files_view::SidebarFilesState;
 use crate::ui::function_pane::pages::FunctionPage;
 use crate::ui::shell::layout_state::WorkspaceLayout;
 use crate::ui::shell::messages::FunctionAction;
+use crate::ui::uiframe::{TabBar, TabBarItem};
 
 /// 宽屏/窄屏切换阈值（像素）
 pub const WIDE_THRESHOLD: f32 = 720.0;
@@ -78,10 +81,10 @@ impl FunctionPane {
     pub fn hamburger(&mut self, ui: &mut egui::Ui) -> egui::Response {
         let (rect, resp) = ui.allocate_exact_size(egui::vec2(28.0, 24.0), egui::Sense::click());
         if ui.is_rect_visible(rect) {
-            crate::ui::widget::vector_icons::paint(
+            crate::ui::uiframe::vector_icons::paint(
                 ui,
                 rect,
-                crate::ui::widget::vector_icons::Icon::Hamburger,
+                crate::ui::uiframe::vector_icons::Icon::Hamburger,
                 ui.visuals().weak_text_color(),
                 1.5,
             );
@@ -105,28 +108,101 @@ pub fn drag_split_enabled(pane: &FunctionPane, session_count: usize) -> bool {
     pane.docked_visible() && session_count >= 1
 }
 
+/// Whether the Files tab should be shown.
+pub fn files_tab_visible(
+    pane: &FunctionPane,
+    sessions: &[WorkspaceSession],
+    focused_session_id: Option<&str>,
+) -> bool {
+    if !pane.wide {
+        return false;
+    }
+    let Some(id) = focused_session_id else {
+        return false;
+    };
+    sessions
+        .iter()
+        .find(|s| s.id() == id)
+        .is_some_and(|s| s.is_terminal())
+}
+
 pub fn render(
     ui: &mut egui::Ui,
     pane: &mut FunctionPane,
-    page: &FunctionPage,
+    page: &mut FunctionPage,
     sessions: &[WorkspaceSession],
     workspace: &WorkspaceLayout,
     highlighted_session: Option<&str>,
-    settings_open: bool,
     connections: &[SavedConnection],
     settings: &AppSettings,
+    files_state: &mut SidebarFilesState,
     _page_slide: f32,
 ) -> FunctionAction {
-    match page {
-        FunctionPage::Workspace => workspace_view::render(
-            ui,
-            pane,
-            sessions,
-            workspace,
-            highlighted_session,
-            settings_open,
-            settings,
-        ),
-        FunctionPage::Connections => connections::render(ui, connections),
+    let show_files = files_tab_visible(pane, sessions, workspace.focused_session_id());
+    if *page == FunctionPage::Files && !show_files {
+        *page = FunctionPage::Active;
     }
+
+    let mut action = FunctionAction::empty();
+
+    let active_tip = rust_i18n::t!("sidebar_tab_active");
+    let conn_tip = rust_i18n::t!("sidebar_tab_connections");
+    let files_tip = rust_i18n::t!("sidebar_tab_files");
+
+    use crate::ui::uiframe::vector_icons::Icon;
+    let mut items = vec![
+        TabBarItem {
+            id: FunctionPage::Active.as_tab_id(),
+            icon: Icon::Sessions,
+            tip: active_tip.as_ref(),
+        },
+        TabBarItem {
+            id: FunctionPage::Connections.as_tab_id(),
+            icon: Icon::Connections,
+            tip: conn_tip.as_ref(),
+        },
+    ];
+    if show_files {
+        items.push(TabBarItem {
+            id: FunctionPage::Files.as_tab_id(),
+            icon: Icon::Folder,
+            tip: files_tip.as_ref(),
+        });
+    }
+
+    // Pin tab strip to the bottom of the function pane.
+    let tab_strip_h = TabBar::HEIGHT + 6.0;
+    egui::Panel::bottom("function_pane_tabs")
+        .exact_size(tab_strip_h)
+        .show_separator_line(true)
+        .show_inside(ui, |ui| {
+            let mut selected = page.as_tab_id();
+            if TabBar::show(ui, &mut selected, &items) {
+                *page = FunctionPage::from_tab_id(selected);
+            }
+        });
+
+    egui::CentralPanel::default().show_inside(ui, |ui| {
+        let body_action = match *page {
+            FunctionPage::Active => workspace_view::render(
+                ui,
+                pane,
+                sessions,
+                workspace,
+                highlighted_session,
+                settings,
+            ),
+            FunctionPage::Connections => connections::render(ui, connections),
+            FunctionPage::Files => files_view::render(
+                ui,
+                files_state,
+                sessions,
+                workspace.focused_session_id(),
+                connections,
+            ),
+        };
+        action = body_action;
+    });
+
+    action
 }

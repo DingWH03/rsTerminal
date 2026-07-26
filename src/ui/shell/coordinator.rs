@@ -1,6 +1,5 @@
 //! Shell coordinator — applies actions from function and workspace panes.
 
-use crate::ui::function_pane::pages::FunctionPage;
 use crate::ui::shell::layout_state::{PaneId, ShellLayout};
 use crate::ui::shell::messages::{FunctionAction, WorkspaceAction};
 
@@ -8,16 +7,6 @@ pub struct ShellCoordinator;
 
 impl ShellCoordinator {
     pub fn apply_function(layout: &mut ShellLayout, action: &FunctionAction, in_overlay: bool) {
-        if action.toggle_settings {
-            layout.settings_overlay = !layout.settings_overlay;
-            layout.function_page = FunctionPage::Workspace;
-        }
-        if action.open_connection_mgmt {
-            layout.function_page = FunctionPage::Connections;
-        }
-        if action.go_back {
-            layout.function_page = FunctionPage::Workspace;
-        }
         if let Some(ref id) = action.select_session {
             if let Some(pane) = layout.workspace.pane_for_session(id) {
                 layout.workspace.focused_pane = pane;
@@ -26,13 +15,18 @@ impl ShellCoordinator {
                     .workspace
                     .assign_session(layout.workspace.focused_pane, Some(id.clone()));
             }
-            layout.settings_overlay = false;
             let _ = in_overlay;
         }
         if let Some(ref id) = action.close_session {
             layout.workspace.clear_session_everywhere(id);
         }
-        let _ = (&action.start_session_drag, &action.duplicate_session);
+        let _ = (
+            &action.start_session_drag,
+            &action.duplicate_session,
+            &action.open_connection_mgmt,
+            &action.toggle_settings,
+            &action.go_back,
+        );
     }
 
     pub fn apply_workspace(layout: &mut ShellLayout, action: &WorkspaceAction) {
@@ -52,7 +46,6 @@ impl ShellCoordinator {
     pub fn assign_session_to_pane(layout: &mut ShellLayout, pane: PaneId, session_id: String) {
         layout.workspace.assign_session(pane, Some(session_id));
         layout.workspace.focused_pane = pane;
-        layout.settings_overlay = false;
     }
 
     pub fn on_sessions_closed(layout: &mut ShellLayout, session_id: &str) {

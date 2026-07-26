@@ -14,9 +14,9 @@ use crate::ui::page::terminal::{
 };
 use crate::ui::shell::coordinator::ShellCoordinator;
 use crate::ui::shell::AppShell;
-use crate::ui::widget::dialogs::{LocalTerminalSettingsDialog, NewConnectionDialog};
-use crate::ui::widget::keyboard::VirtualKeyboard;
-use crate::ui::widget::style;
+use crate::ui::uiframe::dialogs::{LocalTerminalSettingsDialog, NewConnectionDialog};
+use crate::ui::uiframe::keyboard::VirtualKeyboard;
+use crate::ui::uiframe::style;
 use log::info;
 
 pub struct RsTerminalApp {
@@ -264,7 +264,7 @@ impl RsTerminalApp {
 
     fn apply_local_terminal_settings(
         &mut self,
-        apply: crate::ui::widget::dialogs::LocalTerminalSettingsApply,
+        apply: crate::ui::uiframe::dialogs::LocalTerminalSettingsApply,
     ) {
         if self
             .saved_connections
@@ -467,7 +467,7 @@ impl RsTerminalApp {
             return true;
         }
         if self.new_conn_dialog.open {
-            self.new_conn_dialog = NewConnectionDialog::default();
+            self.new_conn_dialog.close();
             return true;
         }
         if self.local_term_dialog.open {
@@ -475,18 +475,26 @@ impl RsTerminalApp {
             return true;
         }
         if self.shell.layout.function_page == FunctionPage::Connections {
-            self.shell.layout.function_page = FunctionPage::Workspace;
+            self.shell.layout.function_page = FunctionPage::Active;
             return true;
         }
         if self.shell.function_pane.overlay_visible() {
             self.shell.function_pane.close_overlay();
             return true;
         }
-        if self.shell.layout.settings_overlay {
-            self.shell.layout.settings_overlay = false;
+        if self.shell.layout.settings_dialog_open {
+            self.shell.layout.settings_dialog_open = false;
             save_settings(&self.settings);
             self.live_font_size = self.settings.font_size();
             self.reload_terminal_fonts(ctx);
+            return true;
+        }
+        if self.shell.layout.help_dialog_open {
+            self.shell.layout.help_dialog_open = false;
+            return true;
+        }
+        if self.shell.layout.connections_dialog_open {
+            self.shell.layout.connections_dialog_open = false;
             return true;
         }
         if self.has_open_sessions() {
@@ -614,7 +622,7 @@ impl eframe::App for RsTerminalApp {
         self.shell.sync_focus_change(&mut self.sessions);
 
         if render.settings_closed {
-            self.shell.layout.settings_overlay = false;
+            self.shell.layout.settings_dialog_open = false;
             save_settings(&self.settings);
             self.live_font_size = self.settings.font_size();
             self.reload_terminal_fonts(&ctx);
@@ -623,18 +631,12 @@ impl eframe::App for RsTerminalApp {
         let fa = &render.function_action;
         let wa = &render.workspace_action;
 
-        if fa.open_connection_mgmt {
-            self.shell.layout.function_page = FunctionPage::Connections;
-        }
-        if fa.go_back {
-            self.shell.layout.function_page = FunctionPage::Workspace;
-        }
         if fa.new_connection {
             self.new_conn_dialog.open_new();
         }
         if let Some(ref id) = fa.connect_connection {
             self.connect_to(id);
-            self.shell.layout.function_page = FunctionPage::Workspace;
+            self.shell.layout.function_page = FunctionPage::Active;
         }
         if let Some(ref id) = fa.open_file_mgr {
             if let Some(conn) = self.saved_connections.iter().find(|c| c.id == *id) {
@@ -644,7 +646,7 @@ impl eframe::App for RsTerminalApp {
                     _ => {}
                 }
             }
-            self.shell.layout.function_page = FunctionPage::Workspace;
+            self.shell.layout.function_page = FunctionPage::Active;
         }
         if let Some(ref id) = fa.edit_connection {
             if let Some(conn) = self.saved_connections.iter().find(|c| c.id == *id) {
@@ -670,10 +672,7 @@ impl eframe::App for RsTerminalApp {
         }
         if let Some(pane) = wa.open_connections_from_empty {
             self.shell.layout.workspace.focused_pane = pane;
-            if !self.shell.function_pane.wide {
-                self.shell.function_pane.open_overlay();
-            }
-            self.shell.layout.function_page = FunctionPage::Connections;
+            self.shell.layout.connections_dialog_open = true;
         }
 
         if let Some(apply) = self.local_term_dialog.show(&ctx, &self.saved_connections) {

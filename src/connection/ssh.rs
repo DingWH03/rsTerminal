@@ -14,6 +14,14 @@ use crate::connection::{
 };
 use crate::storage::types::SavedConnection;
 
+/// Bash `PROMPT_COMMAND` that emits OSC 7 with `$HOSTNAME` + `$PWD`.
+///
+/// Sent via SSH `set_env` (no PTY echo). Requires the server to accept the variable
+/// (`AcceptEnv PROMPT_COMMAND` / `SetEnv`, etc.); otherwise it is ignored and the
+/// sidebar falls back to SFTP home until OSC 7 arrives by other means.
+pub const SSH_OSC7_PROMPT_COMMAND: &str =
+    r#"printf "\033]7;file://%s%s\033\\" "$HOSTNAME" "$PWD""#;
+
 struct SshClient;
 
 impl client::Handler for SshClient {
@@ -142,8 +150,18 @@ async fn run_ssh(
         .map_err(|_| "PTY request timed out".to_string())?
         .map_err(|e| e.to_string())?;
 
+    let mut has_prompt_command = false;
     for (key, value) in env_vars {
+        if key == "PROMPT_COMMAND" {
+            has_prompt_command = true;
+        }
         let _ = channel.set_env(true, key, value).await;
+    }
+    // Ensure OSC 7 cwd reporting is requested even if settings omit it.
+    if !has_prompt_command {
+        let _ = channel
+            .set_env(true, "PROMPT_COMMAND", SSH_OSC7_PROMPT_COMMAND)
+            .await;
     }
 
     timeout(Duration::from_secs(10), channel.request_shell(true))

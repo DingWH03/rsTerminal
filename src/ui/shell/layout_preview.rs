@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use crate::ui::shell::layout_state::{DropEdge, DropZone, PaneId, SplitAxis, SplitNode};
-use crate::ui::widget::split_handle::SPLITTER_SIZE;
+use crate::ui::uiframe::split_handle::SPLITTER_SIZE;
 
 /// Placeholder pane id used only during drag preview rendering.
 pub const PREVIEW_GHOST_PANE: PaneId = PaneId(u64::MAX);

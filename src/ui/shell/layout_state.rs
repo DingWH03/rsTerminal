@@ -527,16 +527,23 @@ pub struct ShellLayout {
     pub function_width: f32,
     pub function_page: FunctionPage,
     pub workspace: WorkspaceLayout,
-    pub settings_overlay: bool,
+    /// Settings shown as a centered dialog (not a full-page overlay).
+    pub settings_dialog_open: bool,
+    /// About / help placeholder dialog.
+    pub help_dialog_open: bool,
+    /// Saved connections browser (Connection → Open).
+    pub connections_dialog_open: bool,
 }
 
 impl Default for ShellLayout {
     fn default() -> Self {
         Self {
             function_width: FUNCTION_DEFAULT_WIDTH,
-            function_page: FunctionPage::Workspace,
+            function_page: FunctionPage::Active,
             workspace: WorkspaceLayout::new_single(),
-            settings_overlay: false,
+            settings_dialog_open: false,
+            help_dialog_open: false,
+            connections_dialog_open: false,
         }
     }
 }

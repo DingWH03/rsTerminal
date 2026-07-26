@@ -2,11 +2,11 @@
 
 use crate::storage::types::SavedConnection;
 use crate::ui::function_pane::FunctionPane;
-use crate::ui::widget::components::empty_state::{self, EmptyStateConfig};
-use crate::ui::widget::components::toolbar_button::{
+use crate::ui::uiframe::components::empty_state::{self, EmptyStateConfig};
+use crate::ui::uiframe::components::toolbar_button::{
     icon_toolbar_button, icon_toolbar_danger,
 };
-use crate::ui::widget::vector_icons::Icon;
+use crate::ui::uiframe::vector_icons::Icon;
 
 /// 最近连接最大显示数量
 const MAX_RECENT_CONNECTIONS: usize = 20;
@@ -203,7 +203,7 @@ pub fn recent_connections_view(
             .button(
                 egui::RichText::new(&more_label)
                     .size(12.0)
-                    .color(crate::ui::widget::style::ACCENT),
+                    .color(crate::ui::uiframe::style::ACCENT),
             )
             .clicked()
         {

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::ui::shell::layout_state::{PaneId, PaneState, SplitAxis, SplitNode, WorkspaceLayout};
 use crate::ui::shell::messages::WorkspaceAction;
-use crate::ui::widget::split_handle::{drag_splitter, SPLITTER_SIZE};
+use crate::ui::uiframe::split_handle::{drag_splitter, SPLITTER_SIZE};
 
 use super::pane_host::render_pane;
 use super::WorkspacePaneContext;

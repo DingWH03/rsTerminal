@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use crate::ui::shell::layout_state::PaneId;
-use crate::ui::widget::animation::Spring;
+use crate::ui::uiframe::animation::Spring;
 
 pub struct ShellAnimations {
     pub page_slide: Spring,

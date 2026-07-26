@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use crate::config::{BellStyle, CursorStyle, TerminalTheme, TerminalType};
 use crate::i18n::{Language, UiTheme};
-use crate::ui::widget::keyboard::KeyboardMode;
+use crate::ui::uiframe::keyboard::KeyboardMode;
 
 /// A terminal profile — a complete set of terminal appearance and behavior settings.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -134,6 +134,10 @@ impl Default for AppSettings {
             ssh_env_vars: HashMap::from([
                 ("TERM".to_string(), "xterm-256color".to_string()),
                 ("LANG".to_string(), "en_US.UTF-8".to_string()),
+                (
+                    "PROMPT_COMMAND".to_string(),
+                    crate::connection::ssh::SSH_OSC7_PROMPT_COMMAND.to_string(),
+                ),
             ]),
             default_local_connection_id: None,
             language: Language::default(),

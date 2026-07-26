@@ -9,11 +9,11 @@ pub mod recent;
 pub mod sidebar;
 
 use crate::storage::types::{ConnectionType, SavedConnection};
-use crate::ui::widget::style;
-use crate::ui::widget::components::card;
-use crate::ui::widget::components::empty_state::{self, EmptyStateConfig};
-use crate::ui::widget::components::filter_chips::{self, CONNECTION_TYPE_FILTERS};
-use crate::ui::widget::components::icon_widget;
+use crate::ui::uiframe::style;
+use crate::ui::uiframe::components::card;
+use crate::ui::uiframe::components::empty_state::{self, EmptyStateConfig};
+use crate::ui::uiframe::components::filter_chips::{self, CONNECTION_TYPE_FILTERS};
+use crate::ui::uiframe::components::icon_widget;
 
 /// 首页连接卡片的工具栏操作（来自卡片上的图标按钮，而非右键菜单）。
 #[derive(Default)]

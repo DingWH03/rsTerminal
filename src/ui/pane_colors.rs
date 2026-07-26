@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::settings::AppSettings;
 use crate::ui::shell::layout_state::{PaneId, WorkspaceLayout};
-use crate::ui::widget::style;
+use crate::ui::uiframe::style;
 
 pub fn default_palette() -> Vec<[u8; 3]> {
     vec![

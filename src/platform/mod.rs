@@ -20,6 +20,7 @@ pub use serial::SerialDevice;
 // These modules contain the actual per-platform logic and are used by
 // the concrete platform structs below.
 pub(crate) mod ble;
+pub mod dnd;
 pub(crate) mod process;
 pub(crate) mod serial;
 pub(crate) mod shell;

@@ -1,8 +1,8 @@
 //! Shared function pane UI elements.
 
 use crate::ui::function_pane::FunctionPane;
-use crate::ui::widget::style;
-use crate::ui::widget::vector_icons::{self, Icon};
+use crate::ui::uiframe::style;
+use crate::ui::uiframe::vector_icons::{self, Icon};
 
 pub fn nav_button(
     ui: &mut egui::Ui,
@@ -60,28 +60,26 @@ pub fn nav_button(
     resp
 }
 
-pub fn brand_row(ui: &mut egui::Ui, pane: &mut FunctionPane, show_hamburger: bool) {
-    ui.horizontal(|ui| {
-        if show_hamburger {
-            let (rect, resp) = ui.allocate_exact_size(egui::vec2(28.0, 24.0), egui::Sense::click());
-            if resp.clicked() {
-                pane.hamburger_click();
-            }
-            if ui.is_rect_visible(rect) {
-                vector_icons::paint(
-                    ui,
-                    rect,
-                    Icon::Hamburger,
-                    ui.visuals().weak_text_color(),
-                    1.5,
-                );
-            }
-        }
-        ui.label(
-            egui::RichText::new("rsTerminal")
-                .size(17.0)
-                .strong()
-                .color(ui.visuals().text_color()),
+/// Optional hamburger-only row (brand text removed).
+pub fn hamburger_row(ui: &mut egui::Ui, pane: &mut FunctionPane) {
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(28.0, 24.0), egui::Sense::click());
+    if resp.clicked() {
+        pane.hamburger_click();
+    }
+    if ui.is_rect_visible(rect) {
+        vector_icons::paint(
+            ui,
+            rect,
+            Icon::Hamburger,
+            ui.visuals().weak_text_color(),
+            1.5,
         );
-    });
+    }
+}
+
+#[deprecated(note = "use hamburger_row; brand text removed from sidebar")]
+pub fn brand_row(ui: &mut egui::Ui, pane: &mut FunctionPane, show_hamburger: bool) {
+    if show_hamburger {
+        hamburger_row(ui, pane);
+    }
 }

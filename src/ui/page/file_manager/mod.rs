@@ -22,8 +22,8 @@ use crate::session::{
 };
 use crate::ui::page::file_manager::transfer::{apply_transfer_done, PasteTarget};
 use crate::ui::function_pane::FunctionPane;
-use crate::ui::widget::style;
-use crate::ui::widget::components::toolbar_button::toolbar_button;
+use crate::ui::uiframe::style;
+use crate::ui::uiframe::components::toolbar_button::toolbar_button;
 
 /// 文件管理器操作结果。
 #[derive(Debug, Default)]
@@ -46,6 +46,10 @@ struct PaneOps {
     bulk_delete: Option<Vec<usize>>,
     rename_index: Option<usize>,
     info_index: Option<usize>,
+    /// External files dropped onto this pane (desktop inbound).
+    dropped_paths: Vec<std::path::PathBuf>,
+    /// Local file rows dragged out (desktop outbound).
+    drag_out_indices: Vec<usize>,
 }
 
 /// 底部操作栏高度
@@ -183,6 +187,7 @@ pub fn file_manager_view(
                         if ops.paste {
                             paste_into_pane(session, FileActivePane::Remote);
                         }
+                        apply_external_drop(session, FileActivePane::Remote, &ops.dropped_paths);
                     }
                 }
                 FileManagerMode::LocalDual => {
@@ -208,6 +213,8 @@ pub fn file_manager_view(
                         if ops.paste {
                             paste_into_pane(session, FileActivePane::LeftLocal);
                         }
+                        apply_external_drop(session, FileActivePane::LeftLocal, &ops.dropped_paths);
+                        apply_external_drag_out(session, FileActivePane::LeftLocal, &ops.drag_out_indices);
                     }
                 }
             }
@@ -238,6 +245,8 @@ pub fn file_manager_view(
             if ops.paste {
                 paste_into_pane(session, FileActivePane::Right);
             }
+            apply_external_drop(session, FileActivePane::Right, &ops.dropped_paths);
+            apply_external_drag_out(session, FileActivePane::Right, &ops.drag_out_indices);
         });
     });
 
@@ -255,7 +264,7 @@ fn paint_pane_column<R>(ui: &mut egui::Ui, size: egui::Vec2, body: impl FnOnce(&
         .inner
 }
 
-// toolbar_button 已迁移到 crate::ui::widget::components::toolbar_button
+// toolbar_button 已迁移到 crate::ui::uiframe::components::toolbar_button
 
 /// 获取当前面板的对侧面板。
 fn opposite_pane(active: FileActivePane, mode: FileManagerMode) -> FileActivePane {
@@ -309,6 +318,124 @@ fn copy_from_pane(session: &mut FileManagerSession, pane: FileActivePane) {
             paths,
         });
     }
+}
+
+/// Apply external OS file drops into a file-manager pane (desktop only).
+fn apply_external_drop(
+    session: &mut FileManagerSession,
+    pane: FileActivePane,
+    paths: &[std::path::PathBuf],
+) {
+    if paths.is_empty() {
+        return;
+    }
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    {
+        match pane {
+            FileActivePane::Right => {
+                let cwd = session.right.cwd.clone();
+                for src in paths {
+                    let dest = crate::platform::dnd::dest_path(&cwd, src);
+                    if src.is_dir() {
+                        let _ = copy_dir_recursive_fm(src, &dest);
+                    } else if let Err(e) = std::fs::copy(src, &dest) {
+                        session.status = Some(e.to_string());
+                    }
+                }
+                session.right.loading = true;
+            }
+            FileActivePane::LeftLocal => {
+                if let Some(left) = session.left_local.as_mut() {
+                    let cwd = left.cwd.clone();
+                    for src in paths {
+                        let dest = crate::platform::dnd::dest_path(&cwd, src);
+                        if src.is_dir() {
+                            let _ = copy_dir_recursive_fm(src, &dest);
+                        } else if let Err(e) = std::fs::copy(src, &dest) {
+                            session.status = Some(e.to_string());
+                        }
+                    }
+                    left.loading = true;
+                }
+            }
+            FileActivePane::Remote => {
+                if let Some(remote) = session.remote.as_ref() {
+                    let cwd = remote.cwd.clone();
+                    let client = Arc::clone(&remote.client);
+                    for src in paths {
+                        let name = src
+                            .file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_else(|| "dropped".into());
+                        let remote_path = join_remote(&cwd, &name);
+                        if let Err(e) = client.upload(src, &remote_path) {
+                            session.status = Some(e);
+                        }
+                    }
+                    if let Some(remote) = session.remote.as_mut() {
+                        remote.loading = true;
+                    }
+                }
+            }
+        }
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+    {
+        let _ = (session, pane, paths);
+    }
+}
+
+fn apply_external_drag_out(
+    session: &FileManagerSession,
+    pane: FileActivePane,
+    indices: &[usize],
+) {
+    if indices.is_empty() {
+        return;
+    }
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    {
+        let paths: Vec<std::path::PathBuf> = match pane {
+            FileActivePane::Right => indices
+                .iter()
+                .filter_map(|&i| session.right.entries.get(i))
+                .map(|e| local::join_path(&session.right.cwd, &e.name))
+                .collect(),
+            FileActivePane::LeftLocal => session
+                .left_local
+                .as_ref()
+                .map(|left| {
+                    indices
+                        .iter()
+                        .filter_map(|&i| left.entries.get(i))
+                        .map(|e| local::join_path(&left.cwd, &e.name))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            FileActivePane::Remote => Vec::new(),
+        };
+        let _ = crate::platform::dnd::begin_file_drag_out(&paths);
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+    {
+        let _ = (session, pane, indices);
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+fn copy_dir_recursive_fm(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
+    std::fs::create_dir_all(dest).map_err(|e| e.to_string())?;
+    for entry in std::fs::read_dir(src).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let ty = entry.file_type().map_err(|e| e.to_string())?;
+        let to = dest.join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_recursive_fm(&entry.path(), &to)?;
+        } else {
+            std::fs::copy(entry.path(), &to).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
 }
 
 /// 将剪贴板内容粘贴到指定面板（启动文件传输）。
@@ -652,6 +779,32 @@ fn paint_file_list_area(
         ui.memory_mut(|m| m.request_focus(pane_focus_id));
     }
 
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    {
+        let hovering = ui.rect_contains_pointer(list_rect);
+        if hovering {
+            let hovered = ui.ctx().input(|i| !i.raw.hovered_files.is_empty());
+            if hovered {
+                ui.painter().rect_stroke(
+                    list_rect,
+                    style::CORNER_RADIUS_XS,
+                    egui::Stroke::new(1.5, style::ACCENT),
+                    egui::StrokeKind::Inside,
+                );
+            }
+            let dropped: Vec<_> = ui.ctx().input(|i| {
+                i.raw
+                    .dropped_files
+                    .iter()
+                    .filter_map(|f| f.path.clone())
+                    .collect()
+            });
+            if !dropped.is_empty() {
+                ops.dropped_paths = dropped;
+            }
+        }
+    }
+
     interacted
 }
 
@@ -767,6 +920,12 @@ fn paint_local_list(
                 install_context_menu(ui, &resp, |ui| {
                     row_context_menu_local(ui, pane, i, ent, ops);
                 });
+                #[cfg(any(target_os = "linux", target_os = "windows"))]
+                if resp.dragged() && !ent.is_dir {
+                    if !ops.drag_out_indices.contains(&i) {
+                        ops.drag_out_indices.push(i);
+                    }
+                }
                 if resp.double_clicked() && ent.is_dir {
                     ops.open_index = Some(i);
                     continue;

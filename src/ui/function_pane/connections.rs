@@ -2,102 +2,29 @@
 
 use crate::storage::types::{ConnectionType, SavedConnection};
 use crate::ui::shell::messages::FunctionAction;
-use crate::ui::widget::components::filter_chips::{self, CONNECTION_TYPE_FILTERS};
-use crate::ui::widget::style;
-use crate::ui::widget::vector_icons::{self, Icon};
+use crate::ui::uiframe::components::filter_chips::{self, CONNECTION_TYPE_FILTERS};
+use crate::ui::uiframe::style;
 
+/// Paint saved-connection list (filter chips + rows).
+/// Used by the sidebar Connections tab and the "Open Connection" dialog.
+/// New connection is created from the top menu (Connection → New), not here.
 pub fn render(ui: &mut egui::Ui, connections: &[SavedConnection]) -> FunctionAction {
+    render_with_id(ui, connections, "function_conn")
+}
+
+/// Same as [`render`] with a distinct egui id salt (sidebar vs dialog).
+pub fn render_with_id(
+    ui: &mut egui::Ui,
+    connections: &[SavedConnection],
+    id_salt: &str,
+) -> FunctionAction {
     let mut action = FunctionAction::empty();
 
-    let top_h = 32.0;
-    let top_w = ui.available_width();
-    let top_rect = ui
-        .allocate_exact_size(egui::vec2(top_w, top_h), egui::Sense::hover())
-        .0;
-
-    let back_rect = egui::Rect::from_min_size(top_rect.min, egui::vec2(top_w * 0.5, top_h));
-    let back_resp = ui.interact(back_rect, ui.id().with("conn_back"), egui::Sense::click());
-    if back_resp.clicked() {
-        action.go_back = true;
-    }
-
-    let new_rect = egui::Rect::from_min_size(
-        egui::pos2(top_rect.center().x, top_rect.top()),
-        egui::vec2(top_w * 0.5, top_h),
+    let filter: Option<ConnectionType> = filter_chips::paint_filter_chips(
+        ui,
+        &format!("{id_salt}_filter"),
+        CONNECTION_TYPE_FILTERS,
     );
-    let new_resp = ui.interact(new_rect, ui.id().with("conn_new"), egui::Sense::click());
-    if new_resp.clicked() {
-        action.new_connection = true;
-    }
-
-    if ui.is_rect_visible(top_rect) {
-        let painter = ui.painter();
-
-        if back_resp.hovered() {
-            painter.rect_filled(
-                back_rect,
-                style::CORNER_RADIUS_XS,
-                ui.visuals().widgets.hovered.bg_fill,
-            );
-        }
-        let back_icon = egui::Rect::from_center_size(
-            egui::pos2(back_rect.left() + 16.0, back_rect.center().y),
-            egui::vec2(16.0, 16.0),
-        );
-        vector_icons::paint(
-            ui,
-            back_icon,
-            Icon::Back,
-            ui.visuals().text_color(),
-            1.4,
-        );
-        let back_g = ui.fonts_mut(|f| {
-            f.layout(
-                rust_i18n::t!("back").to_string(),
-                egui::FontId::proportional(14.0),
-                ui.visuals().text_color(),
-                top_w * 0.4,
-            )
-        });
-        painter.galley(
-            egui::pos2(back_rect.left() + 28.0, back_rect.center().y - back_g.size().y / 2.0),
-            back_g,
-            ui.visuals().text_color(),
-        );
-
-        if new_resp.hovered() {
-            painter.rect_filled(
-                new_rect,
-                style::CORNER_RADIUS_XS,
-                ui.visuals().widgets.hovered.bg_fill,
-            );
-        }
-        let new_g = ui.fonts_mut(|f| {
-            f.layout(
-                rust_i18n::t!("new_connection").to_string(),
-                egui::FontId::proportional(14.0),
-                style::ACCENT,
-                top_w * 0.4,
-            )
-        });
-        let plus_rect = egui::Rect::from_center_size(
-            egui::pos2(new_rect.right() - 8.0 - new_g.size().x - 12.0, new_rect.center().y),
-            egui::vec2(14.0, 14.0),
-        );
-        vector_icons::paint(ui, plus_rect, Icon::Plus, style::ACCENT, 1.4);
-        painter.galley(
-            egui::pos2(
-                new_rect.right() - 8.0 - new_g.size().x,
-                new_rect.center().y - new_g.size().y / 2.0,
-            ),
-            new_g,
-            style::ACCENT,
-        );
-    }
-    ui.add_space(4.0);
-
-    let filter: Option<ConnectionType> =
-        filter_chips::paint_filter_chips(ui, "function_conn_filter", CONNECTION_TYPE_FILTERS);
     ui.add_space(4.0);
 
     let mut sorted: Vec<&SavedConnection> = match filter {
@@ -123,7 +50,7 @@ pub fn render(ui: &mut egui::Ui, connections: &[SavedConnection]) -> FunctionAct
     } else {
         ui.style_mut().spacing.scroll.bar_width = 6.0;
         ui.style_mut().spacing.scroll.bar_outer_margin = 0.0;
-        let menu_id_key = egui::Id::new("conn_menu_id");
+        let menu_id_key = egui::Id::new(format!("{id_salt}_menu_id"));
         let menu_state: Option<String> = ui.data(|d| d.get_temp(menu_id_key)).unwrap_or(None);
 
         if menu_state.is_some()
@@ -133,7 +60,7 @@ pub fn render(ui: &mut egui::Ui, connections: &[SavedConnection]) -> FunctionAct
         }
 
         egui::ScrollArea::vertical()
-            .id_salt("function_conn_list_scroll")
+            .id_salt(format!("{id_salt}_list_scroll"))
             .auto_shrink([false; 2])
             .show(ui, |ui| {
                 for conn in &sorted {

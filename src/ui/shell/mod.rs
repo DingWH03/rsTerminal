@@ -1,4 +1,4 @@
-//! Application shell — left function pane + right workspace pane.
+//! Application shell — top bar + left function pane + right workspace pane.
 
 pub mod animations;
 pub mod coordinator;
@@ -9,9 +9,11 @@ pub mod messages;
 use crate::session::WorkspaceSession;
 use crate::settings::AppSettings;
 use crate::storage::types::SavedConnection;
-use crate::ui::function_pane::{self, split_enabled, drag_split_enabled, FunctionPane};
-use crate::ui::page::settings::settings_page;
-use crate::ui::widget::keyboard::VirtualKeyboard;
+use crate::ui::function_pane::{self, drag_split_enabled, split_enabled, FunctionPane};
+use crate::ui::function_pane::files_view::SidebarFilesState;
+use crate::ui::page::settings::settings_dialog;
+use crate::ui::uiframe::{DialogFrame, DialogOutcome, TopBar, TopBarAction};
+use crate::ui::uiframe::keyboard::VirtualKeyboard;
 use crate::ui::workspace_pane::{self, drag_drop::ActiveDrag, WorkspacePaneContext};
 
 use animations::ShellAnimations;
@@ -24,6 +26,7 @@ use messages::{FunctionAction, WorkspaceAction};
 pub struct AppShell {
     pub layout: ShellLayout,
     pub function_pane: FunctionPane,
+    pub sidebar_files: SidebarFilesState,
     last_focused_pane: Option<crate::ui::shell::layout_state::PaneId>,
     active_drag: Option<ActiveDrag>,
     animations: ShellAnimations,
@@ -35,6 +38,7 @@ impl Default for AppShell {
         Self {
             layout: ShellLayout::default(),
             function_pane: FunctionPane::new(),
+            sidebar_files: SidebarFilesState::default(),
             last_focused_pane: None,
             active_drag: None,
             animations: ShellAnimations::new(),
@@ -48,6 +52,7 @@ impl AppShell {
         Self {
             layout: ShellLayout::from_settings(settings.function_pane_width),
             function_pane: FunctionPane::new(),
+            sidebar_files: SidebarFilesState::default(),
             last_focused_pane: None,
             active_drag: None,
             animations: ShellAnimations::new(),
@@ -103,7 +108,11 @@ impl AppShell {
             .unwrap_or_else(|| id.to_string())
     }
 
-    fn pane_label(sessions: &[WorkspaceSession], layout: &ShellLayout, pane_id: crate::ui::shell::layout_state::PaneId) -> String {
+    fn pane_label(
+        sessions: &[WorkspaceSession],
+        layout: &ShellLayout,
+        pane_id: crate::ui::shell::layout_state::PaneId,
+    ) -> String {
         layout
             .workspace
             .panes
@@ -137,6 +146,16 @@ impl AppShell {
             ui.ctx().request_repaint();
         }
 
+        ui.add_space(top_inset);
+
+        // Top menu bar (wide and narrow). Applied after pane render so actions are not overwritten.
+        let mut top_action = TopBarAction::None;
+        egui::Panel::top("app_top_bar")
+            .exact_size(TopBar::HEIGHT)
+            .show_inside(ui, |ui| {
+                top_action = TopBar::show(ui);
+            });
+
         let is_wide = self.function_pane.wide;
         let show_function = if is_wide {
             self.function_pane.docked_visible()
@@ -144,7 +163,7 @@ impl AppShell {
             self.function_pane.overlay_visible()
         };
 
-        if show_function && !(self.layout.settings_overlay && !is_wide) {
+        if show_function {
             let panel_id = if is_wide {
                 "function_pane"
             } else {
@@ -159,23 +178,20 @@ impl AppShell {
                     .min_size(FUNCTION_MIN_WIDTH)
                     .max_size(FUNCTION_MAX_WIDTH);
             } else {
-                panel = panel
-                    .min_size(ui.available_width())
-                    .resizable(false);
+                panel = panel.min_size(ui.available_width()).resizable(false);
             }
 
             let inner = panel.show_inside(ui, |ui| {
-                ui.add_space(top_inset);
                 result.function_action = function_pane::render(
                     ui,
                     &mut self.function_pane,
-                    &self.layout.function_page,
+                    &mut self.layout.function_page,
                     sessions,
                     &self.layout.workspace,
                     self.layout.workspace.highlighted_session_id(),
-                    self.layout.settings_overlay,
                     saved_connections,
                     settings,
+                    &mut self.sidebar_files,
                     self.animations.page_slide.current,
                 );
             });
@@ -197,70 +213,61 @@ impl AppShell {
             }
         }
 
-        let show_workspace =
-            is_wide || !show_function || self.layout.settings_overlay;
+        let show_workspace = is_wide || !show_function;
 
         if show_workspace {
             egui::CentralPanel::default().show_inside(ui, |ui| {
-                ui.add_space(top_inset);
-                if self.layout.settings_overlay {
-                    if settings_page(ui, settings) {
-                        result.settings_closed = true;
-                    }
-                } else {
-                    let mut session_fade = std::collections::HashMap::new();
-                    for (&pane, _) in &self.layout.workspace.panes {
-                        session_fade.insert(pane, self.animations.session_fade_value(pane));
-                    }
+                let mut session_fade = std::collections::HashMap::new();
+                for (&pane, _) in &self.layout.workspace.panes {
+                    session_fade.insert(pane, self.animations.session_fade_value(pane));
+                }
 
-                    let mut last_drop_zone = self.last_drop_zone;
-                    let ws_result = {
-                        let mut ws_ctx = WorkspacePaneContext {
-                            sessions,
-                            settings,
-                            saved_connections,
-                            virtual_keyboard,
-                            live_font_size,
-                            function_pane: &mut self.function_pane,
-                            split_enabled: split_on,
-                            active_drag: self.active_drag.clone(),
-                            ratio_overrides: std::collections::HashMap::new(),
-                            session_fade,
-                            split_layout_active: false,
-                            last_drop_zone: &mut last_drop_zone,
-                        };
-                        workspace_pane::render(ui, &mut self.layout.workspace, &mut ws_ctx)
+                let mut last_drop_zone = self.last_drop_zone;
+                let ws_result = {
+                    let mut ws_ctx = WorkspacePaneContext {
+                        sessions,
+                        settings,
+                        saved_connections,
+                        virtual_keyboard,
+                        live_font_size,
+                        function_pane: &mut self.function_pane,
+                        split_enabled: split_on,
+                        active_drag: self.active_drag.clone(),
+                        ratio_overrides: std::collections::HashMap::new(),
+                        session_fade,
+                        split_layout_active: false,
+                        last_drop_zone: &mut last_drop_zone,
                     };
-                    result.workspace_action = ws_result.action;
+                    workspace_pane::render(ui, &mut self.layout.workspace, &mut ws_ctx)
+                };
+                result.workspace_action = ws_result.action;
 
-                    if let Some(pane) = result.workspace_action.start_pane_drag {
-                        if self.active_drag.is_none() && drag_split_on {
-                            self.active_drag = Some(ActiveDrag::Pane {
-                                pane_id: pane,
-                                label: Self::pane_label(sessions, &self.layout, pane),
-                            });
-                        }
+                if let Some(pane) = result.workspace_action.start_pane_drag {
+                    if self.active_drag.is_none() && drag_split_on {
+                        self.active_drag = Some(ActiveDrag::Pane {
+                            pane_id: pane,
+                            label: Self::pane_label(sessions, &self.layout, pane),
+                        });
                     }
+                }
 
-                    if ws_result.drag_ended {
-                        if result.workspace_action.drop_applied {
-                            self.animations
-                                .fade_in_pane(self.layout.workspace.focused_pane);
-                        }
-                        self.active_drag = None;
-                        self.last_drop_zone = None;
-                    } else {
-                        self.last_drop_zone = last_drop_zone;
-                        if self.active_drag.is_some() {
-                            ui.ctx().request_repaint();
-                        }
+                if ws_result.drag_ended {
+                    if result.workspace_action.drop_applied {
+                        self.animations
+                            .fade_in_pane(self.layout.workspace.focused_pane);
+                    }
+                    self.active_drag = None;
+                    self.last_drop_zone = None;
+                } else {
+                    self.last_drop_zone = last_drop_zone;
+                    if self.active_drag.is_some() {
+                        ui.ctx().request_repaint();
                     }
                 }
             });
         } else if ui.input(|i| i.pointer.any_released()) {
             if let (Some(drag), Some(zone)) = (&self.active_drag, self.last_drop_zone) {
-                let palette_len =
-                    crate::ui::pane_colors::resolve_palette(settings).len().max(1);
+                let palette_len = crate::ui::pane_colors::resolve_palette(settings).len().max(1);
                 if let Some(focused) = crate::ui::workspace_pane::drag_drop::apply_drop(
                     &mut self.layout.workspace,
                     drag,
@@ -277,6 +284,90 @@ impl AppShell {
             self.last_drop_zone = None;
         }
 
+        match top_action {
+            TopBarAction::NewConnection => {
+                result.function_action.new_connection = true;
+            }
+            TopBarAction::OpenConnections => {
+                self.layout.connections_dialog_open = true;
+            }
+            TopBarAction::OpenSettings => {
+                self.layout.settings_dialog_open = true;
+                result.settings_opened = true;
+            }
+            TopBarAction::OpenHelp => {
+                self.layout.help_dialog_open = true;
+            }
+            TopBarAction::None => {}
+        }
+
+        // Open Connection dialog (same list as sidebar Connections tab)
+        if self.layout.connections_dialog_open {
+            let frame = DialogFrame::new(rust_i18n::t!("dialog_open_connections").to_string())
+                .width(420.0)
+                .height(Some(480.0))
+                .resizable(true);
+            let mut conn_action = FunctionAction::empty();
+            let outcome = frame.show(ui.ctx(), "open_connections_dialog", |ui| {
+                conn_action = function_pane::connections::render_with_id(
+                    ui,
+                    saved_connections,
+                    "open_conn_dialog",
+                );
+            });
+            if outcome == DialogOutcome::Closed {
+                self.layout.connections_dialog_open = false;
+            }
+            // Merge list actions into shell result.
+            if conn_action.new_connection {
+                result.function_action.new_connection = true;
+            }
+            if conn_action.connect_connection.is_some() {
+                result.function_action.connect_connection = conn_action.connect_connection;
+                self.layout.connections_dialog_open = false;
+            }
+            if conn_action.open_file_mgr.is_some() {
+                result.function_action.open_file_mgr = conn_action.open_file_mgr;
+                self.layout.connections_dialog_open = false;
+            }
+            if conn_action.edit_connection.is_some() {
+                result.function_action.edit_connection = conn_action.edit_connection;
+            }
+            if conn_action.delete_connection.is_some() {
+                result.function_action.delete_connection = conn_action.delete_connection;
+            }
+        }
+
+        // Settings dialog
+        if self.layout.settings_dialog_open {
+            if settings_dialog(ui.ctx(), settings) {
+                self.layout.settings_dialog_open = false;
+                result.settings_closed = true;
+            }
+        }
+
+        // Help / About placeholder
+        if self.layout.help_dialog_open {
+            let frame = DialogFrame::new(rust_i18n::t!("menu_about").to_string())
+                .width(360.0)
+                .height(Some(160.0))
+                .resizable(false);
+            if frame.show(ui.ctx(), "about_dialog", |ui| {
+                ui.label(egui::RichText::new("rsTerminal").size(18.0).strong());
+                ui.add_space(6.0);
+                ui.label(format!(
+                    "{} {}",
+                    rust_i18n::t!("about_version"),
+                    env!("CARGO_PKG_VERSION")
+                ));
+                ui.add_space(8.0);
+                ui.label(rust_i18n::t!("about_placeholder"));
+            }) == DialogOutcome::Closed
+            {
+                self.layout.help_dialog_open = false;
+            }
+        }
+
         let in_overlay = self.function_pane.overlay_visible();
         ShellCoordinator::apply_function(&mut self.layout, &result.function_action, in_overlay);
         ShellCoordinator::apply_workspace(&mut self.layout, &result.workspace_action);
@@ -288,16 +379,10 @@ impl AppShell {
                 .fade_in_pane(self.layout.workspace.focused_pane);
         }
 
-        if result.function_action.toggle_settings {
+        if result.function_action.select_session.is_some() && in_overlay {
             self.function_pane.close_overlay();
         }
-        if result.function_action.select_session.is_some() {
-            if in_overlay {
-                self.function_pane.close_overlay();
-            }
-        }
-        if result.function_action.go_back
-            || result.function_action.connect_connection.is_some()
+        if result.function_action.connect_connection.is_some()
             || result.function_action.open_file_mgr.is_some()
         {
             self.function_pane.close_overlay();
@@ -312,4 +397,5 @@ pub struct ShellRenderResult {
     pub function_action: FunctionAction,
     pub workspace_action: WorkspaceAction,
     pub settings_closed: bool,
+    pub settings_opened: bool,
 }

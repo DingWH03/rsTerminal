@@ -14,7 +14,7 @@ use crate::ui::function_pane::FunctionPane;
 use crate::ui::shell::layout_preview::pane_rects_from_tree;
 use crate::ui::shell::layout_state::WorkspaceLayout;
 use crate::ui::shell::messages::WorkspaceAction;
-use crate::ui::widget::keyboard::VirtualKeyboard;
+use crate::ui::uiframe::keyboard::VirtualKeyboard;
 
 use drag_drop::{apply_drop, hit_test_drop_zone, paint_drag_overlay};
 use split_widget::render_split_tree;

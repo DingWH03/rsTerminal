@@ -3,8 +3,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::session::WorkspaceSession;
-use crate::ui::widget::style;
-use crate::ui::widget::vector_icons::{self, Icon};
+use crate::ui::uiframe::style;
+use crate::ui::uiframe::vector_icons::{self, Icon};
 
 pub struct SessionListContext<'a> {
     pub split_enabled: bool,

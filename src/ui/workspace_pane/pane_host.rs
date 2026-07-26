@@ -10,7 +10,7 @@ use crate::ui::pane_colors::pane_color;
 use crate::ui::shell::layout_preview::PREVIEW_GHOST_PANE;
 use crate::ui::shell::layout_state::{PaneId, PaneState};
 use crate::ui::shell::messages::{EmptyPaneConnect, WorkspaceAction};
-use crate::ui::widget::style;
+use crate::ui::uiframe::style;
 
 use super::WorkspacePaneContext;
 

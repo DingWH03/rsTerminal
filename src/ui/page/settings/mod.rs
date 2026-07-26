@@ -7,8 +7,8 @@ use crate::config::{BellStyle, CursorStyle, TerminalTheme, TerminalType};
 use crate::fonts;
 use crate::i18n::Language;
 use crate::settings::{AppSettings, Profile};
-use crate::ui::widget::keyboard::KeyboardMode;
-use crate::ui::widget::style;
+use crate::ui::uiframe::keyboard::KeyboardMode;
+use crate::ui::uiframe::style;
 
 // ─── 标签页标识 ─────────────────────────────────────────────────────────
 
@@ -53,7 +53,23 @@ impl SettingsTab {
 
 // ─── 公开入口函数 ──────────────────────────────────────────────────────
 
-/// 全屏设置页（首页模式）：包含"返回"按钮，返回 `true` 表示关闭设置页。
+/// Settings as a centered dialog window. Returns `true` when the user closes it.
+pub fn settings_dialog(ctx: &egui::Context, settings: &mut AppSettings) -> bool {
+    use crate::ui::uiframe::{DialogFrame, DialogOutcome};
+
+    let frame = DialogFrame::new(rust_i18n::t!("settings").to_string())
+        .width(560.0)
+        .height(Some(520.0))
+        .resizable(true);
+
+    let outcome = frame.show(ctx, "settings_dialog", |ui| {
+        settings_scroll_body(ui, settings, SettingsLayout::Dialog);
+    });
+    matches!(outcome, DialogOutcome::Closed)
+}
+
+/// 全屏设置页（遗留）：包含"返回"按钮，返回 `true` 表示关闭设置页。
+#[allow(dead_code)]
 pub fn settings_page(ui: &mut egui::Ui, settings: &mut AppSettings) -> bool {
     let mut close = false;
     ui.horizontal(|ui| {
@@ -74,6 +90,7 @@ pub fn settings_page(ui: &mut egui::Ui, settings: &mut AppSettings) -> bool {
 }
 
 /// 工作区右侧面板设置视图；返回 `true` 表示关闭面板。
+#[allow(dead_code)]
 pub fn settings_side_panel(ui: &mut egui::Ui, settings: &mut AppSettings) -> bool {
     let mut close = false;
     ui.horizontal(|ui| {
@@ -111,6 +128,8 @@ enum SettingsLayout {
     Home,
     /// 工作区侧面板模式
     Workspace,
+    /// Centered dialog
+    Dialog,
 }
 
 fn settings_scroll_body(ui: &mut egui::Ui, settings: &mut AppSettings, layout: SettingsLayout) {
@@ -119,6 +138,7 @@ fn settings_scroll_body(ui: &mut egui::Ui, settings: &mut AppSettings, layout: S
         .id_salt(match layout {
             SettingsLayout::Home => "settings_page_scroll",
             SettingsLayout::Workspace => "settings_side_panel_scroll",
+            SettingsLayout::Dialog => "settings_dialog_scroll",
         })
         .auto_shrink([false; 2])
         .show(ui, |ui| {
@@ -127,6 +147,7 @@ fn settings_scroll_body(ui: &mut egui::Ui, settings: &mut AppSettings, layout: S
             ui.push_id(match layout {
                 SettingsLayout::Home => "home",
                 SettingsLayout::Workspace => "workspace",
+                SettingsLayout::Dialog => "dialog",
             }, |ui| {
                 fill_page_width(ui);
                 settings_page_body(ui, settings);

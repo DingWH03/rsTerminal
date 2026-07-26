@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::ui::shell::layout_preview::PREVIEW_GHOST_PANE;
 use crate::ui::shell::layout_state::{DropEdge, DropZone, PaneId, WorkspaceLayout};
-use crate::ui::widget::style;
+use crate::ui::uiframe::style;
 
 /// Ratio allocated to the incoming pane during live insert preview (visual only).
 pub const PREVIEW_INSERT_RATIO: f32 = 0.5;

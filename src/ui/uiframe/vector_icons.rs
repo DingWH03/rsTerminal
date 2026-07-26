@@ -14,6 +14,12 @@ pub enum Icon {
     Keyboard,
     FontSmaller,
     FontLarger,
+    /// Active sessions (stacked rows).
+    Sessions,
+    /// Saved connections (card / plug).
+    Connections,
+    /// Folder for file browser.
+    Folder,
 }
 
 pub fn paint(ui: &Ui, rect: Rect, icon: Icon, color: Color32, stroke: f32) {
@@ -54,6 +60,9 @@ fn shapes_for_icon(icon: Icon, rect: Rect, color: Color32, stroke: f32) -> Vec<S
         Icon::Keyboard => keyboard(rect, color, stroke),
         Icon::FontSmaller => font_smaller(rect, color, stroke),
         Icon::FontLarger => font_larger(rect, color, stroke),
+        Icon::Sessions => sessions(rect, color, stroke),
+        Icon::Connections => connections(rect, color, stroke),
+        Icon::Folder => folder(rect, color, stroke),
     }
 }
 
@@ -152,4 +161,33 @@ fn font_larger(rect: Rect, color: Color32, stroke: f32) -> Vec<Shape> {
     shapes.push(line(rect, color, stroke * 0.9, (0.66, 0.58), (0.84, 0.58)));
     shapes.push(line(rect, color, stroke * 0.9, (0.75, 0.50), (0.75, 0.66)));
     shapes
+}
+
+fn sessions(rect: Rect, color: Color32, stroke: f32) -> Vec<Shape> {
+    // Three horizontal rows suggesting an active session list.
+    vec![
+        line(rect, color, stroke, (0.20, 0.28), (0.80, 0.28)),
+        line(rect, color, stroke, (0.20, 0.50), (0.80, 0.50)),
+        line(rect, color, stroke, (0.20, 0.72), (0.62, 0.72)),
+    ]
+}
+
+fn connections(rect: Rect, color: Color32, stroke: f32) -> Vec<Shape> {
+    // Two small cards + link between them.
+    let a = egui::Rect::from_min_max(map_pt(rect, 0.14, 0.28), map_pt(rect, 0.42, 0.72));
+    let b = egui::Rect::from_min_max(map_pt(rect, 0.58, 0.28), map_pt(rect, 0.86, 0.72));
+    vec![
+        Shape::rect_stroke(a, 1.0, Stroke::new(stroke, color), egui::StrokeKind::Inside),
+        Shape::rect_stroke(b, 1.0, Stroke::new(stroke, color), egui::StrokeKind::Inside),
+        line(rect, color, stroke * 0.9, (0.42, 0.50), (0.58, 0.50)),
+    ]
+}
+
+fn folder(rect: Rect, color: Color32, stroke: f32) -> Vec<Shape> {
+    let tab = egui::Rect::from_min_max(map_pt(rect, 0.16, 0.28), map_pt(rect, 0.48, 0.42));
+    let body = egui::Rect::from_min_max(map_pt(rect, 0.16, 0.40), map_pt(rect, 0.84, 0.78));
+    vec![
+        Shape::rect_stroke(tab, 1.0, Stroke::new(stroke, color), egui::StrokeKind::Inside),
+        Shape::rect_stroke(body, 1.0, Stroke::new(stroke, color), egui::StrokeKind::Inside),
+    ]
 }

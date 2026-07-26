@@ -28,6 +28,9 @@ pub struct SftpClient {
     req_tx: mpsc::Sender<SftpRequest>,
     _thread: JoinHandle<()>,
     status: Arc<Mutex<SftpStatus>>,
+    /// Kept so callers can refresh the notifier context later if needed.
+    #[allow(dead_code)]
+    repaint: Option<crate::connection::RepaintNotifier>,
 }
 
 enum SftpRequest {
@@ -92,6 +95,13 @@ impl client::Handler for SftpSshClient {
 
 impl SftpClient {
     pub fn connect(conn: &SavedConnection) -> Result<Self, String> {
+        Self::connect_with_repaint(conn, None)
+    }
+
+    pub fn connect_with_repaint(
+        conn: &SavedConnection,
+        repaint: Option<crate::connection::RepaintNotifier>,
+    ) -> Result<Self, String> {
         let host = conn
             .ssh_host
             .clone()
@@ -106,8 +116,17 @@ impl SftpClient {
         let (req_tx, req_rx) = mpsc::channel();
         let status: Arc<Mutex<SftpStatus>> = Arc::new(Mutex::new(SftpStatus::Connecting));
         let thread_status = status.clone();
+        let thread_repaint = repaint.clone();
         let thread = thread::spawn(move || {
-            if let Err(e) = sftp_worker(&host, port, &user, password, req_rx, thread_status) {
+            if let Err(e) = sftp_worker(
+                &host,
+                port,
+                &user,
+                password,
+                req_rx,
+                thread_status,
+                thread_repaint,
+            ) {
                 log::error!("SFTP worker ended: {e}");
             }
         });
@@ -116,11 +135,16 @@ impl SftpClient {
             req_tx,
             _thread: thread,
             status,
+            repaint,
         })
     }
 
     pub fn is_connected(&self) -> bool {
         matches!(*self.status.lock().unwrap(), SftpStatus::Connected)
+    }
+
+    pub fn is_connecting(&self) -> bool {
+        matches!(*self.status.lock().unwrap(), SftpStatus::Connecting)
     }
 
     pub fn connection_error(&self) -> Option<String> {
@@ -131,14 +155,37 @@ impl SftpClient {
     }
 
     fn call<T>(&self, build: impl FnOnce(mpsc::SyncSender<Result<T, String>>) -> SftpRequest) -> Result<T, String> {
-        let (tx, rx) = mpsc::sync_channel(1);
-        self.req_tx
-            .send(build(tx))
-            .map_err(|_| "SFTP thread stopped".to_string())?;
+        let rx = self.begin(build)?;
         match rx.recv_timeout(Duration::from_secs(120)) {
             Ok(r) => r,
             Err(_) => Err("SFTP operation timed out".to_string()),
         }
+    }
+
+    /// Non-blocking request — poll the returned receiver from the UI thread.
+    fn begin<T>(
+        &self,
+        build: impl FnOnce(mpsc::SyncSender<Result<T, String>>) -> SftpRequest,
+    ) -> Result<mpsc::Receiver<Result<T, String>>, String> {
+        let (tx, rx) = mpsc::sync_channel(1);
+        self.req_tx
+            .send(build(tx))
+            .map_err(|_| "SFTP thread stopped".to_string())?;
+        Ok(rx)
+    }
+
+    pub fn begin_home_dir(&self) -> Result<mpsc::Receiver<Result<String, String>>, String> {
+        self.begin(|reply| SftpRequest::Home { reply })
+    }
+
+    pub fn begin_list_dir(
+        &self,
+        path: &str,
+    ) -> Result<mpsc::Receiver<Result<Vec<FileEntry>, String>>, String> {
+        self.begin(|reply| SftpRequest::List {
+            path: path.to_string(),
+            reply,
+        })
     }
 
     pub fn home_dir(&self) -> Result<String, String> {
@@ -260,23 +307,36 @@ fn sftp_worker(
     password: Option<String>,
     req_rx: mpsc::Receiver<SftpRequest>,
     status: Arc<Mutex<SftpStatus>>,
+    repaint: Option<crate::connection::RepaintNotifier>,
 ) -> Result<(), String> {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .map_err(|e| e.to_string())?;
 
-    let sftp = match rt.block_on(timeout(
-        Duration::from_secs(25),
-        connect_sftp(host, port, user, password.as_deref()),
-    )) {
+    let notify = || {
+        if let Some(r) = &repaint {
+            r.notify();
+        }
+    };
+
+    // `timeout` must be constructed inside the runtime (Handle::current).
+    let sftp = match rt.block_on(async {
+        timeout(
+            Duration::from_secs(25),
+            connect_sftp(host, port, user, password.as_deref()),
+        )
+        .await
+    }) {
         Ok(Ok(sftp)) => {
             *status.lock().unwrap() = SftpStatus::Connected;
+            notify();
             sftp
         }
         Ok(Err(e)) => {
             let msg = format!("SFTP connection failed: {e}");
             *status.lock().unwrap() = SftpStatus::Error(msg.clone());
+            notify();
             while let Ok(req) = req_rx.recv() {
                 reply_err!(req, &msg);
             }
@@ -285,6 +345,7 @@ fn sftp_worker(
         Err(_) => {
             let msg = format!("SFTP connection to {host}:{port} timed out (25s)");
             *status.lock().unwrap() = SftpStatus::Error(msg.clone());
+            notify();
             while let Ok(req) = req_rx.recv() {
                 reply_err!(req, &msg);
             }
@@ -363,10 +424,16 @@ fn sftp_worker(
                 let _ = reply.send(r);
             }
             SftpRequest::Home { reply } => {
+                // Prefer realpath("."); fall back to $HOME-style via canonicalize of "~"
+                // is not portable — try "." then "/".
                 let r = rt.block_on(async {
-                    sftp.canonicalize(".")
-                        .await
-                        .map_err(|e| e.to_string())
+                    match sftp.canonicalize(".").await {
+                        Ok(p) if !p.is_empty() && p != "." => Ok(p),
+                        Ok(_) | Err(_) => match sftp.canonicalize("~").await {
+                            Ok(p) if !p.is_empty() => Ok(p),
+                            _ => Ok("/".to_string()),
+                        },
+                    }
                 });
                 let _ = reply.send(r);
             }

@@ -2,17 +2,25 @@
 //!
 //! 支持四种连接类型（Local、SSH、Serial、BLE）的创建和编辑。
 //! 包含自动扫描串口设备和 BLE 设备的功能。
+//! 以居中弹出 Window 显示；窗口内顶部用下拉框选择类型，下方按类型显示配置。
 
 use std::sync::mpsc;
 
 use crate::storage::types::{ConnectionType, SavedConnection};
 use crate::connection::enumeration::{enumerate_serial_ports, scan_ble_devices_blocking};
-use crate::ui::widget::style;
+use crate::ui::uiframe::style;
 
-/// 新建/编辑连接对话框的状态。
+/// Outcome of painting the connection form for one frame.
+pub enum ConnectionFormOutcome {
+    None,
+    Cancelled,
+    Saved(SavedConnection),
+}
+
+/// 新建/编辑连接表单状态。
 pub struct NewConnectionDialog {
     pub open: bool,
-    /// When set, dialog edits an existing connection (preserves id on save).
+    /// When set, form edits an existing connection (preserves id on save).
     edit_id: Option<String>,
     pub name: String,
     pub conn_type: ConnectionType,
@@ -62,7 +70,7 @@ impl Default for NewConnectionDialog {
 }
 
 impl NewConnectionDialog {
-    /// 打开新建连接对话框，并预填本地连接的默认值。
+    /// 打开新建连接表单，并预填本地连接的默认值。
     pub fn open_new(&mut self) {
         *self = Self::default();
         self.open = true;
@@ -73,13 +81,13 @@ impl NewConnectionDialog {
             .unwrap_or_default();
     }
 
-    /// 打开编辑连接对话框，用已有连接数据填充表单。
+    /// 打开编辑连接表单，用已有连接数据填充。
     pub fn open_edit(&mut self, conn: &SavedConnection) {
         *self = Self::default();
         self.open = true;
         self.edit_id = Some(conn.id.clone());
         self.name = conn.name.clone();
-        self.conn_type = conn.conn_type.clone();
+        self.conn_type = conn.conn_type;
         self.shell = conn.shell.clone().unwrap_or_default();
         self.working_dir = conn.working_dir.clone().unwrap_or_default();
         self.ssh_host = conn.ssh_host.clone().unwrap_or_default();
@@ -92,6 +100,14 @@ impl NewConnectionDialog {
             .map(|b| b.to_string())
             .unwrap_or_else(|| "115200".into());
         self.ble_device = conn.ble_device.clone().unwrap_or_default();
+    }
+
+    pub fn is_editing(&self) -> bool {
+        self.edit_id.is_some()
+    }
+
+    pub fn close(&mut self) {
+        *self = Self::default();
     }
 
     /// 获取当前平台支持的连接类型列表。
@@ -119,11 +135,11 @@ impl NewConnectionDialog {
             return;
         }
         if !types.contains(&self.conn_type) {
-            self.conn_type = types[0].clone();
+            self.conn_type = types[0];
         }
     }
 
-    /// 显示对话框并处理用户交互。返回 `Some(SavedConnection)` 表示保存操作。
+    /// 显示居中弹出窗口并处理交互。返回 `Some(SavedConnection)` 表示保存。
     pub fn show(&mut self, ctx: &egui::Context) -> Option<SavedConnection> {
         if !self.open {
             return None;
@@ -135,276 +151,271 @@ impl NewConnectionDialog {
             self.refresh_serial_devices();
         }
 
-        let mut result = None;
-        let mut close = false;
-
+        let mut outcome = ConnectionFormOutcome::None;
         let title = if self.edit_id.is_some() {
             rust_i18n::t!("dialog_edit_connection")
         } else {
             rust_i18n::t!("dialog_new_connection")
         };
+
         egui::Window::new(title)
             .collapsible(false)
             .resizable(false)
             .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
             .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(rust_i18n::t!("dialog_name"));
-                    ui.text_edit_singleline(&mut self.name);
-                });
-
-                let editing = self.edit_id.is_some();
-                ui.horizontal(|ui| {
-                    ui.label(rust_i18n::t!("dialog_type"));
-                    for ct in Self::available_types() {
-                        let selected = self.conn_type == ct;
-                        let text_color = if selected {
-                            ui.visuals().selection.stroke.color
-                        } else {
-                            ui.visuals().weak_text_color()
-                        };
-                        let text = egui::RichText::new(ct.label())
-                            .size(13.0)
-                            .color(text_color);
-                        let btn = egui::Button::new(text)
-                            .fill(if selected {
-                                ui.visuals().selection.bg_fill.gamma_multiply(0.35)
-                            } else {
-                                egui::Color32::TRANSPARENT
-                            })
-                            .corner_radius(style::CORNER_RADIUS_SM)
-                            .min_size(egui::vec2(0.0, 30.0));
-                        if ui
-                            .add_enabled(!editing, btn)
-                            .clicked()
-                        {
-                            if self.conn_type != ct {
-                                self.conn_type = ct.clone();
-                                self.ble_scan_error = None;
-                                if ct == ConnectionType::Serial {
-                                    self.refresh_serial_devices();
-                                }
-                            }
-                        }
-                    }
-                });
-
-                ui.add_space(12.0);
-                ui.separator();
-                ui.add_space(4.0);
-
-                match self.conn_type {
-                    ConnectionType::Local => {
-                        ui.horizontal(|ui| {
-                            ui.label(rust_i18n::t!("dialog_shell"));
-                            ui.text_edit_singleline(&mut self.shell);
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label(rust_i18n::t!("dialog_working_dir"));
-                            ui.text_edit_singleline(&mut self.working_dir);
-                        });
-                    }
-                    ConnectionType::Ssh => {
-                        ui.horizontal(|ui| {
-                            ui.label(rust_i18n::t!("dialog_host"));
-                            ui.text_edit_singleline(&mut self.ssh_host);
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label(rust_i18n::t!("dialog_port"));
-                            ui.text_edit_singleline(&mut self.ssh_port);
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label(rust_i18n::t!("dialog_user"));
-                            ui.text_edit_singleline(&mut self.ssh_user);
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label(rust_i18n::t!("dialog_password"));
-                            ui.add(
-                                egui::TextEdit::singleline(&mut self.ssh_password)
-                                    .password(true),
-                            );
-                        });
-                        ui.label(
-                            egui::RichText::new(
-                                rust_i18n::t!("dialog_ssh_password_hint"),
-                            )
-                            .small()
-                            .weak(),
-                        );
-                    }
-                    ConnectionType::Serial => {
-                        ui.horizontal(|ui| {
-                            if ui.button(rust_i18n::t!("dialog_refresh_devices")).clicked() {
-                                self.refresh_serial_devices();
-                            }
-                        });
-                        if self.serial_devices.is_empty() {
-                            ui.horizontal(|ui| {
-                                ui.label(rust_i18n::t!("dialog_device"));
-                                ui.text_edit_singleline(&mut self.serial_port);
-                            });
-                        } else {
-                            let selected_text = self
-                                .serial_devices
-                                .iter()
-                                .find(|(path, _)| path == &self.serial_port)
-                                .map(|(_, label)| label.as_str())
-                                .unwrap_or(self.serial_port.as_str());
-                            egui::ComboBox::from_label(rust_i18n::t!("dialog_device"))
-                                .selected_text(selected_text)
-                                .show_ui(ui, |ui| {
-                                    for (path, label) in &self.serial_devices {
-                                        ui.selectable_value(
-                                            &mut self.serial_port,
-                                            path.clone(),
-                                            label,
-                                        );
-                                    }
-                                });
-                        }
-                        ui.horizontal(|ui| {
-                            ui.label(rust_i18n::t!("dialog_baud_rate"));
-                            ui.text_edit_singleline(&mut self.serial_baud);
-                        });
-                    }
-                    ConnectionType::Ble => {
-                        ui.horizontal(|ui| {
-                            let scan_label = if self.ble_scanning {
-                                rust_i18n::t!("scanning")
-                            } else {
-                                rust_i18n::t!("dialog_scan_devices")
-                            };
-                            if ui
-                                .add_enabled(!self.ble_scanning, egui::Button::new(scan_label))
-                                .clicked()
-                            {
-                                self.start_ble_scan(ctx);
-                            }
-                        });
-                        if let Some(err) = &self.ble_scan_error {
-                            ui.label(
-                                egui::RichText::new(err)
-                                    .small()
-                                    .color(style::RED),
-                            );
-                        }
-                        if self.ble_devices.is_empty() && !self.ble_scanning {
-                            ui.label(
-                                egui::RichText::new(rust_i18n::t!("dialog_ble_scan_hint"))
-                                    .weak(),
-                            );
-                            ui.horizontal(|ui| {
-                                ui.label(rust_i18n::t!("dialog_device_name"));
-                                ui.text_edit_singleline(&mut self.ble_device);
-                            });
-                        } else if !self.ble_devices.is_empty() {
-                            let selected = if self.ble_device.is_empty() {
-                                self.ble_devices[0].as_str()
-                            } else {
-                                self.ble_device.as_str()
-                            };
-                            egui::ComboBox::from_label(rust_i18n::t!("dialog_device"))
-                                .selected_text(selected)
-                                .show_ui(ui, |ui| {
-                                    for name in &self.ble_devices {
-                                        ui.selectable_value(
-                                            &mut self.ble_device,
-                                            name.clone(),
-                                            name,
-                                        );
-                                    }
-                                });
-                        }
-                    }
-                }
-
-                ui.add_space(20.0);
-
-                ui.horizontal(|ui| {
-                    let cancel_btn = egui::Button::new(
-                        egui::RichText::new(rust_i18n::t!("cancel"))
-                            .size(14.0)
-                            .color(ui.visuals().weak_text_color()),
-                    )
-                    .fill(ui.visuals().panel_fill)
-                    .corner_radius(style::CORNER_RADIUS_SM)
-                    .min_size(egui::vec2(80.0, 34.0));
-                    if ui.add(cancel_btn).clicked() {
-                        close = true;
-                    }
-
-                    let can_create = !self.name.trim().is_empty()
-                        && match self.conn_type {
-                            ConnectionType::Ssh => !self.ssh_host.trim().is_empty(),
-                            ConnectionType::Serial => !self.serial_port.trim().is_empty(),
-                            ConnectionType::Ble => !self.ble_device.trim().is_empty(),
-                            ConnectionType::Local => true,
-                        };
-
-                    let save_label = if self.edit_id.is_some() {
-                        rust_i18n::t!("save")
-                    } else {
-                        rust_i18n::t!("create")
-                    };
-                    let create_btn = egui::Button::new(
-                        egui::RichText::new(save_label).size(14.0).color(egui::Color32::WHITE),
-                    )
-                    .fill(style::ACCENT)
-                    .corner_radius(style::CORNER_RADIUS_SM)
-                    .min_size(egui::vec2(100.0, 34.0));
-                    if ui
-                        .add_enabled(can_create, create_btn)
-                        .clicked()
-                    {
-                        let mut conn = match &self.conn_type {
-                            ConnectionType::Local => {
-                                let shell = if self.shell.is_empty() {
-                                    None
-                                } else {
-                                    Some(self.shell.as_str())
-                                };
-                                let mut c = SavedConnection::new_local(&self.name, shell);
-                                if !self.working_dir.trim().is_empty() {
-                                    c.working_dir = Some(self.working_dir.trim().to_string());
-                                }
-                                c
-                            }
-                            ConnectionType::Ssh => {
-                                let mut c = SavedConnection::new_ssh(
-                                    &self.name,
-                                    &self.ssh_host,
-                                    self.ssh_port.parse().unwrap_or(22),
-                                    &self.ssh_user,
-                                );
-                                if !self.ssh_password.is_empty() {
-                                    c.ssh_password = Some(self.ssh_password.clone());
-                                }
-                                c
-                            }
-                            ConnectionType::Serial => SavedConnection::new_serial(
-                                &self.name,
-                                &self.serial_port,
-                                self.serial_baud.parse().unwrap_or(115200),
-                            ),
-                            ConnectionType::Ble => {
-                                SavedConnection::new_ble(&self.name, &self.ble_device)
-                            }
-                        };
-                        if let Some(id) = self.edit_id.take() {
-                            conn.id = id;
-                        }
-                        result = Some(conn);
-                        close = true;
-                    }
-                });
+                outcome = self.paint_form(ui, ctx);
             });
 
-        if close {
-            self.open = false;
-            *self = Self::default();
+        match outcome {
+            ConnectionFormOutcome::Saved(conn) => {
+                self.close();
+                Some(conn)
+            }
+            ConnectionFormOutcome::Cancelled => {
+                self.close();
+                None
+            }
+            ConnectionFormOutcome::None => None,
+        }
+    }
+
+    /// 绘制窗口内表单（类型下拉 + 名称 + 按类型配置）。
+    fn paint_form(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) -> ConnectionFormOutcome {
+        let mut outcome = ConnectionFormOutcome::None;
+        let editing = self.edit_id.is_some();
+        let available_types = Self::available_types();
+
+        ui.horizontal(|ui| {
+            ui.label(rust_i18n::t!("dialog_type"));
+            ui.add_enabled_ui(!editing, |ui| {
+                let prev = self.conn_type;
+                egui::ComboBox::from_id_salt("add_connection_type")
+                    .selected_text(self.conn_type.label())
+                    .width(ui.available_width().min(220.0))
+                    .show_ui(ui, |ui| {
+                        for ct in &available_types {
+                            ui.selectable_value(&mut self.conn_type, *ct, ct.label());
+                        }
+                    });
+                if self.conn_type != prev {
+                    self.ble_scan_error = None;
+                    if self.conn_type == ConnectionType::Serial {
+                        self.refresh_serial_devices();
+                    }
+                }
+            });
+        });
+
+        ui.horizontal(|ui| {
+            ui.label(rust_i18n::t!("dialog_name"));
+            ui.text_edit_singleline(&mut self.name);
+        });
+
+        ui.add_space(12.0);
+        ui.separator();
+        ui.add_space(4.0);
+
+        match self.conn_type {
+            ConnectionType::Local => {
+                ui.horizontal(|ui| {
+                    ui.label(rust_i18n::t!("dialog_shell"));
+                    ui.text_edit_singleline(&mut self.shell);
+                });
+                ui.horizontal(|ui| {
+                    ui.label(rust_i18n::t!("dialog_working_dir"));
+                    ui.text_edit_singleline(&mut self.working_dir);
+                });
+            }
+            ConnectionType::Ssh => {
+                ui.horizontal(|ui| {
+                    ui.label(rust_i18n::t!("dialog_host"));
+                    ui.text_edit_singleline(&mut self.ssh_host);
+                });
+                ui.horizontal(|ui| {
+                    ui.label(rust_i18n::t!("dialog_port"));
+                    ui.text_edit_singleline(&mut self.ssh_port);
+                });
+                ui.horizontal(|ui| {
+                    ui.label(rust_i18n::t!("dialog_user"));
+                    ui.text_edit_singleline(&mut self.ssh_user);
+                });
+                ui.horizontal(|ui| {
+                    ui.label(rust_i18n::t!("dialog_password"));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.ssh_password).password(true),
+                    );
+                });
+                ui.label(
+                    egui::RichText::new(rust_i18n::t!("dialog_ssh_password_hint"))
+                        .small()
+                        .weak(),
+                );
+            }
+            ConnectionType::Serial => {
+                ui.horizontal(|ui| {
+                    if ui.button(rust_i18n::t!("dialog_refresh_devices")).clicked() {
+                        self.refresh_serial_devices();
+                    }
+                });
+                if self.serial_devices.is_empty() {
+                    ui.horizontal(|ui| {
+                        ui.label(rust_i18n::t!("dialog_device"));
+                        ui.text_edit_singleline(&mut self.serial_port);
+                    });
+                } else {
+                    let selected_text = self
+                        .serial_devices
+                        .iter()
+                        .find(|(path, _)| path == &self.serial_port)
+                        .map(|(_, label)| label.as_str())
+                        .unwrap_or(self.serial_port.as_str())
+                        .to_string();
+                    egui::ComboBox::from_label(rust_i18n::t!("dialog_device"))
+                        .selected_text(selected_text)
+                        .show_ui(ui, |ui| {
+                            for (path, label) in &self.serial_devices {
+                                ui.selectable_value(
+                                    &mut self.serial_port,
+                                    path.clone(),
+                                    label,
+                                );
+                            }
+                        });
+                }
+                ui.horizontal(|ui| {
+                    ui.label(rust_i18n::t!("dialog_baud_rate"));
+                    ui.text_edit_singleline(&mut self.serial_baud);
+                });
+            }
+            ConnectionType::Ble => {
+                ui.horizontal(|ui| {
+                    let scan_label = if self.ble_scanning {
+                        rust_i18n::t!("scanning")
+                    } else {
+                        rust_i18n::t!("dialog_scan_devices")
+                    };
+                    if ui
+                        .add_enabled(!self.ble_scanning, egui::Button::new(scan_label))
+                        .clicked()
+                    {
+                        self.start_ble_scan(ctx);
+                    }
+                });
+                if let Some(err) = &self.ble_scan_error {
+                    ui.label(
+                        egui::RichText::new(err)
+                            .small()
+                            .color(style::RED),
+                    );
+                }
+                if self.ble_devices.is_empty() && !self.ble_scanning {
+                    ui.label(
+                        egui::RichText::new(rust_i18n::t!("dialog_ble_scan_hint")).weak(),
+                    );
+                    ui.horizontal(|ui| {
+                        ui.label(rust_i18n::t!("dialog_device_name"));
+                        ui.text_edit_singleline(&mut self.ble_device);
+                    });
+                } else if !self.ble_devices.is_empty() {
+                    let selected = if self.ble_device.is_empty() {
+                        self.ble_devices[0].clone()
+                    } else {
+                        self.ble_device.clone()
+                    };
+                    egui::ComboBox::from_label(rust_i18n::t!("dialog_device"))
+                        .selected_text(selected)
+                        .show_ui(ui, |ui| {
+                            for name in &self.ble_devices {
+                                ui.selectable_value(
+                                    &mut self.ble_device,
+                                    name.clone(),
+                                    name,
+                                );
+                            }
+                        });
+                }
+            }
         }
 
-        result
+        ui.add_space(20.0);
+
+        ui.horizontal(|ui| {
+            let cancel_btn = egui::Button::new(
+                egui::RichText::new(rust_i18n::t!("cancel"))
+                    .size(14.0)
+                    .color(ui.visuals().weak_text_color()),
+            )
+            .fill(ui.visuals().panel_fill)
+            .corner_radius(style::CORNER_RADIUS_SM)
+            .min_size(egui::vec2(80.0, 34.0));
+            if ui.add(cancel_btn).clicked() {
+                outcome = ConnectionFormOutcome::Cancelled;
+            }
+
+            let can_create = !self.name.trim().is_empty()
+                && match self.conn_type {
+                    ConnectionType::Ssh => !self.ssh_host.trim().is_empty(),
+                    ConnectionType::Serial => !self.serial_port.trim().is_empty(),
+                    ConnectionType::Ble => !self.ble_device.trim().is_empty(),
+                    ConnectionType::Local => true,
+                };
+
+            let save_label = if self.edit_id.is_some() {
+                rust_i18n::t!("save")
+            } else {
+                rust_i18n::t!("create")
+            };
+            let create_btn = egui::Button::new(
+                egui::RichText::new(save_label)
+                    .size(14.0)
+                    .color(egui::Color32::WHITE),
+            )
+            .fill(style::ACCENT)
+            .corner_radius(style::CORNER_RADIUS_SM)
+            .min_size(egui::vec2(100.0, 34.0));
+            if ui.add_enabled(can_create, create_btn).clicked() {
+                let mut conn = match self.conn_type {
+                    ConnectionType::Local => {
+                        let shell = if self.shell.is_empty() {
+                            None
+                        } else {
+                            Some(self.shell.as_str())
+                        };
+                        let mut c = SavedConnection::new_local(&self.name, shell);
+                        if !self.working_dir.trim().is_empty() {
+                            c.working_dir = Some(self.working_dir.trim().to_string());
+                        }
+                        c
+                    }
+                    ConnectionType::Ssh => {
+                        let mut c = SavedConnection::new_ssh(
+                            &self.name,
+                            &self.ssh_host,
+                            self.ssh_port.parse().unwrap_or(22),
+                            &self.ssh_user,
+                        );
+                        if !self.ssh_password.is_empty() {
+                            c.ssh_password = Some(self.ssh_password.clone());
+                        }
+                        c
+                    }
+                    ConnectionType::Serial => SavedConnection::new_serial(
+                        &self.name,
+                        &self.serial_port,
+                        self.serial_baud.parse().unwrap_or(115200),
+                    ),
+                    ConnectionType::Ble => {
+                        SavedConnection::new_ble(&self.name, &self.ble_device)
+                    }
+                };
+                if let Some(id) = self.edit_id.take() {
+                    conn.id = id;
+                }
+                outcome = ConnectionFormOutcome::Saved(conn);
+            }
+        });
+
+        outcome
     }
 
     fn refresh_serial_devices(&mut self) {

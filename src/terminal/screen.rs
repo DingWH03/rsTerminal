@@ -507,6 +507,12 @@ pub struct Screen {
     /// Title
     pub title: String,
 
+    /// Working directory reported via OSC 7 (`file://` URI), if any.
+    pub cwd: Option<String>,
+
+    /// FinalTerm / iTerm2 / WezTerm semantic prompt markers (OSC 133).
+    pub semantic: SemanticShell,
+
     /// Deferred `\r` (applied on next output unless followed immediately by `\n`).
     pending_cr: bool,
 
@@ -594,6 +600,8 @@ impl Screen {
             mouse_report_motion: false,
             mouse_sgr_encoding: false,
             title: String::new(),
+            cwd: None,
+            semantic: SemanticShell::default(),
             pending_cr: false,
             pending_double_cr: false,
             suppress_extra_crlf_newline: false,
@@ -1546,16 +1554,19 @@ impl Screen {
         }
     }
 
-    /// BS (0x08): move cursor left without erasing (zsh uses this for line redraw).
+    /// BS (0x08): move cursor left one **display** column without erasing.
+    ///
+    /// zsh-autosuggestions restores the cursor after a gray POSTDISPLAY by emitting
+    /// one BS per display column (CJK wide chars count as 2).  Skipping an entire
+    /// wide character in a single BS desyncs the cursor (e.g. menu-complete +
+    /// suggestion `新项目5` left the caret inside `cd 111/`).
     pub fn backspace(&mut self) {
         self.pending_wrap = false;
-        if self.cursor_x == 0 {
+        let cur = self.cursor_display_col();
+        if cur == 0 {
             return;
         }
-        self.cursor_x -= 1;
-        if self.cursor_x > 0 && self.cells[self.cursor_y][self.cursor_x].wide_continuation {
-            self.cursor_x -= 1;
-        }
+        self.set_cursor_display_col_exact(cur - 1);
     }
 
     /// DEL (0x7f): erase the cell before the cursor.
@@ -1574,7 +1585,10 @@ impl Screen {
         }
     }
 
-    /// Display-column index of the cursor (for CUB/CUF/CHA).
+    /// Display-column index of the cursor (for CUB/CUF/CHA/BS).
+    ///
+    /// The cursor may sit on a wide-character continuation cell (after BS); count
+    /// that as the second display column of the wide glyph.
     fn cursor_display_col(&self) -> usize {
         let row = &self.cells[self.cursor_y];
         let mut display_col = 0usize;
@@ -1585,6 +1599,9 @@ impl Screen {
                 continue;
             }
             let w = cell_display_width(row, col).max(1);
+            if col + w > self.cursor_x {
+                return display_col + (self.cursor_x - col);
+            }
             display_col += w;
             col += w;
         }
@@ -1603,6 +1620,7 @@ impl Screen {
             }
             let w = cell_display_width(row, col).max(1);
             if display_col + w > target {
+                // CUB/CUF: snap to the leading cell of a wide glyph.
                 self.cursor_x = col;
                 self.normalize_cursor_x();
                 return;
@@ -1612,6 +1630,28 @@ impl Screen {
         }
         self.cursor_x = self.cols.saturating_sub(1);
         self.normalize_cursor_x();
+    }
+
+    /// Move to a display column; may land on a wide-char continuation cell (BS).
+    fn set_cursor_display_col_exact(&mut self, target: usize) {
+        self.pending_wrap = false;
+        let row = &self.cells[self.cursor_y];
+        let mut display_col = 0usize;
+        let mut col = 0usize;
+        while col < self.cols {
+            if row[col].wide_continuation {
+                col += 1;
+                continue;
+            }
+            let w = cell_display_width(row, col).max(1);
+            if target < display_col + w {
+                self.cursor_x = (col + (target - display_col)).min(self.cols.saturating_sub(1));
+                return;
+            }
+            display_col += w;
+            col += w;
+        }
+        self.cursor_x = self.cols.saturating_sub(1);
     }
 
     fn cursor_step_left(&mut self, n: usize) {
@@ -2423,11 +2463,211 @@ impl TermHandler for Screen {
             self.title = rest.to_string();
         } else if let Some(rest) = data.strip_prefix("2;") {
             self.title = rest.to_string();
+        } else if let Some(rest) = data.strip_prefix("7;") {
+            if let Some(path) = parse_osc7_cwd(rest) {
+                self.cwd = Some(path);
+            }
+        } else if let Some(rest) = data.strip_prefix("133;") {
+            self.handle_osc133(rest);
         } else if data == "0" {
             if let Some(rest) = data.get(1..) {
                 self.title = rest.to_string();
             }
         }
+    }
+}
+
+impl Screen {
+    /// OSC 133 — FinalTerm semantic prompts (`A`/`B`/`C`/`D`/`P`).
+    fn handle_osc133(&mut self, rest: &str) {
+        let mut parts = rest.split(';');
+        let Some(code) = parts.next() else {
+            return;
+        };
+        match code {
+            "A" => {
+                // Prompt start (optionally followed by aid / extra fields).
+                self.semantic.command_running = false;
+                self.semantic.bump_mark(Osc133Kind::PromptStart);
+            }
+            "B" => {
+                self.semantic.command_running = true;
+                self.semantic.last_kind = Some(Osc133Kind::CommandStart);
+            }
+            "C" => {
+                self.semantic.command_running = true;
+                self.semantic.last_kind = Some(Osc133Kind::OutputStart);
+            }
+            "D" => {
+                self.semantic.last_exit_status = parts.next().and_then(|s| s.parse().ok());
+                self.semantic.command_running = false;
+                self.semantic.bump_mark(Osc133Kind::CommandFinished);
+            }
+            "P" => {
+                // Property bag (WezTerm/Kitty): e.g. `P;k=i` initial prompt.
+                let is_initial = parts.clone().any(|p| p == "k=i" || p.starts_with("k=i"));
+                self.semantic.last_kind = Some(Osc133Kind::PromptProperty);
+                if is_initial {
+                    self.semantic.command_running = false;
+                    self.semantic.bump_mark(Osc133Kind::PromptProperty);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Kind of the last OSC 133 sequence consumed by the screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Osc133Kind {
+    PromptStart,
+    CommandStart,
+    OutputStart,
+    CommandFinished,
+    PromptProperty,
+}
+
+/// Shell-integration state derived from OSC 133 (and used with OSC 7 cwd).
+#[derive(Debug, Clone, Default)]
+pub struct SemanticShell {
+    /// Bumps when a prompt begins (`A` / `P;k=i`) or a command finishes (`D`).
+    /// UI can watch this to refresh (e.g. sidebar file listing) without injecting hooks.
+    pub mark_seq: u64,
+    /// True between command start (`B`/`C`) and command end (`D`).
+    pub command_running: bool,
+    /// Exit status from the last `OSC 133;D;<n>`, if provided.
+    pub last_exit_status: Option<i32>,
+    pub last_kind: Option<Osc133Kind>,
+}
+
+impl SemanticShell {
+    fn bump_mark(&mut self, kind: Osc133Kind) {
+        self.mark_seq = self.mark_seq.wrapping_add(1);
+        self.last_kind = Some(kind);
+    }
+}
+
+/// Parse OSC 7 payload (`file://hostname/path` or plain path) into a filesystem path string.
+fn parse_osc7_cwd(payload: &str) -> Option<String> {
+    let payload = payload.trim();
+    if payload.is_empty() {
+        return None;
+    }
+    if let Some(rest) = payload.strip_prefix("file://") {
+        // file://hostname/path or file:///path
+        let path_part = if let Some(idx) = rest.find('/') {
+            &rest[idx..]
+        } else {
+            rest
+        };
+        // Percent-decode common escapes
+        let decoded = percent_decode(path_part);
+        if decoded.is_empty() {
+            None
+        } else {
+            Some(decoded)
+        }
+    } else if payload.starts_with('/') {
+        Some(payload.to_string())
+    } else {
+        // Windows-style or host-relative — keep as-is
+        Some(payload.to_string())
+    }
+}
+
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let h = hex_nibble(bytes[i + 1]);
+            let l = hex_nibble(bytes[i + 2]);
+            if let (Some(h), Some(l)) = (h, l) {
+                out.push((h << 4) | l);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+fn hex_nibble(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod osc7_tests {
+    use super::parse_osc7_cwd;
+
+    #[test]
+    fn osc7_file_uri() {
+        assert_eq!(
+            parse_osc7_cwd("file://hostname/home/user/proj"),
+            Some("/home/user/proj".into())
+        );
+        assert_eq!(
+            parse_osc7_cwd("file:///tmp/foo%20bar"),
+            Some("/tmp/foo bar".into())
+        );
+    }
+
+    #[test]
+    fn osc7_plain_path() {
+        assert_eq!(parse_osc7_cwd("/var/log"), Some("/var/log".into()));
+    }
+}
+
+#[cfg(test)]
+mod osc133_tests {
+    use super::{Osc133Kind, Screen};
+    use crate::terminal::parser::TermHandler;
+
+    #[test]
+    fn osc133_prompt_and_command_lifecycle() {
+        let mut screen = Screen::new(2, 40);
+        screen.osc_dispatch("133;A");
+        assert_eq!(screen.semantic.mark_seq, 1);
+        assert!(!screen.semantic.command_running);
+        assert_eq!(screen.semantic.last_kind, Some(Osc133Kind::PromptStart));
+
+        screen.osc_dispatch("133;B");
+        assert!(screen.semantic.command_running);
+        assert_eq!(screen.semantic.mark_seq, 1);
+
+        screen.osc_dispatch("133;C");
+        assert!(screen.semantic.command_running);
+
+        screen.osc_dispatch("133;D;0");
+        assert!(!screen.semantic.command_running);
+        assert_eq!(screen.semantic.last_exit_status, Some(0));
+        assert_eq!(screen.semantic.mark_seq, 2);
+        assert_eq!(screen.semantic.last_kind, Some(Osc133Kind::CommandFinished));
+    }
+
+    #[test]
+    fn osc133_property_initial_prompt_bumps_mark() {
+        let mut screen = Screen::new(2, 40);
+        screen.osc_dispatch("133;P;k=i");
+        assert_eq!(screen.semantic.mark_seq, 1);
+        assert_eq!(screen.semantic.last_kind, Some(Osc133Kind::PromptProperty));
+    }
+
+    #[test]
+    fn osc7_then_133_updates_cwd_and_mark() {
+        let mut screen = Screen::new(2, 40);
+        screen.osc_dispatch("7;file://host/home/u/proj");
+        screen.osc_dispatch("133;A");
+        assert_eq!(screen.cwd.as_deref(), Some("/home/u/proj"));
+        assert_eq!(screen.semantic.mark_seq, 1);
     }
 }
 

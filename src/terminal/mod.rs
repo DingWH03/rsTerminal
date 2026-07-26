@@ -3,6 +3,8 @@ pub mod metrics;
 pub mod parser;
 pub mod screen;
 
+pub use screen::{Osc133Kind, SemanticShell};
+
 pub const DEFAULT_GRID_ROWS: usize = 24;
 pub const DEFAULT_GRID_COLS: usize = 80;
 
@@ -1230,5 +1232,44 @@ mod tests {
                 start_y + i + 1
             );
         }
+    }
+
+    #[test]
+    fn zsh_autosuggest_bs_per_display_col_after_cjk() {
+        // zsh-autosuggestions: print gray CJK POSTDISPLAY, then one BS per display column.
+        let mut term = Terminal::new(1, 80);
+        term.write(b"cd 111/");
+        let end = term.screen.cursor_x;
+        assert_eq!(end, 7);
+        // 新项目5 = 2+2+2+1 = 7 display columns
+        term.write(b"\x1b[90m\xe6\x96\xb0\xe9\xa1\xb9\xe7\x9b\xae5\x1b[39m");
+        assert_eq!(term.screen.cursor_x, end + 7);
+        term.write(b"\x08\x08\x08\x08\x08\x08\x08");
+        assert_eq!(
+            term.screen.cursor_x, end,
+            "7 BS over CJK suggestion must return to end of cd 111/"
+        );
+    }
+
+    #[test]
+    fn zsh_menu_complete_then_cjk_autosuggest_restores_cursor() {
+        // Reduced capture: after accepting `cd 111/`, omz autosuggest paints gray
+        // `新项目5` at CUF 44 and restores with 7×BS.
+        let mut term = Terminal::new(3, 100);
+        term.write(b"\x1b[01;32mdwh@dwh-82sk\x1b[00m \x1b[01;34m/tmp/rsterm-comp-test\x1b[00m \xc2\xbb ");
+        term.write(b"cd 111/");
+        // autosuggest path from captured omz enter tail
+        term.write(b"\r\r\n\x1b[J\x1b[A\x1b[44C\x1b[90m\xe6\x96\xb0\xe9\xa1\xb9\xe7\x9b\xae5\x1b[39m\x08\x08\x08\x08\x08\x08\x08");
+        assert_eq!(
+            term.screen.cursor_x, 44,
+            "cursor must sit after cd 111/, not inside it"
+        );
+        let row: String = term.screen.cells[term.screen.cursor_y]
+            .iter()
+            .map(|c| c.ch)
+            .collect::<String>()
+            .trim_end()
+            .to_string();
+        assert!(row.contains("cd 111/"), "row={row:?}");
     }
 }
