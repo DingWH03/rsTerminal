@@ -41,13 +41,10 @@ pub fn render_pane(
         .unwrap_or(style::ACCENT);
     let fade = ctx.session_fade.get(&pane_id).copied().unwrap_or(1.0);
     let in_split = ctx.split_layout_active;
-    let border_margin = if in_split {
-        style::PANE_INSET as i8
-    } else {
-        0
-    };
 
-    let frame = egui::Frame::NONE.inner_margin(egui::Margin::same(border_margin));
+    // Single-pane: flush to workspace edges. Split: no per-pane inset either —
+    // inter-pane gap comes solely from SPLITTER_SIZE / PANE_GAP.
+    let frame = egui::Frame::NONE;
 
     frame.show(ui, |ui| {
         ui.set_min_size(ui.available_size());

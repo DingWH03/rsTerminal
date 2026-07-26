@@ -32,14 +32,14 @@ pub fn nav_button(
             ui.visuals().text_color()
         };
 
-        let mut text_left = rect.left() + 10.0;
+        let mut text_left = rect.left() + 6.0;
         if let Some(icon) = icon {
             let icon_rect = egui::Rect::from_center_size(
-                egui::pos2(rect.left() + 16.0, rect.center().y),
-                egui::vec2(16.0, 16.0),
+                egui::pos2(rect.left() + 12.0, rect.center().y),
+                egui::vec2(14.0, 14.0),
             );
             vector_icons::paint(ui, icon_rect, icon, color, 1.4);
-            text_left = rect.left() + 30.0;
+            text_left = rect.left() + 24.0;
         }
 
         let galley = ui.fonts_mut(|f| {

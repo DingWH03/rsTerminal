@@ -16,9 +16,9 @@ pub struct TabBar;
 
 impl TabBar {
     /// Outer square hit target (padding + icon).
-    pub const CELL: f32 = 32.0;
-    pub const ICON: f32 = 16.0;
-    pub const GAP: f32 = 4.0;
+    pub const CELL: f32 = 28.0;
+    pub const ICON: f32 = 15.0;
+    pub const GAP: f32 = 2.0;
     pub const HEIGHT: f32 = Self::CELL;
 
     /// Minimum width needed for `n` tabs (including gaps).

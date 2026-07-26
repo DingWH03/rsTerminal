@@ -1,8 +1,10 @@
 //! Draggable split handle for multi-pane layouts.
 
 use crate::ui::shell::layout_state::SplitAxis;
+use crate::ui::uiframe::style::PANE_GAP;
 
-pub const SPLITTER_SIZE: f32 = 1.0;
+/// Gap between split panes (also the splitter hit strip width).
+pub const SPLITTER_SIZE: f32 = PANE_GAP;
 
 /// Allocate a draggable splitter between two panes.
 /// Returns `Some(new_ratio)` when the user drags the handle.

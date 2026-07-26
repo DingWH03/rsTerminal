@@ -7,8 +7,8 @@ use crate::ui::shell::messages::FunctionAction;
 use crate::ui::uiframe::components::empty_state::{paint_empty_state, EmptyStateConfig};
 use crate::ui::uiframe::style;
 
-const CHART_H: f32 = 78.0;
-const CHART_PAD: f32 = 6.0;
+const CHART_H: f32 = 72.0;
+const CHART_PAD: f32 = 4.0;
 
 pub fn render(
     ui: &mut egui::Ui,
@@ -70,7 +70,7 @@ pub fn render(
         .id_salt("sidebar_monitor_scroll")
         .auto_shrink([false, false])
         .show(ui, |ui| {
-            ui.add_space(4.0);
+            ui.add_space(2.0);
 
             let host = snap
                 .as_ref()
@@ -91,7 +91,7 @@ pub fn render(
                     ui.label(egui::RichText::new(uptime_label).color(muted).size(11.0));
                 });
             });
-            ui.add_space(8.0);
+            ui.add_space(2.0);
 
             let last = history.last().copied().unwrap_or_default();
             let cpu_title = rust_i18n::t!("sidebar_monitor_cpu");
@@ -106,7 +106,7 @@ pub fn render(
                 &history,
                 SeriesKind::Load,
             );
-            ui.add_space(10.0);
+            ui.add_space(4.0);
             paint_series_card(
                 ui,
                 mem_title.as_ref(),
@@ -119,7 +119,7 @@ pub fn render(
                 &history,
                 SeriesKind::Mem,
             );
-            ui.add_space(10.0);
+            ui.add_space(4.0);
             paint_series_card(
                 ui,
                 disk_title.as_ref(),
@@ -132,7 +132,6 @@ pub fn render(
                 &history,
                 SeriesKind::Disk,
             );
-            ui.add_space(6.0);
         });
 
     FunctionAction::empty()
@@ -210,7 +209,7 @@ fn paint_series_card(
         .fill(fill)
         .stroke(egui::Stroke::new(1.0, border))
         .corner_radius(style::CORNER_RADIUS_SM)
-        .inner_margin(egui::Margin::symmetric(8, 8))
+        .inner_margin(egui::Margin::symmetric(4, 4))
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(title).color(muted).size(11.0));

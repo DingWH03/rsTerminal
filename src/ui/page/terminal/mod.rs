@@ -10,6 +10,7 @@
 //! 核心结构 `ActiveSession` 管理单个终端会话的所有状态，
 //! `connection_view` 是主要的渲染入口函数。
 
+pub mod files_cache;
 pub mod grid;
 pub mod input;
 pub mod mouse;
@@ -178,6 +179,8 @@ pub struct ActiveSession {
     pub metrics: crate::remote::SessionMetrics,
     /// Shared-session SFTP when connected via `connect_ssh_session`.
     pub session_sftp: Option<std::sync::Arc<crate::fs::sftp::SftpClient>>,
+    /// Reactive sidebar file listing for this session (cwd-driven, not UI-driven).
+    pub files: files_cache::SessionFilesCache,
 }
 
 /// 终端连接视图的操作结果枚举。

@@ -25,7 +25,6 @@ pub fn render_with_id(
         &format!("{id_salt}_filter"),
         CONNECTION_TYPE_FILTERS,
     );
-    ui.add_space(4.0);
 
     let mut sorted: Vec<&SavedConnection> = match filter {
         Some(ref ft) => connections.iter().filter(|c| c.conn_type == *ft).collect(),
@@ -38,10 +37,18 @@ pub fn render_with_id(
             .then_with(|| a.name.cmp(&b.name))
     });
 
-    ui.separator();
+    // Hairline under tags — avoid egui Separator's default vertical margins.
+    let y = ui.cursor().top();
+    let full = ui.max_rect();
+    ui.painter().hline(
+        full.x_range(),
+        y,
+        egui::Stroke::new(1.0, ui.visuals().widgets.noninteractive.bg_stroke.color),
+    );
+    ui.add_space(1.0);
 
     if sorted.is_empty() {
-        ui.add_space(16.0);
+        ui.add_space(4.0);
         ui.label(
             egui::RichText::new(rust_i18n::t!("home_no_connections"))
                 .size(13.0)
@@ -79,7 +86,7 @@ fn paint_connection_row(
     menu_state: &Option<String>,
     action: &mut FunctionAction,
 ) {
-    let row_h = 40.0;
+    let row_h = 34.0;
     let row_rect = egui::Rect::from_min_size(
         ui.cursor().min,
         egui::vec2(ui.available_width(), row_h),
@@ -117,7 +124,7 @@ fn paint_connection_row(
             );
         }
 
-        let text_left = row_rect.left() + 10.0;
+        let text_left = row_rect.left() + 6.0;
         let name_w = row_rect.right() - text_left - 30.0;
         let name_g = ui.fonts_mut(|f| {
             f.layout(
@@ -128,7 +135,7 @@ fn paint_connection_row(
             )
         });
         painter.galley(
-            egui::pos2(text_left, row_rect.top() + 4.0),
+            egui::pos2(text_left, row_rect.top() + 2.0),
             name_g,
             ui.visuals().text_color(),
         );
@@ -142,7 +149,7 @@ fn paint_connection_row(
             )
         });
         painter.galley(
-            egui::pos2(text_left, row_rect.top() + 22.0),
+            egui::pos2(text_left, row_rect.top() + 18.0),
             det_g,
             ui.visuals().weak_text_color(),
         );

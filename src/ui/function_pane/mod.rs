@@ -11,7 +11,6 @@ pub mod workspace_view;
 use crate::session::WorkspaceSession;
 use crate::settings::AppSettings;
 use crate::storage::types::{ConnectionType, SavedConnection};
-use crate::ui::function_pane::files_view::SidebarFilesState;
 use crate::ui::function_pane::pages::FunctionPage;
 use crate::ui::shell::layout_state::WorkspaceLayout;
 use crate::ui::shell::messages::FunctionAction;
@@ -151,12 +150,11 @@ pub fn render(
     ui: &mut egui::Ui,
     pane: &mut FunctionPane,
     page: &mut FunctionPage,
-    sessions: &[WorkspaceSession],
+    sessions: &mut [WorkspaceSession],
     workspace: &WorkspaceLayout,
     highlighted_session: Option<&str>,
     connections: &[SavedConnection],
     settings: &AppSettings,
-    files_state: &mut SidebarFilesState,
     _page_slide: f32,
 ) -> FunctionAction {
     let focused = workspace.focused_session_id();
@@ -170,6 +168,10 @@ pub fn render(
     }
 
     let mut action = FunctionAction::empty();
+
+    // Compact sidebar chrome (outer panel already has 1px inset).
+    ui.spacing_mut().item_spacing = egui::vec2(4.0, 2.0);
+    ui.spacing_mut().button_padding = egui::vec2(4.0, 2.0);
 
     let active_tip = rust_i18n::t!("sidebar_tab_active");
     let conn_tip = rust_i18n::t!("sidebar_tab_connections");
@@ -204,10 +206,11 @@ pub fn render(
         });
     }
 
-    let tab_strip_h = TabBar::HEIGHT + 6.0;
+    let tab_strip_h = TabBar::HEIGHT + 2.0;
     egui::Panel::bottom("function_pane_tabs")
         .exact_size(tab_strip_h)
         .show_separator_line(true)
+        .frame(egui::Frame::NONE)
         .show_inside(ui, |ui| {
             let mut selected = page.as_tab_id();
             if TabBar::show(ui, &mut selected, &items) {
@@ -215,24 +218,27 @@ pub fn render(
             }
         });
 
-    egui::CentralPanel::default().show_inside(ui, |ui| {
-        let body_action = match *page {
-            FunctionPage::Active => workspace_view::render(
-                ui,
-                pane,
-                sessions,
-                workspace,
-                highlighted_session,
-                settings,
-            ),
-            FunctionPage::Connections => connections::render(ui, connections),
-            FunctionPage::Files => {
-                files_view::render(ui, files_state, sessions, focused, connections)
-            }
-            FunctionPage::Monitor => monitor_view::render(ui, sessions, focused),
-        };
-        action = body_action;
-    });
+    egui::CentralPanel::default()
+        .frame(egui::Frame::NONE)
+        .show_inside(ui, |ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(4.0, 2.0);
+            let body_action = match *page {
+                FunctionPage::Active => workspace_view::render(
+                    ui,
+                    pane,
+                    sessions,
+                    workspace,
+                    highlighted_session,
+                    settings,
+                ),
+                FunctionPage::Connections => connections::render(ui, connections),
+                FunctionPage::Files => {
+                    files_view::render(ui, sessions, focused, connections)
+                }
+                FunctionPage::Monitor => monitor_view::render(ui, sessions, focused),
+            };
+            action = body_action;
+        });
 
     action
 }

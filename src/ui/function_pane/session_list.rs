@@ -3,6 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::session::WorkspaceSession;
+use crate::ui::uiframe::components::empty_state::{paint_empty_state, EmptyStateConfig};
 use crate::ui::uiframe::style;
 use crate::ui::uiframe::vector_icons::{self, Icon};
 
@@ -34,11 +35,15 @@ pub fn paint_session_rows(
     };
 
     if sessions.is_empty() {
-        ui.add_space(8.0);
-        ui.label(
-            egui::RichText::new(rust_i18n::t!("sidebar_no_sessions"))
-                .size(12.0)
-                .color(ui.visuals().weak_text_color()),
+        paint_empty_state(
+            ui,
+            EmptyStateConfig {
+                vector_icon: Some(Icon::Sessions),
+                vector_icon_size: 44.0,
+                title: &rust_i18n::t!("sidebar_no_sessions"),
+                title_size: 13.0,
+                ..Default::default()
+            },
         );
         return action;
     }

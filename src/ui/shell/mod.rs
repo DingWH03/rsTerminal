@@ -10,7 +10,6 @@ use crate::session::WorkspaceSession;
 use crate::settings::AppSettings;
 use crate::storage::types::SavedConnection;
 use crate::ui::function_pane::{self, drag_split_enabled, split_enabled, FunctionPane};
-use crate::ui::function_pane::files_view::SidebarFilesState;
 use crate::ui::page::settings::settings_dialog;
 use crate::ui::uiframe::{DialogFrame, DialogOutcome, TopBar, TopBarAction};
 use crate::ui::uiframe::keyboard::VirtualKeyboard;
@@ -26,7 +25,6 @@ use messages::{FunctionAction, WorkspaceAction};
 pub struct AppShell {
     pub layout: ShellLayout,
     pub function_pane: FunctionPane,
-    pub sidebar_files: SidebarFilesState,
     last_focused_pane: Option<crate::ui::shell::layout_state::PaneId>,
     active_drag: Option<ActiveDrag>,
     animations: ShellAnimations,
@@ -38,7 +36,6 @@ impl Default for AppShell {
         Self {
             layout: ShellLayout::default(),
             function_pane: FunctionPane::new(),
-            sidebar_files: SidebarFilesState::default(),
             last_focused_pane: None,
             active_drag: None,
             animations: ShellAnimations::new(),
@@ -52,7 +49,6 @@ impl AppShell {
         Self {
             layout: ShellLayout::from_settings(settings.function_pane_width),
             function_pane: FunctionPane::new(),
-            sidebar_files: SidebarFilesState::default(),
             last_focused_pane: None,
             active_drag: None,
             animations: ShellAnimations::new(),
@@ -171,7 +167,13 @@ impl AppShell {
             };
             let mut panel = egui::Panel::left(panel_id)
                 .resizable(is_wide)
-                .default_size(self.layout.function_width);
+                .default_size(self.layout.function_width)
+                // Compact: 1px inset from the panel edge (not the default 8px).
+                .frame(
+                    egui::Frame::NONE
+                        .fill(ui.visuals().panel_fill)
+                        .inner_margin(egui::Margin::same(1)),
+                );
 
             if is_wide {
                 panel = panel
@@ -191,7 +193,6 @@ impl AppShell {
                     self.layout.workspace.highlighted_session_id(),
                     saved_connections,
                     settings,
-                    &mut self.sidebar_files,
                     self.animations.page_slide.current,
                 );
             });
@@ -216,7 +217,11 @@ impl AppShell {
         let show_workspace = is_wide || !show_function;
 
         if show_workspace {
-            egui::CentralPanel::default().show_inside(ui, |ui| {
+            // Flush to edges (no default 8px margins) but keep theme panel fill.
+            let ws_frame = egui::Frame::NONE.fill(ui.visuals().panel_fill);
+            egui::CentralPanel::default()
+                .frame(ws_frame)
+                .show_inside(ui, |ui| {
                 let mut session_fade = std::collections::HashMap::new();
                 for (&pane, _) in &self.layout.workspace.panes {
                     session_fade.insert(pane, self.animations.session_fade_value(pane));

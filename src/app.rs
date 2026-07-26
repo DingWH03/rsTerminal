@@ -419,6 +419,7 @@ impl RsTerminalApp {
             disconnect_message: None,
             metrics,
             session_sftp,
+            files: Default::default(),
         }));
         ShellCoordinator::assign_session_to_pane(&mut self.shell.layout, pane, id);
     }
@@ -639,6 +640,10 @@ impl eframe::App for RsTerminalApp {
         }
 
         self.drain_inactive_sessions();
+        crate::ui::function_pane::files_view::tick_all_session_files(
+            &mut self.sessions,
+            &self.saved_connections,
+        );
 
         if let Some(idx) = self.focused_session_index() {
             if let WorkspaceSession::Terminal(term) = &mut self.sessions[idx] {
@@ -654,6 +659,11 @@ impl eframe::App for RsTerminalApp {
             &self.saved_connections,
             &mut self.virtual_keyboard,
             &mut self.live_font_size,
+        );
+
+        crate::ui::function_pane::files_view::tick_all_session_files(
+            &mut self.sessions,
+            &self.saved_connections,
         );
 
         self.shell.sync_focus_change(&mut self.sessions);
@@ -773,6 +783,7 @@ impl eframe::App for RsTerminalApp {
                                         session.handle = out.handle;
                                         session.metrics = out.metrics;
                                         session.session_sftp = Some(out.sftp);
+                                        session.files.invalidate_pending();
                                         session.disconnect_message = None;
                                         session.want_terminal_focus = true;
                                     }

@@ -50,7 +50,7 @@ pub fn home_screen(
         "home_filter",
         CONNECTION_TYPE_FILTERS,
     );
-    ui.add_space(4.0);
+    ui.add_space(2.0);
 
     // ── 已保存连接列表 ─────────────────────────────────────────────────
     if connections.is_empty() {

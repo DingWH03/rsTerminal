@@ -113,6 +113,7 @@ fn render_split_readonly(
                     let second_w = (total_w - SPLITTER_SIZE - first_w).max(1.0);
 
                     ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 0.0;
                         ui.allocate_ui_with_layout(
                             egui::vec2(first_w, available.y),
                             egui::Layout::top_down(egui::Align::LEFT),
@@ -160,6 +161,7 @@ fn render_split_readonly(
                     let second_h = (total_h - SPLITTER_SIZE - first_h).max(1.0);
 
                     ui.vertical(|ui| {
+                        ui.spacing_mut().item_spacing.y = 0.0;
                         ui.allocate_ui_with_layout(
                             egui::vec2(available.x, first_h),
                             egui::Layout::top_down(egui::Align::LEFT),
@@ -260,6 +262,7 @@ fn render_split(
                     let second_w = (total_w - SPLITTER_SIZE - first_w).max(1.0);
 
                     ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 0.0;
                         ui.allocate_ui_with_layout(
                             egui::vec2(first_w, available.y),
                             egui::Layout::top_down(egui::Align::LEFT),
@@ -326,6 +329,7 @@ fn render_split(
                     let second_h = (total_h - SPLITTER_SIZE - first_h).max(1.0);
 
                     ui.vertical(|ui| {
+                        ui.spacing_mut().item_spacing.y = 0.0;
                         ui.allocate_ui_with_layout(
                             egui::vec2(available.x, first_h),
                             egui::Layout::top_down(egui::Align::LEFT),

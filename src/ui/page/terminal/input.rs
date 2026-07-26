@@ -32,7 +32,7 @@ pub fn terminal_event_filter() -> EventFilter {
     }
 }
 
-/// 分配终端面板区域：按字符网格精确尺寸绘制黑框，并在可用区域内居中。
+/// 分配终端面板区域：背景铺满可用区域贴边；字符网格左上对齐（余量在右下，同色填充）。
 pub fn allocate_terminal_surface(
     ui: &mut Ui,
     available: Vec2,
@@ -40,16 +40,16 @@ pub fn allocate_terminal_surface(
     sense: Sense,
     widget_id: Id,
 ) -> (egui::Rect, egui::Rect, egui::Response) {
-    let (_, container) = ui.allocate_space(available);
+    let (_, panel_rect) = ui.allocate_space(available);
     let grid_size = Vec2::new(
-        grid_size.x.min(container.width()),
-        grid_size.y.min(container.height()),
+        grid_size.x.min(panel_rect.width()),
+        grid_size.y.min(panel_rect.height()),
     );
-    let x = container.left() + ((container.width() - grid_size.x) * 0.5).max(0.0);
-    let y = container.top() + ((container.height() - grid_size.y) * 0.5).max(0.0);
-    let grid_rect = egui::Rect::from_min_size(egui::pos2(x, y), grid_size);
-    let response = ui.interact(grid_rect, widget_id, sense);
-    (grid_rect, grid_rect, response)
+    // Top-left align the cell grid; fractional leftover stays inside panel_rect (same bg).
+    let grid_rect = egui::Rect::from_min_size(panel_rect.min, grid_size);
+    // Hit-test the full panel so clicks in the leftover strip still focus the terminal.
+    let response = ui.interact(panel_rect, widget_id, sense);
+    (panel_rect, grid_rect, response)
 }
 
 /// 为终端画布打开 Android 软键盘。
