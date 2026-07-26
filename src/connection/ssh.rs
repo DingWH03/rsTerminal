@@ -1,26 +1,40 @@
+//! Interactive SSH PTY plus optional shared SFTP + status agent on one TCP connection.
+
 use std::collections::HashMap;
 use std::future::Future;
-use std::sync::{mpsc, Arc};
+use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
 use russh::client::{self, Handle, KeyboardInteractiveAuthResponse};
 use russh::keys::{load_secret_key, PrivateKeyWithHashAlg};
-use russh::{ChannelMsg, Disconnect};
+use russh::{Channel, ChannelMsg, Disconnect};
 use tokio::sync::mpsc::unbounded_channel;
 use tokio::time::timeout;
 
 use crate::connection::{
     emit_conn_data, ssh_keys, ConnIn, ConnOut, ConnectionHandle, ConnectionState, RepaintNotifier,
 };
+use crate::fs::sftp::{self, SftpClient, SftpRequest};
+use crate::remote::protocol::{push_bytes, AgentToClient};
+use crate::remote::status::{MetricsEvent, SessionMetrics};
+use crate::remote::AGENT_SCRIPT;
 use crate::storage::types::SavedConnection;
 
 /// Bash `PROMPT_COMMAND` that emits OSC 7 with `$HOSTNAME` + `$PWD`.
 ///
 /// Sent via SSH `set_env` (no PTY echo). Requires the server to accept the variable
 /// (`AcceptEnv PROMPT_COMMAND` / `SetEnv`, etc.); otherwise it is ignored and the
-/// sidebar falls back to SFTP home until OSC 7 arrives by other means.
+/// sidebar falls back to SFTP home / agent+OSC merger.
 pub const SSH_OSC7_PROMPT_COMMAND: &str =
     r#"printf "\033]7;file://%s%s\033\\" "$HOSTNAME" "$PWD""#;
+
+/// Result of opening a multiplexed SSH session (PTY + shared SFTP + status agent).
+pub struct SshConnectOutcome {
+    pub handle: ConnectionHandle,
+    pub metrics: SessionMetrics,
+    /// SFTP client bridged onto the same SSH connection (sidebar / agent deploy).
+    pub sftp: Arc<SftpClient>,
+}
 
 struct SshClient;
 
@@ -41,6 +55,16 @@ pub fn connect_ssh(
     rows: u16,
     cols: u16,
 ) -> Result<ConnectionHandle, String> {
+    Ok(connect_ssh_session(config, env_vars, rows, cols)?.handle)
+}
+
+/// Preferred entry: returns PTY handle, metrics bus, and shared-session SFTP.
+pub fn connect_ssh_session(
+    config: &SavedConnection,
+    env_vars: &HashMap<String, String>,
+    rows: u16,
+    cols: u16,
+) -> Result<SshConnectOutcome, String> {
     let host = config
         .ssh_host
         .clone()
@@ -51,15 +75,28 @@ pub fn connect_ssh(
         .clone()
         .ok_or_else(|| "SSH user not configured".to_string())?;
     let saved_password = config.ssh_password.clone();
+    let session_tag = config.id.clone();
 
     let (to_conn_tx, to_conn_rx) = mpsc::channel::<ConnOut>();
     let (from_conn_tx, from_conn_rx) = mpsc::channel::<ConnIn>();
 
+    let metrics = SessionMetrics::new();
+    let metrics_thread = metrics.clone();
+
+    let (sftp_tx, sftp_rx) = mpsc::channel::<SftpRequest>();
+    let sftp_status = SftpClient::new_status_handle();
+    let repaint = RepaintNotifier::default();
+    let sftp = Arc::new(SftpClient::bridge(
+        sftp_tx,
+        sftp_status.clone(),
+        Some(repaint.clone()),
+    ));
+
     let host_clone = host.clone();
     let from_tx = from_conn_tx.clone();
     let env_vars = env_vars.clone();
-    let repaint = RepaintNotifier::default();
     let ssh_repaint = repaint.clone();
+    let sftp_status_thread = sftp_status.clone();
 
     let thread = std::thread::spawn(move || {
         let rt = tokio::runtime::Builder::new_current_thread()
@@ -67,7 +104,7 @@ pub fn connect_ssh(
             .build()
             .expect("tokio runtime");
 
-        if let Err(msg) = rt.block_on(run_ssh(
+        if let Err(msg) = rt.block_on(run_ssh_session(
             &host_clone,
             port,
             &user,
@@ -75,24 +112,32 @@ pub fn connect_ssh(
             rows,
             cols,
             &env_vars,
+            &session_tag,
             to_conn_rx,
             from_tx,
             ssh_repaint,
+            metrics_thread,
+            sftp_rx,
+            sftp_status_thread,
         )) {
             let _ = from_conn_tx.send(ConnIn::StateChanged(ConnectionState::Error(msg)));
         }
     });
 
-    Ok(ConnectionHandle::new(
-        to_conn_tx,
-        from_conn_rx,
-        thread,
-        std::thread::spawn(|| {}),
-        repaint,
-    ))
+    Ok(SshConnectOutcome {
+        handle: ConnectionHandle::new(
+            to_conn_tx,
+            from_conn_rx,
+            thread,
+            std::thread::spawn(|| {}),
+            repaint,
+        ),
+        metrics,
+        sftp,
+    })
 }
 
-async fn run_ssh(
+async fn run_ssh_session(
     host: &str,
     port: u16,
     user: &str,
@@ -100,10 +145,24 @@ async fn run_ssh(
     rows: u16,
     cols: u16,
     env_vars: &HashMap<String, String>,
+    session_tag: &str,
     to_conn_rx: mpsc::Receiver<ConnOut>,
     from_tx: mpsc::Sender<ConnIn>,
     repaint: RepaintNotifier,
+    metrics: SessionMetrics,
+    sftp_rx: mpsc::Receiver<SftpRequest>,
+    sftp_status: Arc<Mutex<sftp::SftpStatus>>,
 ) -> Result<(), String> {
+    // Bridge sync SFTP requests into the async runtime.
+    let (sftp_async_tx, mut sftp_async_rx) = unbounded_channel::<SftpRequest>();
+    std::thread::spawn(move || {
+        while let Ok(msg) = sftp_rx.recv() {
+            if sftp_async_tx.send(msg).is_err() {
+                break;
+            }
+        }
+    });
+
     let (out_async_tx, mut out_async_rx) = unbounded_channel::<ConnOut>();
     std::thread::spawn(move || {
         while let Ok(msg) = to_conn_rx.recv() {
@@ -114,28 +173,47 @@ async fn run_ssh(
     });
 
     let ssh_config = Arc::new(client::Config {
-        // Send keepalive every 15 s; if 3 in a row go unanswered, close the connection.
         keepalive_interval: Some(Duration::from_secs(15)),
         keepalive_max: 3,
-        // Also garbage-collect if the entire session has been idle this long.
         inactivity_timeout: Some(Duration::from_secs(180)),
         nodelay: true,
         ..Default::default()
     });
 
-    let mut handle = timeout(Duration::from_secs(20), client::connect(ssh_config, (host, port), SshClient))
-        .await
-        .map_err(|_| format!("SSH connection to {host}:{port} timed out (20s)"))?
-        .map_err(|e| e.to_string())?;
+    let mut handle = timeout(
+        Duration::from_secs(20),
+        client::connect(ssh_config, (host, port), SshClient),
+    )
+    .await
+    .map_err(|_| format!("SSH connection to {host}:{port} timed out (20s)"))?
+    .map_err(|e| e.to_string())?;
 
     let password = saved_password
         .or_else(|| std::env::var("SSH_PASSWORD").ok())
         .or_else(|| std::env::var("RSTERMINAL_SSH_PASSWORD").ok());
 
-    timeout(Duration::from_secs(30), authenticate(&mut handle, user, password.as_deref()))
-        .await
-        .map_err(|_| "SSH authentication timed out (30s)".to_string())?
-        .map_err(|e| e.to_string())?;
+    timeout(
+        Duration::from_secs(30),
+        authenticate(&mut handle, user, password.as_deref()),
+    )
+    .await
+    .map_err(|_| "SSH authentication timed out (30s)".to_string())?
+    .map_err(|e| e.to_string())?;
+
+    // Shared SFTP subsystem (sidebar listing + agent script upload).
+    let sftp_session = match sftp::open_sftp_on_handle(&handle).await {
+        Ok(s) => {
+            SftpClient::mark_connected(&sftp_status);
+            repaint.notify();
+            Some(s)
+        }
+        Err(e) => {
+            log::warn!("shared SFTP open failed: {e}");
+            SftpClient::mark_error(&sftp_status, e);
+            repaint.notify();
+            None
+        }
+    };
 
     let mut channel = timeout(Duration::from_secs(15), handle.channel_open_session())
         .await
@@ -145,10 +223,13 @@ async fn run_ssh(
     let cols_u = cols.max(1) as u32;
     let rows_u = rows.max(1) as u32;
 
-    timeout(Duration::from_secs(10), channel.request_pty(false, "xterm-256color", cols_u, rows_u, 0, 0, &[]))
-        .await
-        .map_err(|_| "PTY request timed out".to_string())?
-        .map_err(|e| e.to_string())?;
+    timeout(
+        Duration::from_secs(10),
+        channel.request_pty(false, "xterm-256color", cols_u, rows_u, 0, 0, &[]),
+    )
+    .await
+    .map_err(|_| "PTY request timed out".to_string())?
+    .map_err(|e| e.to_string())?;
 
     let mut has_prompt_command = false;
     for (key, value) in env_vars {
@@ -157,7 +238,6 @@ async fn run_ssh(
         }
         let _ = channel.set_env(true, key, value).await;
     }
-    // Ensure OSC 7 cwd reporting is requested even if settings omit it.
     if !has_prompt_command {
         let _ = channel
             .set_env(true, "PROMPT_COMMAND", SSH_OSC7_PROMPT_COMMAND)
@@ -169,9 +249,37 @@ async fn run_ssh(
         .map_err(|_| "Shell request timed out".to_string())?
         .map_err(|e| e.to_string())?;
 
+    // Status agent after the interactive shell is up. Deploy via stdin (`sh -s`) so we
+    // do not depend on SFTP flush visibility or the login shell parsing `VAR=val cmd`
+    // (fish/csh break that form and exit with zero stdout).
+    let (mut agent_ch, mut agent_buf, agent_remote) =
+        match start_status_agent(&handle, sftp_session.as_ref(), session_tag).await {
+            Ok((ch, buf, path)) => {
+                log::info!(
+                    "status agent exec ok deploy={}",
+                    path.as_deref().unwrap_or("stdin")
+                );
+                metrics.push_event(MetricsEvent::AgentStarted {
+                    remote_path: path
+                        .clone()
+                        .unwrap_or_else(|| "stdin:-".into()),
+                });
+                repaint.notify();
+                (Some(ch), buf, path)
+            }
+            Err(e) => {
+                log::warn!("status agent start failed: {e}");
+                metrics.push_event(MetricsEvent::AgentStartFailed { error: e.clone() });
+                repaint.notify();
+                (None, String::new(), None)
+            }
+        };
+
     let _ = from_tx.send(ConnIn::StateChanged(ConnectionState::Connected));
 
     let mut clean_close = false;
+    let mut sftp_session = sftp_session;
+    let mut agent_exit: Option<u32> = None;
     loop {
         tokio::select! {
             msg = channel.wait() => {
@@ -188,6 +296,46 @@ async fn run_ssh(
                     }
                     Some(ChannelMsg::Close) | None => break,
                     _ => {}
+                }
+            }
+            msg = async {
+                match agent_ch.as_mut() {
+                    Some(ch) => ch.wait().await,
+                    None => std::future::pending().await,
+                }
+            } => {
+                match msg {
+                    Some(ChannelMsg::Data { data }) | Some(ChannelMsg::ExtendedData { data, .. }) => {
+                        ingest_agent_bytes(&mut agent_buf, &data, &metrics, &repaint);
+                    }
+                    Some(ChannelMsg::ExitStatus { exit_status }) => {
+                        log::warn!("status agent exit_status={exit_status}");
+                        agent_exit = Some(exit_status);
+                    }
+                    Some(ChannelMsg::Failure) => {
+                        log::warn!("status agent CHANNEL_FAILURE");
+                        metrics.push_event(MetricsEvent::AgentClosed {
+                            reason: "exec CHANNEL_FAILURE".into(),
+                        });
+                        repaint.notify();
+                        agent_ch = None;
+                    }
+                    Some(ChannelMsg::Success) => {
+                        log::debug!("status agent late CHANNEL_SUCCESS");
+                    }
+                    Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | None => {
+                        let reason = match agent_exit {
+                            Some(code) => format!("exit {code}"),
+                            None => "channel closed".into(),
+                        };
+                        log::warn!("status agent closed: {reason}");
+                        metrics.push_event(MetricsEvent::AgentClosed { reason });
+                        repaint.notify();
+                        agent_ch = None;
+                    }
+                    other => {
+                        log::debug!("status agent msg: {other:?}");
+                    }
                 }
             }
             out = out_async_rx.recv() => {
@@ -211,7 +359,28 @@ async fn run_ssh(
                     None => break,
                 }
             }
+            req = sftp_async_rx.recv() => {
+                match req {
+                    Some(SftpRequest::Shutdown) | None => {
+                        sftp_session = None;
+                    }
+                    Some(req) => {
+                        if let Some(ref sftp) = sftp_session {
+                            sftp::apply_sftp_request(sftp, req).await;
+                        } else {
+                            reply_sftp_gone(req);
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    if let Some(ch) = agent_ch.take() {
+        let _ = ch.close().await;
+    }
+    if let (Some(sftp), Some(path)) = (sftp_session.as_ref(), agent_remote.as_ref()) {
+        let _ = sftp.remove_file(path).await;
     }
 
     let _ = channel.close().await;
@@ -225,6 +394,147 @@ async fn run_ssh(
     };
     let _ = from_tx.send(ConnIn::StateChanged(end));
     Ok(())
+}
+
+fn ingest_agent_bytes(
+    line_buf: &mut String,
+    data: &[u8],
+    metrics: &SessionMetrics,
+    repaint: &RepaintNotifier,
+) {
+    let mut frames = Vec::new();
+    if let Err(e) = push_bytes(line_buf, data, &mut frames) {
+        log::warn!("agent frame error: {e}");
+        metrics.push_event(MetricsEvent::ParseError { error: e });
+        repaint.notify();
+        return;
+    }
+    for frame in frames {
+        let disk_present = frame.status_disk_present();
+        if let Some(st) = frame.clone().into_remote_status() {
+            log::debug!(
+                "status agent patch ts={} host={:?} mem={} disk={}",
+                st.ts_ms,
+                st.hostname,
+                st.mem.is_some(),
+                disk_present
+            );
+            metrics.apply_agent_status_ex(st, disk_present);
+            repaint.notify();
+            continue;
+        }
+        match frame {
+            AgentToClient::Hello { agent, ver, .. } => {
+                log::info!("remote agent hello: {agent} {ver}");
+                metrics.push_event(MetricsEvent::Hello { agent, ver });
+                repaint.notify();
+            }
+            AgentToClient::Error { code, msg, .. } => {
+                log::warn!("remote agent error {code}: {msg}");
+                metrics.push_event(MetricsEvent::ParseError {
+                    error: format!("{code}: {msg}"),
+                });
+                repaint.notify();
+            }
+            AgentToClient::Pong { .. } | AgentToClient::Status { .. } => {}
+        }
+    }
+}
+
+fn reply_sftp_gone(req: SftpRequest) {
+    let err = "shared SFTP unavailable";
+    match req {
+        SftpRequest::List { reply, .. } => {
+            let _ = reply.send(Err(err.into()));
+        }
+        SftpRequest::Upload { reply, .. }
+        | SftpRequest::Download { reply, .. }
+        | SftpRequest::Remove { reply, .. }
+        | SftpRequest::Mkdir { reply, .. }
+        | SftpRequest::Rename { reply, .. }
+        | SftpRequest::WriteBytes { reply, .. } => {
+            let _ = reply.send(Err(err.into()));
+        }
+        SftpRequest::Stat { reply, .. } => {
+            let _ = reply.send(Err(err.into()));
+        }
+        SftpRequest::PathBytes { reply, .. } => {
+            let _ = reply.send(Err(err.into()));
+        }
+        SftpRequest::Home { reply } => {
+            let _ = reply.send(Err(err.into()));
+        }
+        SftpRequest::Shutdown => {}
+    }
+}
+
+async fn start_status_agent(
+    handle: &Handle<SshClient>,
+    _shared_sftp: Option<&russh_sftp::client::SftpSession>,
+    _session_tag: &str,
+) -> Result<(Channel<client::Msg>, String, Option<String>), String> {
+    let mut ch = handle
+        .channel_open_session()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // OpenSSH always runs client commands as `$SHELL -c "<cmd>"`. Prefix env
+    // assignments (`VAR=1 cmd`) are POSIX/bash-only — fish/csh reject them and
+    // the channel closes with no stdout. Always wrap with `/bin/sh -c` so the
+    // login shell only has to spawn an external command.
+    //
+    // Feed the script on stdin (`sh -s`) to avoid depending on SFTP write
+    // visibility /tmp noexec edge cases.
+    let cmd = "/bin/sh -c 'RSTERM_INTERVAL_MS=1000 RSTERM_DISK_MOUNT=/ exec /bin/sh -s'";
+    log::info!("status agent exec cmd={cmd}");
+    ch.exec(true, cmd).await.map_err(|e| e.to_string())?;
+    wait_channel_success(&mut ch, "agent exec").await?;
+
+    ch.data(&AGENT_SCRIPT.as_bytes()[..])
+        .await
+        .map_err(|e| e.to_string())?;
+    if !AGENT_SCRIPT.ends_with('\n') {
+        ch.data(&b"\n"[..]).await.map_err(|e| e.to_string())?;
+    }
+    ch.eof().await.map_err(|e| e.to_string())?;
+
+    Ok((ch, String::new(), None))
+}
+
+/// Drain channel messages until SSH `CHANNEL_SUCCESS` / `CHANNEL_FAILURE`.
+async fn wait_channel_success(
+    ch: &mut Channel<client::Msg>,
+    what: &str,
+) -> Result<(), String> {
+    loop {
+        match timeout(Duration::from_secs(10), ch.wait()).await {
+            Err(_) => return Err(format!("{what}: timed out waiting for CHANNEL_SUCCESS")),
+            Ok(None) => return Err(format!("{what}: channel closed before reply")),
+            Ok(Some(ChannelMsg::Success)) => return Ok(()),
+            Ok(Some(ChannelMsg::Failure)) => {
+                return Err(format!("{what}: CHANNEL_FAILURE"));
+            }
+            Ok(Some(ChannelMsg::Eof)) | Ok(Some(ChannelMsg::Close)) => {
+                return Err(format!("{what}: closed before reply"));
+            }
+            Ok(Some(ChannelMsg::ExitStatus { exit_status })) => {
+                return Err(format!("{what}: exited before start (status {exit_status})"));
+            }
+            Ok(Some(ChannelMsg::Data { data }))
+            | Ok(Some(ChannelMsg::ExtendedData { data, .. })) => {
+                // Extremely early output before SUCCESS — keep waiting, but log it.
+                let preview = String::from_utf8_lossy(&data);
+                log::warn!(
+                    "{what}: early output before SUCCESS ({} bytes): {:?}",
+                    data.len(),
+                    preview.chars().take(200).collect::<String>()
+                );
+            }
+            Ok(Some(other)) => {
+                log::debug!("{what}: ignoring {other:?} while waiting for SUCCESS");
+            }
+        }
+    }
 }
 
 async fn authenticate(
@@ -299,10 +609,7 @@ async fn try_keyboard_interactive(
             KeyboardInteractiveAuthResponse::Success => return true,
             KeyboardInteractiveAuthResponse::Failure { .. } => return false,
             KeyboardInteractiveAuthResponse::InfoRequest { prompts, .. } => {
-                let answers: Vec<String> = prompts
-                    .iter()
-                    .map(|_| password.to_string())
-                    .collect();
+                let answers: Vec<String> = prompts.iter().map(|_| password.to_string()).collect();
                 resp = match handle
                     .authenticate_keyboard_interactive_respond(answers)
                     .await

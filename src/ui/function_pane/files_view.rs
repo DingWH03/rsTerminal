@@ -1,13 +1,12 @@
 //! Sidebar Files tab — single-column listing for the focused terminal.
 //!
-//! Path / refresh signals come from shell integration (no PTY injection):
-//! - **OSC 7** — working directory (`screen.cwd`)
-//! - **OSC 133** — semantic prompt marks; `mark_seq` bumps on prompt start /
-//!   command end so the listing refreshes even when cwd is unchanged
+//! Path / refresh signals:
+//! - **OSC 7 / 133** — shell integration (fallback)
+//! - **Remote agent** — `SessionMetrics` on SSH sessions (preferred cwd + host stats)
 //!
 //! Backends:
-//! - **Local**: local FS (OSC 7, else home)
-//! - **SSH**: dedicated SFTP (OSC 7 path when present, else SFTP home)
+//! - **Local**: local FS
+//! - **SSH**: shared-session SFTP when available, else a dedicated SFTP connect
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
@@ -131,14 +130,22 @@ pub fn render(
     let repaint = term.handle.repaint.clone();
     let osc_cwd = term.terminal.screen.cwd.clone();
     let semantic_seq = term.terminal.screen.semantic.mark_seq;
+    let metrics = term.metrics.clone();
+    let session_sftp = term.session_sftp.clone();
 
     match conn_type {
         ConnectionType::Local => {
-            // Local: OSC 7 cwd + OSC 133 refresh; else home.
+            // Prefer OSC 7; else /proc/<shell>/cwd; else $HOME.
             if state.tracked_session.as_deref() != Some(sid) {
                 state.last_semantic_seq = 0;
             }
-            if let Some(cwd) = osc_cwd.as_deref() {
+            let proc_cwd = local_shell_cwd(term.handle.shell_pid);
+            let cwd = osc_cwd
+                .as_deref()
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .or(proc_cwd);
+            if let Some(ref cwd) = cwd {
                 state.follow_shell_integration(sid, Some(cwd), semantic_seq);
             } else if state.tracked_session.as_deref() != Some(sid)
                 || state.tracked_cwd.is_none()
@@ -148,6 +155,12 @@ pub fn render(
                 state.follow_shell_integration(sid, None, semantic_seq);
             } else {
                 state.follow_shell_integration(sid, None, semantic_seq);
+            }
+            // Poll /proc cwd each frame so `cd` is reflected without OSC.
+            if state.browse_cwd.is_none() {
+                if let Some(cwd) = local_shell_cwd(term.handle.shell_pid) {
+                    state.on_session_cwd(sid, &cwd);
+                }
             }
             if state.loading {
                 if let Some(cwd) = state.effective_cwd().map(str::to_string) {
@@ -164,10 +177,14 @@ pub fn render(
                     state.loading = false;
                 }
             }
+            // Keep listing fresh while following the shell.
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(500));
         }
         ConnectionType::Ssh => {
-            // SFTP listing; path/refresh from OSC 7 + OSC 133 when the shell emits them.
-            if state.tracked_session.as_deref() != Some(sid) {
+            // Agent `/proc` cwd (preferred) + OSC 7; list via shared-session SFTP.
+            let session_changed = state.tracked_session.as_deref() != Some(sid);
+            if session_changed {
                 state.tracked_session = Some(sid.to_string());
                 state.tracked_cwd = None;
                 state.browse_cwd = None;
@@ -177,11 +194,29 @@ pub fn render(
                 state.error = None;
                 state.loading = true;
             }
-            state.follow_shell_integration(sid, osc_cwd.as_deref(), semantic_seq);
+            if let Some(ref cwd) = osc_cwd {
+                if !cwd.is_empty() {
+                    metrics.note_osc_cwd(Some(cwd));
+                }
+            }
+            let merged_cwd = metrics.effective_cwd(osc_cwd.as_deref());
+            if let Some(ref cwd) = merged_cwd {
+                state.follow_shell_integration(sid, Some(cwd), semantic_seq);
+            } else {
+                state.follow_shell_integration(sid, None, semantic_seq);
+            }
             poll_pending(state);
-            if !ensure_sftp(ui, state, saved_conn_id.as_deref(), connections, &repaint) {
+            if !ensure_sftp(
+                ui,
+                state,
+                saved_conn_id.as_deref(),
+                connections,
+                &repaint,
+                session_sftp.as_ref(),
+            ) {
                 return action;
             }
+            // Until shell/agent cwd arrives, fall back to remote home so SFTP is usable.
             if state.tracked_cwd.is_none() && state.pending.is_none() {
                 if let Some(client) = state.sftp.clone() {
                     match client.begin_home_dir() {
@@ -210,6 +245,10 @@ pub fn render(
             poll_pending(state);
             if state.pending.is_some() {
                 ui.ctx().request_repaint();
+            } else {
+                // Agent emits cwd about once/sec — keep Files tab live.
+                ui.ctx()
+                    .request_repaint_after(std::time::Duration::from_millis(400));
             }
         }
         _ => {}
@@ -297,17 +336,22 @@ fn poll_pending(state: &mut SidebarFilesState) {
     match pending {
         PendingOp::Home(rx) => match rx.try_recv() {
             Ok(Ok(home)) => {
-                let sid = state.tracked_session.clone().unwrap_or_default();
-                state.on_session_cwd(&sid, &home);
-                // on_session_cwd sets loading; list will be requested next frame
-                state.loading = true;
+                // Agent/OSC may have already filled cwd while home was in flight.
+                if state.tracked_cwd.is_none() {
+                    let sid = state.tracked_session.clone().unwrap_or_default();
+                    state.on_session_cwd(&sid, &home);
+                } else {
+                    state.loading = true;
+                }
             }
             Ok(Err(e)) => {
-                // Last resort root
                 log::warn!("SFTP home failed: {e}");
-                let sid = state.tracked_session.clone().unwrap_or_default();
-                state.on_session_cwd(&sid, "/");
-                state.loading = true;
+                if state.tracked_cwd.is_none() {
+                    let sid = state.tracked_session.clone().unwrap_or_default();
+                    state.on_session_cwd(&sid, "/");
+                } else {
+                    state.loading = true;
+                }
             }
             Err(mpsc::TryRecvError::Empty) => {
                 state.pending = Some(PendingOp::Home(rx));
@@ -348,6 +392,7 @@ fn ensure_sftp(
     saved_conn_id: Option<&str>,
     connections: &[SavedConnection],
     repaint: &crate::connection::RepaintNotifier,
+    shared_sftp: Option<&Arc<SftpClient>>,
 ) -> bool {
     let Some(conn_id) = saved_conn_id else {
         paint_empty(
@@ -367,32 +412,33 @@ fn ensure_sftp(
     }
 
     if state.sftp.is_none() {
-        let Some(conn) = connections.iter().find(|c| c.id == conn_id) else {
-            paint_empty(
-                ui,
-                "⚠",
-                &rust_i18n::t!("sidebar_files_sftp_failed"),
-                Some(&rust_i18n::t!("sidebar_files_no_saved_conn")),
-            );
-            return false;
-        };
-        match SftpClient::connect_with_repaint(conn, Some(repaint.clone())) {
-            Ok(client) => {
-                state.sftp = Some(Arc::new(client));
-                state.sftp_conn_id = Some(conn_id.to_string());
-                if state.tracked_session.is_none() {
-                    // Mark session so Home result can attach.
-                    // Caller should have session id; use conn id as placeholder until cwd known.
-                }
-            }
-            Err(e) => {
+        if let Some(shared) = shared_sftp {
+            state.sftp = Some(shared.clone());
+            state.sftp_conn_id = Some(conn_id.to_string());
+        } else {
+            let Some(conn) = connections.iter().find(|c| c.id == conn_id) else {
                 paint_empty(
                     ui,
                     "⚠",
                     &rust_i18n::t!("sidebar_files_sftp_failed"),
-                    Some(&e),
+                    Some(&rust_i18n::t!("sidebar_files_no_saved_conn")),
                 );
                 return false;
+            };
+            match SftpClient::connect_with_repaint(conn, Some(repaint.clone())) {
+                Ok(client) => {
+                    state.sftp = Some(Arc::new(client));
+                    state.sftp_conn_id = Some(conn_id.to_string());
+                }
+                Err(e) => {
+                    paint_empty(
+                        ui,
+                        "⚠",
+                        &rust_i18n::t!("sidebar_files_sftp_failed"),
+                        Some(&e),
+                    );
+                    return false;
+                }
             }
         }
     }
@@ -531,5 +577,25 @@ fn drag_out_paths(
             .map(|e| PathBuf::from(join_remote(cwd, &e.name)))
             .collect(),
         _ => Vec::new(),
+    }
+}
+
+/// Read the local PTY shell's cwd via `/proc` (Linux) when OSC 7 is unavailable.
+fn local_shell_cwd(pid: Option<u32>) -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        let pid = pid?;
+        let path = std::fs::read_link(format!("/proc/{pid}/cwd")).ok()?;
+        let s = path.to_string_lossy().into_owned();
+        if s.is_empty() {
+            None
+        } else {
+            Some(s)
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = pid;
+        None
     }
 }

@@ -18,7 +18,7 @@ use crate::fs::FileEntry;
 use crate::storage::types::SavedConnection;
 
 #[derive(Clone)]
-enum SftpStatus {
+pub(crate) enum SftpStatus {
     Connecting,
     Connected,
     Error(String),
@@ -33,7 +33,7 @@ pub struct SftpClient {
     repaint: Option<crate::connection::RepaintNotifier>,
 }
 
-enum SftpRequest {
+pub(crate) enum SftpRequest {
     List {
         path: String,
         reply: mpsc::SyncSender<Result<Vec<FileEntry>, String>>,
@@ -76,6 +76,13 @@ enum SftpRequest {
     },
     Home {
         reply: mpsc::SyncSender<Result<String, String>>,
+    },
+    /// Write raw bytes (agent script deploy on a shared session).
+    #[allow(dead_code)]
+    WriteBytes {
+        remote: String,
+        data: Vec<u8>,
+        reply: mpsc::SyncSender<Result<(), String>>,
     },
     Shutdown,
 }
@@ -137,6 +144,32 @@ impl SftpClient {
             status,
             repaint,
         })
+    }
+
+    /// Attach to an existing SSH worker that already owns an SFTP subsystem channel.
+    pub(crate) fn bridge(
+        req_tx: mpsc::Sender<SftpRequest>,
+        status: Arc<Mutex<SftpStatus>>,
+        repaint: Option<crate::connection::RepaintNotifier>,
+    ) -> Self {
+        Self {
+            req_tx,
+            _thread: thread::spawn(|| {}),
+            status,
+            repaint,
+        }
+    }
+
+    pub(crate) fn mark_connected(status: &Arc<Mutex<SftpStatus>>) {
+        *status.lock().unwrap() = SftpStatus::Connected;
+    }
+
+    pub(crate) fn mark_error(status: &Arc<Mutex<SftpStatus>>, msg: impl Into<String>) {
+        *status.lock().unwrap() = SftpStatus::Error(msg.into());
+    }
+
+    pub(crate) fn new_status_handle() -> Arc<Mutex<SftpStatus>> {
+        Arc::new(Mutex::new(SftpStatus::Connecting))
     }
 
     pub fn is_connected(&self) -> bool {
@@ -295,6 +328,7 @@ macro_rules! reply_err {
             SftpRequest::Mkdir { reply, .. } => { let _ = reply.send(Err($err.to_string())); }
             SftpRequest::Rename { reply, .. } => { let _ = reply.send(Err($err.to_string())); }
             SftpRequest::Home { reply } => { let _ = reply.send(Err($err.to_string())); }
+            SftpRequest::WriteBytes { reply, .. } => { let _ = reply.send(Err($err.to_string())); }
             SftpRequest::Shutdown => {}
         }
     };
@@ -437,6 +471,14 @@ fn sftp_worker(
                 });
                 let _ = reply.send(r);
             }
+            SftpRequest::WriteBytes {
+                remote,
+                data,
+                reply,
+            } => {
+                let r = rt.block_on(write_remote_bytes(&sftp, &remote, &data));
+                let _ = reply.send(r);
+            }
             SftpRequest::Shutdown => break,
         }
     }
@@ -576,6 +618,118 @@ fn metadata_mtime(meta: &russh_sftp::client::fs::Metadata) -> Option<std::time::
     meta.mtime
         .and_then(|t| UNIX_EPOCH.checked_add(Duration::new(t as u64, 0)))
         .or_else(|| meta.modified().ok())
+}
+
+/// Open an SFTP subsystem on an already-authenticated SSH handle (shared session).
+pub(crate) async fn open_sftp_on_handle<H>(handle: &Handle<H>) -> Result<SftpSession, String>
+where
+    H: client::Handler + Send + 'static,
+    H::Error: From<russh::Error> + Send,
+{
+    let channel = handle
+        .channel_open_session()
+        .await
+        .map_err(|e| e.to_string())?;
+    channel
+        .request_subsystem(true, "sftp")
+        .await
+        .map_err(|e| e.to_string())?;
+    let sftp = SftpSession::new(channel.into_stream())
+        .await
+        .map_err(|e| e.to_string())?;
+    sftp.set_timeout(120);
+    Ok(sftp)
+}
+
+pub(crate) async fn write_remote_bytes(
+    sftp: &SftpSession,
+    remote: &str,
+    data: &[u8],
+) -> Result<(), String> {
+    let mut file = sftp.create(remote).await.map_err(|e| e.to_string())?;
+    file.write_all(data).await.map_err(|e| e.to_string())?;
+    let _ = file.sync_all().await;
+    drop(file);
+    let _ = sftp
+        .set_metadata(
+            remote,
+            russh_sftp::protocol::FileAttributes {
+                permissions: Some(0o700),
+                ..Default::default()
+            },
+        )
+        .await;
+    Ok(())
+}
+
+/// Dispatch one bridged SFTP request on a live session (shared SSH runtime).
+pub(crate) async fn apply_sftp_request(sftp: &SftpSession, req: SftpRequest) {
+    match req {
+        SftpRequest::List { path, reply } => {
+            let _ = reply.send(list_remote(sftp, &path).await);
+        }
+        SftpRequest::Upload {
+            local,
+            remote,
+            progress,
+            label,
+            reply,
+        } => {
+            let _ = reply.send(
+                upload_file(sftp, &local, &remote, progress.as_deref(), &label).await,
+            );
+        }
+        SftpRequest::Download {
+            remote,
+            local,
+            progress,
+            label,
+            reply,
+        } => {
+            let _ = reply.send(
+                download_file(sftp, &remote, &local, progress.as_deref(), &label).await,
+            );
+        }
+        SftpRequest::Stat { path, reply } => {
+            let _ = reply.send(remote_entry_info(sftp, &path).await);
+        }
+        SftpRequest::PathBytes { path, reply } => {
+            let _ = reply.send(remote_path_bytes(sftp, &path).await);
+        }
+        SftpRequest::Remove { path, is_dir, reply } => {
+            let r = if is_dir {
+                sftp.remove_dir(&path).await
+            } else {
+                sftp.remove_file(&path).await
+            }
+            .map_err(|e| e.to_string());
+            let _ = reply.send(r);
+        }
+        SftpRequest::Mkdir { path, reply } => {
+            let _ = reply.send(sftp.create_dir(&path).await.map_err(|e| e.to_string()));
+        }
+        SftpRequest::Rename { from, to, reply } => {
+            let _ = reply.send(sftp.rename(&from, &to).await.map_err(|e| e.to_string()));
+        }
+        SftpRequest::Home { reply } => {
+            let r = match sftp.canonicalize(".").await {
+                Ok(p) if !p.is_empty() && p != "." => Ok(p),
+                Ok(_) | Err(_) => match sftp.canonicalize("~").await {
+                    Ok(p) if !p.is_empty() => Ok(p),
+                    _ => Ok("/".to_string()),
+                },
+            };
+            let _ = reply.send(r);
+        }
+        SftpRequest::WriteBytes {
+            remote,
+            data,
+            reply,
+        } => {
+            let _ = reply.send(write_remote_bytes(sftp, &remote, &data).await);
+        }
+        SftpRequest::Shutdown => {}
+    }
 }
 
 async fn list_remote(sftp: &SftpSession, path: &str) -> Result<Vec<FileEntry>, String> {

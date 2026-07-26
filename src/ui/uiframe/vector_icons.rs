@@ -20,6 +20,8 @@ pub enum Icon {
     Connections,
     /// Folder for file browser.
     Folder,
+    /// Performance monitor (sparkline glyph).
+    Chart,
 }
 
 pub fn paint(ui: &Ui, rect: Rect, icon: Icon, color: Color32, stroke: f32) {
@@ -63,6 +65,7 @@ fn shapes_for_icon(icon: Icon, rect: Rect, color: Color32, stroke: f32) -> Vec<S
         Icon::Sessions => sessions(rect, color, stroke),
         Icon::Connections => connections(rect, color, stroke),
         Icon::Folder => folder(rect, color, stroke),
+        Icon::Chart => chart(rect, color, stroke),
     }
 }
 
@@ -190,4 +193,23 @@ fn folder(rect: Rect, color: Color32, stroke: f32) -> Vec<Shape> {
         Shape::rect_stroke(tab, 1.0, Stroke::new(stroke, color), egui::StrokeKind::Inside),
         Shape::rect_stroke(body, 1.0, Stroke::new(stroke, color), egui::StrokeKind::Inside),
     ]
+}
+
+fn chart(rect: Rect, color: Color32, stroke: f32) -> Vec<Shape> {
+    // Axes + rising polyline.
+    let mut shapes = vec![
+        line(rect, color, stroke, (0.18, 0.78), (0.82, 0.78)),
+        line(rect, color, stroke, (0.18, 0.22), (0.18, 0.78)),
+    ];
+    let pts = [
+        (0.28, 0.62),
+        (0.42, 0.48),
+        (0.56, 0.55),
+        (0.70, 0.34),
+        (0.82, 0.28),
+    ];
+    for w in pts.windows(2) {
+        shapes.push(line(rect, color, stroke, w[0], w[1]));
+    }
+    shapes
 }

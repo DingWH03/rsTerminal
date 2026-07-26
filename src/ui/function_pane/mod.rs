@@ -1,15 +1,16 @@
-//! Left function pane — sessions, connections, and sidebar files.
+//! Left function pane — sessions, connections, sidebar files, and monitor.
 
 pub mod common;
 pub mod connections;
 pub mod files_view;
+pub mod monitor_view;
 pub mod pages;
 pub mod session_list;
 pub mod workspace_view;
 
 use crate::session::WorkspaceSession;
 use crate::settings::AppSettings;
-use crate::storage::types::SavedConnection;
+use crate::storage::types::{ConnectionType, SavedConnection};
 use crate::ui::function_pane::files_view::SidebarFilesState;
 use crate::ui::function_pane::pages::FunctionPage;
 use crate::ui::shell::layout_state::WorkspaceLayout;
@@ -126,6 +127,26 @@ pub fn files_tab_visible(
         .is_some_and(|s| s.is_terminal())
 }
 
+/// Whether the Monitor tab should be shown (SSH terminal focused, wide layout).
+pub fn monitor_tab_visible(
+    pane: &FunctionPane,
+    sessions: &[WorkspaceSession],
+    focused_session_id: Option<&str>,
+) -> bool {
+    if !pane.wide {
+        return false;
+    }
+    let Some(id) = focused_session_id else {
+        return false;
+    };
+    sessions.iter().find(|s| s.id() == id).is_some_and(|s| {
+        matches!(
+            s,
+            WorkspaceSession::Terminal(t) if t.conn_type == ConnectionType::Ssh
+        )
+    })
+}
+
 pub fn render(
     ui: &mut egui::Ui,
     pane: &mut FunctionPane,
@@ -138,8 +159,13 @@ pub fn render(
     files_state: &mut SidebarFilesState,
     _page_slide: f32,
 ) -> FunctionAction {
-    let show_files = files_tab_visible(pane, sessions, workspace.focused_session_id());
+    let focused = workspace.focused_session_id();
+    let show_files = files_tab_visible(pane, sessions, focused);
+    let show_monitor = monitor_tab_visible(pane, sessions, focused);
     if *page == FunctionPage::Files && !show_files {
+        *page = FunctionPage::Active;
+    }
+    if *page == FunctionPage::Monitor && !show_monitor {
         *page = FunctionPage::Active;
     }
 
@@ -148,6 +174,7 @@ pub fn render(
     let active_tip = rust_i18n::t!("sidebar_tab_active");
     let conn_tip = rust_i18n::t!("sidebar_tab_connections");
     let files_tip = rust_i18n::t!("sidebar_tab_files");
+    let monitor_tip = rust_i18n::t!("sidebar_tab_monitor");
 
     use crate::ui::uiframe::vector_icons::Icon;
     let mut items = vec![
@@ -169,8 +196,14 @@ pub fn render(
             tip: files_tip.as_ref(),
         });
     }
+    if show_monitor {
+        items.push(TabBarItem {
+            id: FunctionPage::Monitor.as_tab_id(),
+            icon: Icon::Chart,
+            tip: monitor_tip.as_ref(),
+        });
+    }
 
-    // Pin tab strip to the bottom of the function pane.
     let tab_strip_h = TabBar::HEIGHT + 6.0;
     egui::Panel::bottom("function_pane_tabs")
         .exact_size(tab_strip_h)
@@ -193,13 +226,10 @@ pub fn render(
                 settings,
             ),
             FunctionPage::Connections => connections::render(ui, connections),
-            FunctionPage::Files => files_view::render(
-                ui,
-                files_state,
-                sessions,
-                workspace.focused_session_id(),
-                connections,
-            ),
+            FunctionPage::Files => {
+                files_view::render(ui, files_state, sessions, focused, connections)
+            }
+            FunctionPage::Monitor => monitor_view::render(ui, sessions, focused),
         };
         action = body_action;
     });

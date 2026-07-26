@@ -298,18 +298,43 @@ impl RsTerminalApp {
             None => return,
         };
         let profile = self.settings.default_profile().clone();
-        let result = match config.conn_type {
+        match config.conn_type {
             #[cfg(not(target_os = "android"))]
-            ConnectionType::Local => local::connect_local(&config, &profile, 24, 80),
+            ConnectionType::Local => match local::connect_local(&config, &profile, 24, 80) {
+                Ok(handle) => {
+                    self.open_session_in_pane(handle, &config, profile.scrollback_lines, pane, None)
+                }
+                Err(e) => self.connection_notice = Some(e),
+            },
             #[cfg(target_os = "android")]
-            ConnectionType::Local => Err("Local terminal is not supported on Android".into()),
-            ConnectionType::Ssh => ssh::connect_ssh(&config, &self.settings.ssh_env_vars, 24, 80),
-            ConnectionType::Serial => serial::connect_serial(&config),
-            ConnectionType::Ble => ble::connect_ble(&config),
-        };
-        match result {
-            Ok(handle) => self.open_session_in_pane(handle, &config, profile.scrollback_lines, pane),
-            Err(e) => self.connection_notice = Some(e),
+            ConnectionType::Local => {
+                self.connection_notice =
+                    Some("Local terminal is not supported on Android".into());
+            }
+            ConnectionType::Ssh => {
+                match ssh::connect_ssh_session(&config, &self.settings.ssh_env_vars, 24, 80) {
+                    Ok(out) => self.open_session_in_pane(
+                        out.handle,
+                        &config,
+                        profile.scrollback_lines,
+                        pane,
+                        Some((out.metrics, out.sftp)),
+                    ),
+                    Err(e) => self.connection_notice = Some(e),
+                }
+            }
+            ConnectionType::Serial => match serial::connect_serial(&config) {
+                Ok(handle) => {
+                    self.open_session_in_pane(handle, &config, profile.scrollback_lines, pane, None)
+                }
+                Err(e) => self.connection_notice = Some(e),
+            },
+            ConnectionType::Ble => match ble::connect_ble(&config) {
+                Ok(handle) => {
+                    self.open_session_in_pane(handle, &config, profile.scrollback_lines, pane, None)
+                }
+                Err(e) => self.connection_notice = Some(e),
+            },
         }
     }
 
@@ -324,6 +349,7 @@ impl RsTerminalApp {
             config,
             scrollback_lines,
             self.shell.layout.workspace.focused_pane,
+            None,
         );
     }
 
@@ -333,6 +359,10 @@ impl RsTerminalApp {
         config: &SavedConnection,
         scrollback_lines: usize,
         pane: crate::ui::shell::layout_state::PaneId,
+        ssh_extras: Option<(
+            crate::remote::SessionMetrics,
+            std::sync::Arc<crate::fs::sftp::SftpClient>,
+        )>,
     ) {
         let profile = self.settings.default_profile();
         let mut terminal = Terminal::new(DEFAULT_GRID_ROWS, DEFAULT_GRID_COLS);
@@ -348,6 +378,11 @@ impl RsTerminalApp {
                 crate::platform::get().ssh_user_at_host(user, host)
             }
             _ => String::new(),
+        };
+
+        let (metrics, session_sftp) = match ssh_extras {
+            Some((m, s)) => (m, Some(s)),
+            None => (crate::remote::SessionMetrics::new(), None),
         };
 
         let id = uuid::Uuid::new_v4().to_string();
@@ -382,6 +417,8 @@ impl RsTerminalApp {
             mouse_motion_last: None,
             font_generation: crate::fonts::font_generation(),
             disconnect_message: None,
+            metrics,
+            session_sftp,
         }));
         ShellCoordinator::assign_session_to_pane(&mut self.shell.layout, pane, id);
     }
@@ -726,14 +763,16 @@ impl eframe::App for RsTerminalApp {
                             if let Some(config) =
                                 self.saved_connections.iter().find(|c| c.id == *conn_id)
                             {
-                                match ssh::connect_ssh(
+                                match ssh::connect_ssh_session(
                                     config,
                                     &self.settings.ssh_env_vars,
                                     24,
                                     80,
                                 ) {
-                                    Ok(new_handle) => {
-                                        session.handle = new_handle;
+                                    Ok(out) => {
+                                        session.handle = out.handle;
+                                        session.metrics = out.metrics;
+                                        session.session_sftp = Some(out.sftp);
                                         session.disconnect_message = None;
                                         session.want_terminal_focus = true;
                                     }

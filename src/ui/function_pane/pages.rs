@@ -9,6 +9,8 @@ pub enum FunctionPage {
     Connections,
     /// Single-column files for the focused terminal (wide layout only).
     Files,
+    /// One-minute remote performance charts (SSH, wide layout).
+    Monitor,
 }
 
 impl FunctionPage {
@@ -17,6 +19,7 @@ impl FunctionPage {
             Self::Active => 0,
             Self::Connections => 1,
             Self::Files => 2,
+            Self::Monitor => 3,
         }
     }
 
@@ -24,6 +27,7 @@ impl FunctionPage {
         match id {
             1 => Self::Connections,
             2 => Self::Files,
+            3 => Self::Monitor,
             _ => Self::Active,
         }
     }

@@ -174,6 +174,10 @@ pub struct ActiveSession {
     pub mouse_motion_last: Option<(usize, usize)>,
     /// 上次应用的字体生成号（字体变化时清除字形缓存）
     pub font_generation: u32,
+    /// SSH remote status bus (agent + OSC merger). Empty for non-SSH sessions.
+    pub metrics: crate::remote::SessionMetrics,
+    /// Shared-session SFTP when connected via `connect_ssh_session`.
+    pub session_sftp: Option<std::sync::Arc<crate::fs::sftp::SftpClient>>,
 }
 
 /// 终端连接视图的操作结果枚举。
@@ -1490,6 +1494,24 @@ pub(crate) fn drain_connection(session: &mut ActiveSession, action: &mut Connect
                 // CSI 8 no longer emits this; keep arm so older tests / sequences do not resize the PTY.
             }
         }
+    }
+    // Keep OSC 7 cwd warm even when the Files tab is not open.
+    if let Some(cwd) = session.terminal.screen.cwd.as_deref() {
+        if !cwd.is_empty() {
+            session.metrics.note_osc_cwd(Some(cwd));
+        }
+    }
+    for ev in session.metrics.drain_events() {
+        let line = crate::remote::format_metrics_event(&ev);
+        match &ev {
+            crate::remote::MetricsEvent::Status(_) => {
+                log::debug!("[remote-metrics] {line}");
+            }
+            _ => {
+                log::info!("[remote-metrics] {line}");
+            }
+        }
+        updated = true;
     }
     updated
 }

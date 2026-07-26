@@ -15,6 +15,7 @@ pub mod app;
 pub mod config;
 pub mod connection;
 pub mod fs;
+pub mod remote;
 pub mod session;
 pub mod fonts;
 pub mod i18n;
