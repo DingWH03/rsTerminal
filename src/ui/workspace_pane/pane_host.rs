@@ -2,10 +2,10 @@
 
 use std::collections::HashMap;
 
-use crate::session::WorkspaceSession;
+use crate::session::{ConnectionViewAction, WorkspaceSession};
 use crate::ui::page::file_manager::file_manager_view;
 use crate::ui::page::home::recent::{recent_connections_view, SplitPaneChrome};
-use crate::ui::page::terminal::{connection_view, ConnectionViewAction};
+use crate::ui::page::terminal::connection_view;
 use crate::ui::pane_colors::pane_color;
 use crate::ui::shell::layout_preview::PREVIEW_GHOST_PANE;
 use crate::ui::shell::layout_state::{PaneId, PaneState};
@@ -90,6 +90,7 @@ pub fn render_pane(
                                     is_focused,
                                     &mut pane_focus_click,
                                     in_split,
+                                    ctx.suppress_terminal_input,
                                 );
                                 if pane_focus_click {
                                     action.focus_pane = Some(pane_id);

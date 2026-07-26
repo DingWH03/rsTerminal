@@ -1,3 +1,5 @@
+//! File-manager workspace session state.
+
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -6,12 +8,6 @@ use std::thread::JoinHandle;
 
 use crate::fs::sftp::SftpClient;
 use crate::fs::{home_dir, FileEntry};
-use crate::storage::types::ConnectionType;
-
-/// Session types that bridge terminal and file-manager sessions.
-/// The enum itself lives in the terminal page module because it wraps
-/// [`ActiveSession`]; we re-export it here for convenience.
-pub use crate::ui::page::terminal::WorkspaceSession;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PaneSide {
@@ -256,12 +252,5 @@ impl FileManagerSession {
             remote_anchor: None,
             active_pane: FileActivePane::LeftLocal,
         }
-    }
-}
-
-pub fn terminal_conn_type(session: &WorkspaceSession) -> Option<&ConnectionType> {
-    match session {
-        WorkspaceSession::Terminal(s) => Some(&s.conn_type),
-        _ => None,
     }
 }

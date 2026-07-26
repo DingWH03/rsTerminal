@@ -1,28 +1,13 @@
-//! Sidebar Files tab — binds to the focused session's [`SessionFilesCache`].
+//! Sidebar Files tab — binds to the focused session's [`crate::session::SessionFilesCache`].
 //!
-//! Listing I/O is driven by [`crate::ui::page::terminal::files_cache::tick_session_files`]
-//! on each session; this module only paints and applies browse / DnD gestures.
+//! Listing I/O is driven by [`crate::session::tick_session_files`]; this module only paints
+//! and applies browse / DnD gestures.
 
-use crate::session::WorkspaceSession;
+use crate::session::{tick_session_files, WorkspaceSession};
 use crate::storage::types::{ConnectionType, SavedConnection};
-use crate::ui::page::terminal::files_cache::tick_session_files;
 use crate::ui::shell::messages::FunctionAction;
 use crate::ui::uiframe::components::empty_state::{paint_empty_state, EmptyStateConfig};
 use crate::ui::uiframe::file_list::FileListView;
-
-/// Keep every terminal session's file cache in sync with cwd / SFTP replies.
-///
-/// Call once per frame (ideally after connection drains) so switching panes is instant.
-pub fn tick_all_session_files(
-    sessions: &mut [WorkspaceSession],
-    connections: &[SavedConnection],
-) {
-    for session in sessions {
-        if let Some(term) = session.terminal_mut() {
-            tick_session_files(term, connections);
-        }
-    }
-}
 
 pub fn render(
     ui: &mut egui::Ui,
@@ -75,7 +60,6 @@ pub fn render(
         ConnectionType::Local | ConnectionType::Ssh => {}
     }
 
-    // Opportunistic tick so the open Files tab stays live even if app tick ordering shifts.
     tick_session_files(term, connections);
 
     if term.conn_type == ConnectionType::Ssh {

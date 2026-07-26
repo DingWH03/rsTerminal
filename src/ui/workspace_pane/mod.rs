@@ -32,6 +32,8 @@ pub struct WorkspacePaneContext<'a> {
     pub session_fade: HashMap<crate::ui::shell::layout_state::PaneId, f32>,
     pub split_layout_active: bool,
     pub last_drop_zone: &'a mut Option<crate::ui::shell::layout_state::DropZone>,
+    /// Modal dialogs (new connection, settings, …) own the keyboard.
+    pub suppress_terminal_input: bool,
 }
 
 pub struct WorkspaceRenderResult {

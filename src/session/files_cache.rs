@@ -1,8 +1,7 @@
 //! Per-session sidebar file listing cache.
 //!
-//! Each [`crate::ui::page::terminal::ActiveSession`] owns a cache. List fetches are driven by
-//! cwd / prompt-mark changes (and SFTP replies), not by the Files tab painting. Switching
-//! focus only rebinds the UI to that session's already-populated cache.
+//! Each [`crate::session::terminal::ActiveSession`] owns a cache. List fetches are driven by
+//! cwd / prompt-mark changes (and SFTP replies), not by the Files tab painting.
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
@@ -11,8 +10,9 @@ use std::sync::Arc;
 use crate::fs::local;
 use crate::fs::sftp::{join_remote, SftpClient};
 use crate::fs::FileEntry;
+use crate::session::terminal::ActiveSession;
+use crate::session::workspace::WorkspaceSession;
 use crate::storage::types::{ConnectionType, SavedConnection};
-use crate::ui::page::terminal::ActiveSession;
 
 enum PendingOp {
     Home(mpsc::Receiver<Result<String, String>>),
@@ -424,3 +424,16 @@ fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<(), String> {
     }
     Ok(())
 }
+
+/// Keep every terminal session's file cache in sync with cwd / SFTP replies.
+pub fn tick_all_session_files(
+    sessions: &mut [WorkspaceSession],
+    connections: &[SavedConnection],
+) {
+    for session in sessions {
+        if let Some(term) = session.terminal_mut() {
+            tick_session_files(term, connections);
+        }
+    }
+}
+

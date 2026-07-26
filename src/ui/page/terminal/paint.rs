@@ -6,7 +6,6 @@
 //! - 字形缓存避免重复布局计算
 //! - 支持 zsh 自动建议的幽灵文本擦除
 
-use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
@@ -17,39 +16,7 @@ use crate::config::TerminalTheme;
 use crate::fonts::terminal_font_id_for_char;
 use crate::terminal::screen::{cell_display_width, Cell, Color};
 
-/// 字形缓存 — 以字符 + 视觉属性为键，缓存已布局的字形。
-///
-/// 避免每帧重复布局相同字符，提高渲染性能。
-/// 超过 4096 条时自动清空。
-#[derive(Default)]
-pub struct RowGalleyCache {
-    font_size: f32,
-    entries: HashMap<u64, Arc<Galley>>,
-}
-
-impl RowGalleyCache {
-    pub fn clear(&mut self) {
-        self.entries.clear();
-    }
-
-    fn ensure_font(&mut self, font_size: f32) {
-        if (self.font_size - font_size).abs() > f32::EPSILON {
-            self.font_size = font_size;
-            self.entries.clear();
-        }
-    }
-
-    fn get(&self, key: u64) -> Option<Arc<Galley>> {
-        self.entries.get(&key).cloned()
-    }
-
-    fn insert(&mut self, key: u64, galley: Arc<Galley>) {
-        if self.entries.len() > 4096 {
-            self.entries.clear();
-        }
-        self.entries.insert(key, galley);
-    }
-}
+pub use crate::session::RowGalleyCache;
 
 /// 影响字形渲染的视觉属性（SGR 转义序列 / vim / zsh 建议）。
 #[derive(Clone, Copy, PartialEq, Eq)]

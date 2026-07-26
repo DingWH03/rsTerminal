@@ -7,11 +7,11 @@ use crate::storage;
 use crate::storage::types::{ConnectionType, SavedConnection};
 use crate::terminal::{DEFAULT_GRID_COLS, DEFAULT_GRID_ROWS};
 use crate::terminal::Terminal;
-use crate::session::{FileManagerMode, FileManagerSession, WorkspaceSession};
-use crate::ui::function_pane::pages::FunctionPage;
-use crate::ui::page::terminal::{
-    drain_connection, ActiveSession, ConnectionViewAction,
+use crate::session::{
+    drain_connection, ActiveSession, ConnectionViewAction, FileManagerMode,
+    FileManagerSession, WorkspaceSession,
 };
+use crate::ui::function_pane::pages::FunctionPage;
 use crate::ui::shell::coordinator::ShellCoordinator;
 use crate::ui::shell::AppShell;
 use crate::ui::uiframe::dialogs::{LocalTerminalSettingsDialog, NewConnectionDialog};
@@ -490,6 +490,16 @@ impl RsTerminalApp {
         }
     }
 
+    /// Stop the terminal from reclaiming keyboard focus (modals / text fields).
+    fn release_terminal_keyboard_focus(&mut self) {
+        for session in &mut self.sessions {
+            if let Some(term) = session.terminal_mut() {
+                term.want_terminal_focus = false;
+                term.terminal_had_focus = false;
+            }
+        }
+    }
+
     fn focused_session_index(&self) -> Option<usize> {
         self.shell
             .focused_session_id()
@@ -640,7 +650,7 @@ impl eframe::App for RsTerminalApp {
         }
 
         self.drain_inactive_sessions();
-        crate::ui::function_pane::files_view::tick_all_session_files(
+        crate::session::tick_all_session_files(
             &mut self.sessions,
             &self.saved_connections,
         );
@@ -651,6 +661,13 @@ impl eframe::App for RsTerminalApp {
             }
         }
 
+        let suppress_terminal_input = self.new_conn_dialog.open
+            || self.local_term_dialog.open
+            || self.show_quit_dialog
+            || self.shell.layout.settings_dialog_open
+            || self.shell.layout.help_dialog_open
+            || self.shell.layout.connections_dialog_open;
+
         let render = self.shell.render(
             ui,
             top_inset,
@@ -659,9 +676,10 @@ impl eframe::App for RsTerminalApp {
             &self.saved_connections,
             &mut self.virtual_keyboard,
             &mut self.live_font_size,
+            suppress_terminal_input,
         );
 
-        crate::ui::function_pane::files_view::tick_all_session_files(
+        crate::session::tick_all_session_files(
             &mut self.sessions,
             &self.saved_connections,
         );
@@ -680,6 +698,7 @@ impl eframe::App for RsTerminalApp {
 
         if fa.new_connection {
             self.new_conn_dialog.open_new();
+            self.release_terminal_keyboard_focus();
         }
         if let Some(ref id) = fa.connect_connection {
             self.connect_to(id);
@@ -698,6 +717,7 @@ impl eframe::App for RsTerminalApp {
         if let Some(ref id) = fa.edit_connection {
             if let Some(conn) = self.saved_connections.iter().find(|c| c.id == *id) {
                 self.new_conn_dialog.open_edit(conn);
+                self.release_terminal_keyboard_focus();
             }
         }
         if let Some(ref id) = fa.delete_connection {

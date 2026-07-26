@@ -127,6 +127,7 @@ impl AppShell {
         saved_connections: &[SavedConnection],
         virtual_keyboard: &mut VirtualKeyboard,
         live_font_size: &mut f32,
+        suppress_terminal_input: bool,
     ) -> ShellRenderResult {
         let mut result = ShellRenderResult::default();
         let session_count = sessions.len();
@@ -242,6 +243,7 @@ impl AppShell {
                         session_fade,
                         split_layout_active: false,
                         last_drop_zone: &mut last_drop_zone,
+                        suppress_terminal_input,
                     };
                     workspace_pane::render(ui, &mut self.layout.workspace, &mut ws_ctx)
                 };

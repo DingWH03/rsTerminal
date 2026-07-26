@@ -20,6 +20,8 @@ pub enum ConnectionFormOutcome {
 /// 新建/编辑连接表单状态。
 pub struct NewConnectionDialog {
     pub open: bool,
+    /// Request keyboard focus on the name field once after open.
+    request_name_focus: bool,
     /// When set, form edits an existing connection (preserves id on save).
     edit_id: Option<String>,
     pub name: String,
@@ -48,6 +50,7 @@ impl Default for NewConnectionDialog {
     fn default() -> Self {
         Self {
             open: false,
+            request_name_focus: false,
             edit_id: None,
             name: String::new(),
             conn_type: ConnectionType::Local,
@@ -74,6 +77,7 @@ impl NewConnectionDialog {
     pub fn open_new(&mut self) {
         *self = Self::default();
         self.open = true;
+        self.request_name_focus = true;
         // Pre-fill Local defaults: system shell and home directory.
         self.shell = crate::platform::get().default_shell();
         self.working_dir = std::env::var("HOME")
@@ -85,6 +89,7 @@ impl NewConnectionDialog {
     pub fn open_edit(&mut self, conn: &SavedConnection) {
         *self = Self::default();
         self.open = true;
+        self.request_name_focus = true;
         self.edit_id = Some(conn.id.clone());
         self.name = conn.name.clone();
         self.conn_type = conn.conn_type;
@@ -161,6 +166,7 @@ impl NewConnectionDialog {
         egui::Window::new(title)
             .collapsible(false)
             .resizable(false)
+            .order(egui::Order::Foreground)
             .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
             .show(ctx, |ui| {
                 outcome = self.paint_form(ui, ctx);
@@ -208,7 +214,11 @@ impl NewConnectionDialog {
 
         ui.horizontal(|ui| {
             ui.label(rust_i18n::t!("dialog_name"));
-            ui.text_edit_singleline(&mut self.name);
+            let name_edit = ui.text_edit_singleline(&mut self.name);
+            if self.request_name_focus {
+                name_edit.request_focus();
+                self.request_name_focus = false;
+            }
         });
 
         ui.add_space(12.0);

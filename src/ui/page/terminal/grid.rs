@@ -3,7 +3,7 @@
 //! 确保 egui 布局尺寸变化时，终端仿真器和底层 PTY 的尺寸保持一致。
 //! 在 alt-screen 模式下，先调整仿真器再调整 PTY；普通模式下先调整 PTY 再调整仿真器。
 
-use crate::ui::page::terminal::{ActiveSession, ConnectionViewAction};
+use crate::session::{ActiveSession, ConnectionViewAction};
 
 /// 同步仿真器网格尺寸。如果尺寸或字体未变化则跳过。
 pub fn sync_emulator_grid(session: &mut ActiveSession, rows: usize, cols: usize, font_size: f32) {
