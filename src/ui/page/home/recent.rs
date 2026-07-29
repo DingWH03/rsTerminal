@@ -1,6 +1,6 @@
 //! 最近连接视图 — 在侧边栏中显示最近使用的连接列表。
 
-use crate::storage::types::SavedConnection;
+use crate::persist::types::SavedConnection;
 use crate::ui::function_pane::FunctionPane;
 use crate::ui::uiframe::components::empty_state::{self, EmptyStateConfig};
 use crate::ui::uiframe::components::toolbar_button::{

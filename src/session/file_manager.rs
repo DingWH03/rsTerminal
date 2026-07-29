@@ -197,7 +197,7 @@ impl FileManagerSession {
         }
     }
 
-    pub fn open_ssh(config: &crate::storage::types::SavedConnection) -> Result<Self, String> {
+    pub fn open_ssh(config: &crate::persist::types::SavedConnection) -> Result<Self, String> {
         let client = SftpClient::connect(config)?;
         let host = config.ssh_host.as_deref().unwrap_or("host");
         let title = format!("Remote: {host}");

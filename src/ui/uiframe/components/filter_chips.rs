@@ -2,7 +2,7 @@
 //!
 //! 紧凑水平居中的 tag 条，只占用一行高度，不会吞掉下方列表空间。
 
-use crate::storage::types::ConnectionType;
+use crate::persist::types::ConnectionType;
 use crate::ui::uiframe::style;
 
 /// 筛选标签的配置项。

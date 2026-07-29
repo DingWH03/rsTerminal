@@ -5,13 +5,18 @@
 //! 以居中弹出 Window 显示；窗口内顶部用下拉框选择类型，下方按类型显示配置。
 
 pub mod notices;
+pub mod favorite_commands;
 
 pub use notices::{paint_connection_notice, paint_quit_confirm};
+pub use favorite_commands::{
+    FavoriteCommandDialog, FavoriteCommandOutcome, ManageCommandsAction,
+    ManageFavoriteCommandsDialog,
+};
 
 use std::sync::mpsc;
 
 use crate::connection::enumeration::{enumerate_serial_ports, scan_ble_devices_blocking};
-use crate::storage::types::{ConnectionType, SavedConnection};
+use crate::persist::types::{ConnectionType, SavedConnection};
 use crate::ui::uiframe::style;
 
 /// On Android, show the soft keyboard for a focused dialog text field.

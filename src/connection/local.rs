@@ -9,7 +9,7 @@ use crate::connection::{
     winchg,
 };
 use crate::settings::Profile;
-use crate::storage::types::SavedConnection;
+use crate::persist::types::SavedConnection;
 
 fn pty_size(rows: u16, cols: u16) -> PtySize {
     PtySize {

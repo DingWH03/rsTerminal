@@ -8,7 +8,7 @@
 pub mod recent;
 pub mod sidebar;
 
-use crate::storage::types::{ConnectionType, SavedConnection};
+use crate::persist::types::{ConnectionType, SavedConnection};
 use crate::ui::uiframe::style;
 use crate::ui::uiframe::components::card;
 use crate::ui::uiframe::components::empty_state::{self, EmptyStateConfig};

@@ -6,7 +6,7 @@ use std::time::Duration;
 use crate::connection::{
     emit_conn_data, ConnIn, ConnOut, ConnectionHandle, ConnectionState, RepaintNotifier,
 };
-use crate::storage::types::SavedConnection;
+use crate::persist::types::SavedConnection;
 
 pub fn connect_serial(config: &SavedConnection) -> Result<ConnectionHandle, String> {
     let port_name = config

@@ -15,7 +15,7 @@ use crate::connection::ssh_keys;
 use crate::fs::entry_info::{self, EntryInfo};
 use crate::fs::transfer_progress::ByteProgress;
 use crate::fs::FileEntry;
-use crate::storage::types::SavedConnection;
+use crate::persist::types::SavedConnection;
 
 #[derive(Clone)]
 pub(crate) enum SftpStatus {

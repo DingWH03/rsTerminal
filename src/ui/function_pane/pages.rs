@@ -7,6 +7,8 @@ pub enum FunctionPage {
     Active,
     /// All saved connections.
     Connections,
+    /// Favorite commands for quick input.
+    Commands,
     /// Single-column files for the focused terminal (wide layout only).
     Files,
     /// One-minute remote performance charts (SSH, wide layout).
@@ -18,16 +20,18 @@ impl FunctionPage {
         match self {
             Self::Active => 0,
             Self::Connections => 1,
-            Self::Files => 2,
-            Self::Monitor => 3,
+            Self::Commands => 2,
+            Self::Files => 3,
+            Self::Monitor => 4,
         }
     }
 
     pub fn from_tab_id(id: usize) -> Self {
         match id {
             1 => Self::Connections,
-            2 => Self::Files,
-            3 => Self::Monitor,
+            2 => Self::Commands,
+            3 => Self::Files,
+            4 => Self::Monitor,
             _ => Self::Active,
         }
     }

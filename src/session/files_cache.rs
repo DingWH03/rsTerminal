@@ -12,7 +12,7 @@ use crate::fs::sftp::{join_remote, SftpClient};
 use crate::fs::FileEntry;
 use crate::session::terminal::ActiveSession;
 use crate::session::workspace::WorkspaceSession;
-use crate::storage::types::{ConnectionType, SavedConnection};
+use crate::persist::types::{ConnectionType, SavedConnection};
 
 enum PendingOp {
     Home(mpsc::Receiver<Result<String, String>>),

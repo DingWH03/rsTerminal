@@ -533,6 +533,8 @@ pub struct ShellLayout {
     pub help_dialog_open: bool,
     /// Saved connections browser (Connection → Open).
     pub connections_dialog_open: bool,
+    /// Favorite commands manager (Commands → Manage).
+    pub commands_manage_dialog_open: bool,
 }
 
 impl Default for ShellLayout {
@@ -544,6 +546,7 @@ impl Default for ShellLayout {
             settings_dialog_open: false,
             help_dialog_open: false,
             connections_dialog_open: false,
+            commands_manage_dialog_open: false,
         }
     }
 }

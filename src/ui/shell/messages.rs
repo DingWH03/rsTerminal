@@ -19,11 +19,58 @@ pub struct FunctionAction {
     pub open_file_mgr: Option<String>,
     pub edit_connection: Option<String>,
     pub delete_connection: Option<String>,
+    pub run_favorite_command: Option<String>,
+    pub edit_favorite_command: Option<String>,
+    pub delete_favorite_command: Option<String>,
+    pub new_favorite_command: bool,
 }
 
 impl FunctionAction {
     pub fn empty() -> Self {
         Self::default()
+    }
+
+    /// Merge another action into this one (non-empty fields from `other` win).
+    /// Used so menu-bar actions are not wiped by the function pane render.
+    pub fn merge_from(&mut self, other: Self) {
+        if other.select_session.is_some() {
+            self.select_session = other.select_session;
+        }
+        if other.start_session_drag.is_some() {
+            self.start_session_drag = other.start_session_drag;
+        }
+        if other.duplicate_session.is_some() {
+            self.duplicate_session = other.duplicate_session;
+        }
+        if other.close_session.is_some() {
+            self.close_session = other.close_session;
+        }
+        self.open_connection_mgmt |= other.open_connection_mgmt;
+        self.toggle_settings |= other.toggle_settings;
+        self.go_back |= other.go_back;
+        self.new_connection |= other.new_connection;
+        self.new_favorite_command |= other.new_favorite_command;
+        if other.connect_connection.is_some() {
+            self.connect_connection = other.connect_connection;
+        }
+        if other.open_file_mgr.is_some() {
+            self.open_file_mgr = other.open_file_mgr;
+        }
+        if other.edit_connection.is_some() {
+            self.edit_connection = other.edit_connection;
+        }
+        if other.delete_connection.is_some() {
+            self.delete_connection = other.delete_connection;
+        }
+        if other.run_favorite_command.is_some() {
+            self.run_favorite_command = other.run_favorite_command;
+        }
+        if other.edit_favorite_command.is_some() {
+            self.edit_favorite_command = other.edit_favorite_command;
+        }
+        if other.delete_favorite_command.is_some() {
+            self.delete_favorite_command = other.delete_favorite_command;
+        }
     }
 }
 

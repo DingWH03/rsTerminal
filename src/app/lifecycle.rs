@@ -63,11 +63,22 @@ impl RsTerminalApp {
             self.new_conn_dialog.close();
             return true;
         }
+        if self.favorite_cmd_dialog.open {
+            self.favorite_cmd_dialog.close();
+            return true;
+        }
+        if self.manage_commands_dialog.open {
+            self.manage_commands_dialog.open = false;
+            self.shell.layout.commands_manage_dialog_open = false;
+            return true;
+        }
         if self.local_term_dialog.open {
             self.local_term_dialog = LocalTerminalSettingsDialog::default();
             return true;
         }
-        if self.shell.layout.function_page == FunctionPage::Connections {
+        if self.shell.layout.function_page == FunctionPage::Connections
+            || self.shell.layout.function_page == FunctionPage::Commands
+        {
             self.shell.layout.function_page = FunctionPage::Active;
             return true;
         }

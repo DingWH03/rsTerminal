@@ -1,9 +1,11 @@
 //! Connections management page in the function pane.
 
-use crate::storage::types::{ConnectionType, SavedConnection};
+use crate::persist::types::{ConnectionType, SavedConnection};
 use crate::ui::shell::messages::FunctionAction;
+use crate::ui::uiframe::components::empty_state::{paint_empty_state, EmptyStateConfig};
 use crate::ui::uiframe::components::filter_chips::{self, CONNECTION_TYPE_FILTERS};
 use crate::ui::uiframe::style;
+use crate::ui::uiframe::vector_icons::Icon;
 
 /// Paint saved-connection list (filter chips + rows).
 /// Used by the sidebar Connections tab and the "Open Connection" dialog.
@@ -19,6 +21,20 @@ pub fn render_with_id(
     id_salt: &str,
 ) -> FunctionAction {
     let mut action = FunctionAction::empty();
+
+    if connections.is_empty() {
+        paint_empty_state(
+            ui,
+            EmptyStateConfig {
+                vector_icon: Some(Icon::Connections),
+                vector_icon_size: 44.0,
+                title: &rust_i18n::t!("home_no_connections"),
+                title_size: 13.0,
+                ..Default::default()
+            },
+        );
+        return action;
+    }
 
     let filter: Option<ConnectionType> = filter_chips::paint_filter_chips(
         ui,
@@ -48,33 +64,38 @@ pub fn render_with_id(
     ui.add_space(1.0);
 
     if sorted.is_empty() {
-        ui.add_space(4.0);
-        ui.label(
-            egui::RichText::new(rust_i18n::t!("home_no_connections"))
-                .size(13.0)
-                .color(ui.visuals().weak_text_color()),
+        paint_empty_state(
+            ui,
+            EmptyStateConfig {
+                vector_icon: Some(Icon::Connections),
+                vector_icon_size: 44.0,
+                title: &rust_i18n::t!("home_no_connections"),
+                title_size: 13.0,
+                ..Default::default()
+            },
         );
-    } else {
-        ui.style_mut().spacing.scroll.bar_width = 6.0;
-        ui.style_mut().spacing.scroll.bar_outer_margin = 0.0;
-        let menu_id_key = egui::Id::new(format!("{id_salt}_menu_id"));
-        let menu_state: Option<String> = ui.data(|d| d.get_temp(menu_id_key)).unwrap_or(None);
-
-        if menu_state.is_some()
-            && ui.input(|i| i.pointer.button_clicked(egui::PointerButton::Primary))
-        {
-            ui.data_mut(|d| d.insert_temp(menu_id_key, None::<String>));
-        }
-
-        egui::ScrollArea::vertical()
-            .id_salt(format!("{id_salt}_list_scroll"))
-            .auto_shrink([false; 2])
-            .show(ui, |ui| {
-                for conn in &sorted {
-                    paint_connection_row(ui, conn, &menu_id_key, &menu_state, &mut action);
-                }
-            });
+        return action;
     }
+
+    ui.style_mut().spacing.scroll.bar_width = 6.0;
+    ui.style_mut().spacing.scroll.bar_outer_margin = 0.0;
+    let menu_id_key = egui::Id::new(format!("{id_salt}_menu_id"));
+    let menu_state: Option<String> = ui.data(|d| d.get_temp(menu_id_key)).unwrap_or(None);
+
+    if menu_state.is_some()
+        && ui.input(|i| i.pointer.button_clicked(egui::PointerButton::Primary))
+    {
+        ui.data_mut(|d| d.insert_temp(menu_id_key, None::<String>));
+    }
+
+    egui::ScrollArea::vertical()
+        .id_salt(format!("{id_salt}_list_scroll"))
+        .auto_shrink([false; 2])
+        .show(ui, |ui| {
+            for conn in &sorted {
+                paint_connection_row(ui, conn, &menu_id_key, &menu_state, &mut action);
+            }
+        });
 
     action
 }

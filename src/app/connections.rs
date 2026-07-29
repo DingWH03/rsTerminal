@@ -5,8 +5,7 @@ use crate::connection::{ble, serial, ssh};
 #[cfg(not(target_os = "android"))]
 use crate::connection::local;
 use crate::settings::save_settings;
-use crate::storage;
-use crate::storage::types::ConnectionType;
+use crate::persist::types::ConnectionType;
 use crate::ui::function_pane::pages::FunctionPage;
 
 impl RsTerminalApp {
@@ -46,7 +45,7 @@ impl RsTerminalApp {
             {
                 self.saved_connections[pos] = apply.config.clone();
             }
-            storage::save_connections(&self.saved_connections);
+            let _ = self.persist.upsert_connection(&apply.config);
             self.settings.default_local_connection_id = Some(apply.config.id.clone());
             save_settings(&self.settings);
         }
@@ -110,22 +109,22 @@ impl RsTerminalApp {
         }
     }
 
-    pub(crate) fn save_connection(&mut self, new_conn: crate::storage::types::SavedConnection) {
+    pub(crate) fn save_connection(&mut self, new_conn: crate::persist::types::SavedConnection) {
         if let Some(pos) = self
             .saved_connections
             .iter()
             .position(|c| c.id == new_conn.id)
         {
-            self.saved_connections[pos] = new_conn;
+            self.saved_connections[pos] = new_conn.clone();
         } else {
-            self.saved_connections.push(new_conn);
+            self.saved_connections.push(new_conn.clone());
         }
-        storage::save_connections(&self.saved_connections);
+        let _ = self.persist.upsert_connection(&new_conn);
     }
 
     pub(crate) fn delete_connection(&mut self, id: &str) {
         self.saved_connections.retain(|c| c.id != *id);
-        storage::save_connections(&self.saved_connections);
+        let _ = self.persist.delete_connection(id);
     }
 
     pub(crate) fn open_file_manager_for_connection(&mut self, id: &str) {

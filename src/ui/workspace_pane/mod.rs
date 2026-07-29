@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use crate::session::WorkspaceSession;
 use crate::settings::AppSettings;
-use crate::storage::types::SavedConnection;
+use crate::persist::types::SavedConnection;
 use crate::ui::function_pane::FunctionPane;
 use crate::ui::shell::layout_preview::pane_rects_from_tree;
 use crate::ui::shell::layout_state::WorkspaceLayout;

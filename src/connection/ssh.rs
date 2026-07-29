@@ -18,7 +18,7 @@ use crate::fs::sftp::{self, SftpClient, SftpRequest};
 use crate::remote::protocol::{push_bytes, AgentToClient};
 use crate::remote::status::{MetricsEvent, SessionMetrics};
 use crate::remote::AGENT_SCRIPT;
-use crate::storage::types::SavedConnection;
+use crate::persist::types::SavedConnection;
 
 /// Bash `PROMPT_COMMAND` that emits OSC 7 with `$HOSTNAME` + `$PWD`.
 ///

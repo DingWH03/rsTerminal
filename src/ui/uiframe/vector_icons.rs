@@ -22,6 +22,8 @@ pub enum Icon {
     Folder,
     /// Performance monitor (sparkline glyph).
     Chart,
+    /// Favorite commands (prompt chevron).
+    Commands,
 }
 
 pub fn paint(ui: &Ui, rect: Rect, icon: Icon, color: Color32, stroke: f32) {
@@ -66,6 +68,7 @@ fn shapes_for_icon(icon: Icon, rect: Rect, color: Color32, stroke: f32) -> Vec<S
         Icon::Connections => connections(rect, color, stroke),
         Icon::Folder => folder(rect, color, stroke),
         Icon::Chart => chart(rect, color, stroke),
+        Icon::Commands => commands_icon(rect, color, stroke),
     }
 }
 
@@ -212,4 +215,13 @@ fn chart(rect: Rect, color: Color32, stroke: f32) -> Vec<Shape> {
         shapes.push(line(rect, color, stroke, w[0], w[1]));
     }
     shapes
+}
+
+fn commands_icon(rect: Rect, color: Color32, stroke: f32) -> Vec<Shape> {
+    // `>` chevron + underscore cursor.
+    vec![
+        line(rect, color, stroke, (0.22, 0.28), (0.48, 0.50)),
+        line(rect, color, stroke, (0.48, 0.50), (0.22, 0.72)),
+        line(rect, color, stroke, (0.52, 0.72), (0.82, 0.72)),
+    ]
 }

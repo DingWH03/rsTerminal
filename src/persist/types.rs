@@ -1,3 +1,5 @@
+//! Domain types for persisted connections, secrets, and favorite commands.
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -9,6 +11,25 @@ pub enum ConnectionType {
 }
 
 impl ConnectionType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Local => "local",
+            Self::Ssh => "ssh",
+            Self::Serial => "serial",
+            Self::Ble => "ble",
+        }
+    }
+
+    pub fn from_str_db(s: &str) -> Option<Self> {
+        match s {
+            "local" | "Local" => Some(Self::Local),
+            "ssh" | "Ssh" => Some(Self::Ssh),
+            "serial" | "Serial" => Some(Self::Serial),
+            "ble" | "Ble" => Some(Self::Ble),
+            _ => None,
+        }
+    }
+
     pub fn label(&self) -> &str {
         match self {
             ConnectionType::Local => "Local Terminal",
@@ -45,7 +66,7 @@ pub struct SavedConnection {
     pub ssh_host: Option<String>,
     pub ssh_port: Option<u16>,
     pub ssh_user: Option<String>,
-    /// Optional password (stored locally in settings JSON).
+    /// Optional password (stored in SQLite connections table).
     pub ssh_password: Option<String>,
     /// Serial
     pub serial_port: Option<String>,
@@ -128,6 +149,79 @@ impl SavedConnection {
             serial_port: None,
             serial_baud: None,
             ble_device: Some(device.to_string()),
+        }
+    }
+}
+
+/// Favorite / quick-input command stored in SQLite.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FavoriteCommand {
+    pub id: String,
+    pub name: String,
+    pub command: String,
+    pub auto_execute: bool,
+    pub sort_order: i64,
+}
+
+impl FavoriteCommand {
+    pub fn new(name: &str, command: &str, auto_execute: bool) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            name: name.to_string(),
+            command: command.to_string(),
+            auto_execute,
+            sort_order: 0,
+        }
+    }
+}
+
+/// Which store holds the secret payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum SecretBackendKind {
+    #[default]
+    Local,
+    System,
+}
+
+impl SecretBackendKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Local => "local",
+            Self::System => "system",
+        }
+    }
+
+    pub fn from_str_db(s: &str) -> Self {
+        match s {
+            "system" => Self::System,
+            _ => Self::Local,
+        }
+    }
+}
+
+/// Reserved secret record (importable / system keyring capable).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecretRecord {
+    pub id: String,
+    pub name: String,
+    pub kind: String,
+    pub payload: String,
+    pub backend: SecretBackendKind,
+    pub created_at: i64,
+}
+
+impl SecretRecord {
+    pub fn new_local(name: &str, kind: &str, payload: &str) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            name: name.to_string(),
+            kind: kind.to_string(),
+            payload: payload.to_string(),
+            backend: SecretBackendKind::Local,
+            created_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0),
         }
     }
 }

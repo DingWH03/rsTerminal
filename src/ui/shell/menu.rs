@@ -1,7 +1,7 @@
 //! Application menu bar — construction and action routing.
 //!
 //! UI chrome lives in [`crate::ui::uiframe::menu_bar`]; this module owns the
-//! Connection / View / Preferences / Help tree and how actions affect the shell.
+//! Connection / Commands / View / Preferences / Help tree and how actions affect the shell.
 
 use crate::ui::function_pane::FunctionPane;
 use crate::ui::shell::layout_state::ShellLayout;
@@ -23,6 +23,8 @@ pub enum AppMenuAction {
     None,
     NewConnection,
     OpenConnections,
+    NewFavoriteCommand,
+    ManageFavoriteCommands,
     ToggleSidebar,
     OpenSettings,
     OpenHelp,
@@ -33,6 +35,8 @@ const ID_CONN_OPEN: MenuEntryId = 2;
 const ID_VIEW_SIDEBAR: MenuEntryId = 3;
 const ID_PREF_SETTINGS: MenuEntryId = 4;
 const ID_HELP_ABOUT: MenuEntryId = 5;
+const ID_CMD_NEW: MenuEntryId = 6;
+const ID_CMD_MANAGE: MenuEntryId = 7;
 
 /// Height of the menu bar chrome.
 pub const HEIGHT: f32 = MenuBar::HEIGHT;
@@ -42,6 +46,9 @@ pub fn show(ui: &mut egui::Ui, state: AppMenuState) -> AppMenuAction {
     let t_conn = rust_i18n::t!("menu_connection");
     let t_conn_new = rust_i18n::t!("menu_connection_new");
     let t_conn_open = rust_i18n::t!("menu_connection_open");
+    let t_cmds = rust_i18n::t!("menu_commands");
+    let t_cmd_new = rust_i18n::t!("menu_commands_new");
+    let t_cmd_manage = rust_i18n::t!("menu_commands_manage");
     let t_view = rust_i18n::t!("menu_view");
     let t_sidebar = rust_i18n::t!("menu_view_sidebar");
     let t_pref = rust_i18n::t!("menu_preferences");
@@ -57,6 +64,16 @@ pub fn show(ui: &mut egui::Ui, state: AppMenuState) -> AppMenuAction {
         MenuEntry::Button {
             id: ID_CONN_OPEN,
             label: t_conn_open.as_ref(),
+        },
+    ];
+    let command_entries = [
+        MenuEntry::Button {
+            id: ID_CMD_NEW,
+            label: t_cmd_new.as_ref(),
+        },
+        MenuEntry::Button {
+            id: ID_CMD_MANAGE,
+            label: t_cmd_manage.as_ref(),
         },
     ];
     let view_entries = [MenuEntry::Checkbox {
@@ -84,6 +101,10 @@ pub fn show(ui: &mut egui::Ui, state: AppMenuState) -> AppMenuAction {
             entries: &view_entries,
         },
         MenuGroup {
+            title: t_cmds.as_ref(),
+            entries: &command_entries,
+        },
+        MenuGroup {
             title: t_pref.as_ref(),
             entries: &pref_entries,
         },
@@ -96,6 +117,8 @@ pub fn show(ui: &mut egui::Ui, state: AppMenuState) -> AppMenuAction {
     match MenuBar::show(ui, MenuBarSpec { groups: &groups }) {
         Some(ID_CONN_NEW) => AppMenuAction::NewConnection,
         Some(ID_CONN_OPEN) => AppMenuAction::OpenConnections,
+        Some(ID_CMD_NEW) => AppMenuAction::NewFavoriteCommand,
+        Some(ID_CMD_MANAGE) => AppMenuAction::ManageFavoriteCommands,
         Some(ID_VIEW_SIDEBAR) => AppMenuAction::ToggleSidebar,
         Some(ID_PREF_SETTINGS) => AppMenuAction::OpenSettings,
         Some(ID_HELP_ABOUT) => AppMenuAction::OpenHelp,
@@ -116,6 +139,12 @@ pub fn apply(
         }
         AppMenuAction::OpenConnections => {
             layout.connections_dialog_open = true;
+        }
+        AppMenuAction::NewFavoriteCommand => {
+            result.function_action.new_favorite_command = true;
+        }
+        AppMenuAction::ManageFavoriteCommands => {
+            layout.commands_manage_dialog_open = true;
         }
         AppMenuAction::ToggleSidebar => {
             function_pane.toggle_docked_sidebar();

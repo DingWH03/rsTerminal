@@ -21,7 +21,7 @@ pub mod fonts;
 pub mod i18n;
 pub mod platform;
 pub mod settings;
-pub mod storage;
+pub mod persist;
 pub mod terminal;
 pub mod ui;
 
@@ -98,8 +98,8 @@ fn android_main(app: winit::platform::android::activity::AndroidApp) {
     // the `directories` crate returns None and config is lost on restart.
     // Use the app-internal data path provided by the system instead.
     if let Some(data_dir) = app.internal_data_path() {
-        storage::init_android_base_dir(data_dir);
-        log::info!("Android config dir: {:?}", storage::config_dir());
+        persist::init_android_base_dir(data_dir);
+        log::info!("Android config dir: {:?}", persist::config_dir());
     }
 
     let native_options = eframe::NativeOptions {

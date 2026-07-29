@@ -1,5 +1,6 @@
-//! Left function pane — sessions, connections, sidebar files, and monitor.
+//! Left function pane — sessions, connections, commands, sidebar files, and monitor.
 
+pub mod commands_view;
 pub mod common;
 pub mod connections;
 pub mod files_view;
@@ -8,9 +9,9 @@ pub mod pages;
 pub mod session_list;
 pub mod workspace_view;
 
+use crate::persist::types::{ConnectionType, FavoriteCommand, SavedConnection};
 use crate::session::WorkspaceSession;
 use crate::settings::AppSettings;
-use crate::storage::types::{ConnectionType, SavedConnection};
 use crate::ui::function_pane::pages::FunctionPage;
 use crate::ui::shell::layout_state::WorkspaceLayout;
 use crate::ui::shell::messages::FunctionAction;
@@ -166,6 +167,7 @@ pub fn render(
     workspace: &WorkspaceLayout,
     highlighted_session: Option<&str>,
     connections: &[SavedConnection],
+    favorite_commands: &[FavoriteCommand],
     settings: &AppSettings,
     _page_slide: f32,
 ) -> FunctionAction {
@@ -187,6 +189,7 @@ pub fn render(
 
     let active_tip = rust_i18n::t!("sidebar_tab_active");
     let conn_tip = rust_i18n::t!("sidebar_tab_connections");
+    let cmds_tip = rust_i18n::t!("sidebar_tab_commands");
     let files_tip = rust_i18n::t!("sidebar_tab_files");
     let monitor_tip = rust_i18n::t!("sidebar_tab_monitor");
 
@@ -201,6 +204,11 @@ pub fn render(
             id: FunctionPage::Connections.as_tab_id(),
             icon: Icon::Connections,
             tip: conn_tip.as_ref(),
+        },
+        TabBarItem {
+            id: FunctionPage::Commands.as_tab_id(),
+            icon: Icon::Commands,
+            tip: cmds_tip.as_ref(),
         },
     ];
     if show_files {
@@ -244,6 +252,7 @@ pub fn render(
                     settings,
                 ),
                 FunctionPage::Connections => connections::render(ui, connections),
+                FunctionPage::Commands => commands_view::render(ui, favorite_commands),
                 FunctionPage::Files => {
                     files_view::render(ui, sessions, focused, connections)
                 }

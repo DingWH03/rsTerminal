@@ -2,7 +2,7 @@
 
 use crate::session::file_manager::{FileManagerMode, FileManagerSession};
 use crate::session::terminal::ActiveSession;
-use crate::storage::types::ConnectionType;
+use crate::persist::types::ConnectionType;
 
 /// 工作区标签页：可以是终端仿真器或文件管理器。
 pub enum WorkspaceSession {

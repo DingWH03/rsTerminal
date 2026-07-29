@@ -14,7 +14,7 @@ use crate::connection::{
     emit_conn_port_data, emit_conn_ports_changed, ConnIn, ConnOut, ConnectionHandle,
     ConnectionPort, ConnectionPortKind, ConnectionState, RepaintNotifier,
 };
-use crate::storage::types::SavedConnection;
+use crate::persist::types::SavedConnection;
 
 // ---------------------------------------------------------------------------
 // Built-in BLE terminal profiles

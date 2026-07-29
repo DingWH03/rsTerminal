@@ -9,7 +9,7 @@ pub mod messages;
 
 use crate::session::WorkspaceSession;
 use crate::settings::AppSettings;
-use crate::storage::types::SavedConnection;
+use crate::persist::types::SavedConnection;
 use crate::ui::function_pane::{self, drag_split_enabled, split_enabled, FunctionPane};
 use crate::ui::page::settings::settings_dialog;
 use crate::ui::uiframe::{DialogFrame, DialogOutcome};
@@ -126,6 +126,7 @@ impl AppShell {
         sessions: &mut [WorkspaceSession],
         settings: &mut AppSettings,
         saved_connections: &[SavedConnection],
+        favorite_commands: &[crate::persist::types::FavoriteCommand],
         virtual_keyboard: &mut VirtualKeyboard,
         live_font_size: &mut f32,
         suppress_terminal_input: bool,
@@ -194,7 +195,7 @@ impl AppShell {
             }
 
             let inner = panel.show_inside(ui, |ui| {
-                result.function_action = function_pane::render(
+                let pane_action = function_pane::render(
                     ui,
                     &mut self.function_pane,
                     &mut self.layout.function_page,
@@ -202,9 +203,11 @@ impl AppShell {
                     &self.layout.workspace,
                     self.layout.workspace.highlighted_session_id(),
                     saved_connections,
+                    favorite_commands,
                     settings,
                     self.animations.page_slide.current,
                 );
+                result.function_action.merge_from(pane_action);
             });
 
             if is_wide {

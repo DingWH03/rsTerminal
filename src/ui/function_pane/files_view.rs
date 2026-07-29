@@ -4,7 +4,7 @@
 //! and applies browse / DnD gestures.
 
 use crate::session::{tick_session_files, WorkspaceSession};
-use crate::storage::types::{ConnectionType, SavedConnection};
+use crate::persist::types::{ConnectionType, SavedConnection};
 use crate::ui::shell::messages::FunctionAction;
 use crate::ui::uiframe::components::empty_state::{paint_empty_state, EmptyStateConfig};
 use crate::ui::uiframe::file_list::FileListView;

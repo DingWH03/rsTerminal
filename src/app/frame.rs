@@ -4,6 +4,7 @@ use super::RsTerminalApp;
 use crate::settings::save_settings;
 use crate::session::{ConnectionViewAction, WorkspaceSession};
 use crate::ui::function_pane::pages::FunctionPage;
+use crate::ui::page::dialogs::FavoriteCommandOutcome;
 
 impl RsTerminalApp {
     pub(crate) fn frame_logic(&mut self, ctx: &egui::Context) {
@@ -73,8 +74,14 @@ impl RsTerminalApp {
             }
         }
 
+        if self.shell.layout.commands_manage_dialog_open {
+            self.manage_commands_dialog.open = true;
+        }
+
         let suppress_terminal_input = self.new_conn_dialog.open
             || self.local_term_dialog.open
+            || self.favorite_cmd_dialog.open
+            || self.manage_commands_dialog.open
             || self.show_quit_dialog
             || self.shell.layout.settings_dialog_open
             || self.shell.layout.help_dialog_open
@@ -86,6 +93,7 @@ impl RsTerminalApp {
             &mut self.sessions,
             &mut self.settings,
             &self.saved_connections,
+            &self.favorite_commands,
             &mut self.virtual_keyboard,
             &mut self.live_font_size,
             suppress_terminal_input,
@@ -110,6 +118,10 @@ impl RsTerminalApp {
 
         if fa.new_connection {
             self.new_conn_dialog.open_new();
+            self.release_terminal_keyboard_focus(&ctx);
+        }
+        if fa.new_favorite_command {
+            self.favorite_cmd_dialog.open_new();
             self.release_terminal_keyboard_focus(&ctx);
         }
         if let Some(ref id) = fa.connect_connection {
@@ -137,6 +149,18 @@ impl RsTerminalApp {
                 self.shell.function_pane.close_overlay();
             }
         }
+        if let Some(ref id) = fa.run_favorite_command {
+            self.run_favorite_command(id, &ctx);
+        }
+        if let Some(ref id) = fa.edit_favorite_command {
+            if let Some(cmd) = self.favorite_commands.iter().find(|c| c.id == *id).cloned() {
+                self.favorite_cmd_dialog.open_edit(&cmd);
+                self.release_terminal_keyboard_focus(&ctx);
+            }
+        }
+        if let Some(ref id) = fa.delete_favorite_command {
+            self.delete_favorite_command(id);
+        }
 
         if let Some(req) = wa.connect_from_empty.clone() {
             self.connect_to_pane(&req.connection_id, req.pane);
@@ -158,6 +182,31 @@ impl RsTerminalApp {
 
         if let Some(new_conn) = self.new_conn_dialog.show(&ctx) {
             self.save_connection(new_conn);
+        }
+
+        match self.favorite_cmd_dialog.show(&ctx) {
+            FavoriteCommandOutcome::Saved(cmd) => self.save_favorite_command(cmd),
+            FavoriteCommandOutcome::None => {}
+        }
+
+        let manage = self
+            .manage_commands_dialog
+            .show(&ctx, &self.favorite_commands);
+        if !self.manage_commands_dialog.open {
+            self.shell.layout.commands_manage_dialog_open = false;
+        }
+        if manage.new {
+            self.favorite_cmd_dialog.open_new();
+            self.release_terminal_keyboard_focus(&ctx);
+        }
+        if let Some(id) = manage.edit_id {
+            if let Some(cmd) = self.favorite_commands.iter().find(|c| c.id == id).cloned() {
+                self.favorite_cmd_dialog.open_edit(&cmd);
+                self.release_terminal_keyboard_focus(&ctx);
+            }
+        }
+        if let Some(id) = manage.delete_id {
+            self.delete_favorite_command(&id);
         }
 
         if let Some(pane) = wa.close_pane_session {
