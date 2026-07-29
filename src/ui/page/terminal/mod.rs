@@ -920,6 +920,14 @@ pub fn connection_view(
         ui.ctx().memory_mut(|mem| {
             mem.surrender_focus(term_widget_id);
         });
+        #[cfg(target_os = "android")]
+        {
+            if keyboard.terminal_ime_enabled {
+                keyboard.terminal_ime_enabled = false;
+            }
+            // Terminal left IMEPurpose::Terminal set; dialog TextEdits need Normal.
+            crate::platform::android_ime::release_terminal_ime_for_text_fields(ui.ctx());
+        }
     }
     #[cfg(target_os = "android")]
     {

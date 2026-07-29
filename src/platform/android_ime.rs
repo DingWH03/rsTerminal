@@ -81,7 +81,8 @@ fn get_status_bar_height_px(app: &AndroidApp) -> i32 {
 /// Explicitly ask the Activity to show rsTerminal's Android IME bridge.
 ///
 /// This is only used by the terminal canvas after a user tap. Standard egui
-/// `TextEdit` widgets keep using the normal egui/winit IME path.
+/// `TextEdit` widgets keep using the normal egui/winit IME path — call
+/// [`prepare_text_field_ime`] when a dialog text field needs the soft keyboard.
 pub fn show_soft_input() {
     // SHOW_FORCED is intentional here: after Android Back hides the keyboard,
     // some IMEs ignore SHOW_IMPLICIT for an already-focused custom view. The
@@ -92,6 +93,26 @@ pub fn show_soft_input() {
 /// Explicitly hide the Android soft keyboard through the Activity bridge.
 pub fn hide_soft_input() {
     call_activity_ime_method(jni_str!("hideIme"), 0);
+}
+
+/// Prepare the Android soft keyboard for a normal egui [`egui::TextEdit`].
+///
+/// After the terminal canvas has set `IMEPurpose::Terminal` and focused the
+/// custom IME bridge, floating dialogs will not get a keyboard until purpose is
+/// reset to `Normal` and the Activity bridge is asked to show input again.
+pub fn prepare_text_field_ime(ctx: &Context, ime_area: egui::Rect) {
+    use egui::viewport::{IMEPurpose, ViewportCommand};
+    ctx.send_viewport_cmd(ViewportCommand::IMEPurpose(IMEPurpose::Normal));
+    ctx.send_viewport_cmd(ViewportCommand::IMEAllowed(true));
+    ctx.send_viewport_cmd(ViewportCommand::IMERect(ime_area));
+    show_soft_input();
+}
+
+/// Leave terminal IME ownership so dialog / TextEdit IME can take over.
+pub fn release_terminal_ime_for_text_fields(ctx: &Context) {
+    use egui::viewport::{IMEPurpose, ViewportCommand};
+    ctx.send_viewport_cmd(ViewportCommand::IMEPurpose(IMEPurpose::Normal));
+    ctx.send_viewport_cmd(ViewportCommand::IMEAllowed(true));
 }
 
 fn call_activity_ime_method(method: &jni::strings::JNIStr, mode: i32) {

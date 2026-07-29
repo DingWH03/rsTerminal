@@ -4,6 +4,7 @@ pub mod animations;
 pub mod coordinator;
 pub mod layout_preview;
 pub mod layout_state;
+pub mod menu;
 pub mod messages;
 
 use crate::session::WorkspaceSession;
@@ -11,7 +12,7 @@ use crate::settings::AppSettings;
 use crate::storage::types::SavedConnection;
 use crate::ui::function_pane::{self, drag_split_enabled, split_enabled, FunctionPane};
 use crate::ui::page::settings::settings_dialog;
-use crate::ui::uiframe::{DialogFrame, DialogOutcome, TopBar, TopBarAction};
+use crate::ui::uiframe::{DialogFrame, DialogOutcome};
 use crate::ui::uiframe::keyboard::VirtualKeyboard;
 use crate::ui::workspace_pane::{self, drag_drop::ActiveDrag, WorkspacePaneContext};
 
@@ -145,12 +146,20 @@ impl AppShell {
 
         ui.add_space(top_inset);
 
-        // Top menu bar (wide and narrow). Applied after pane render so actions are not overwritten.
-        let mut top_action = TopBarAction::None;
+        // Top menu bar (wide and narrow).
         egui::Panel::top("app_top_bar")
-            .exact_size(TopBar::HEIGHT)
+            .exact_size(menu::HEIGHT)
             .show_inside(ui, |ui| {
-                top_action = TopBar::show(ui);
+                menu::show_and_apply(
+                    ui,
+                    menu::AppMenuState {
+                        sidebar_toggle_enabled: self.function_pane.wide,
+                        sidebar_visible: self.function_pane.docked_open(),
+                    },
+                    &mut self.layout,
+                    &mut self.function_pane,
+                    &mut result,
+                );
             });
 
         let is_wide = self.function_pane.wide;
@@ -289,23 +298,6 @@ impl AppShell {
             }
             self.active_drag = None;
             self.last_drop_zone = None;
-        }
-
-        match top_action {
-            TopBarAction::NewConnection => {
-                result.function_action.new_connection = true;
-            }
-            TopBarAction::OpenConnections => {
-                self.layout.connections_dialog_open = true;
-            }
-            TopBarAction::OpenSettings => {
-                self.layout.settings_dialog_open = true;
-                result.settings_opened = true;
-            }
-            TopBarAction::OpenHelp => {
-                self.layout.help_dialog_open = true;
-            }
-            TopBarAction::None => {}
         }
 
         // Open Connection dialog (same list as sidebar Connections tab)

@@ -52,6 +52,18 @@ impl FunctionPane {
         self.wide && self.docked_open
     }
 
+    /// Whether the docked sidebar is open (independent of wide layout).
+    pub fn docked_open(&self) -> bool {
+        self.docked_open
+    }
+
+    /// Toggle docked sidebar visibility. No-op when not in wide layout.
+    pub fn toggle_docked_sidebar(&mut self) {
+        if self.wide {
+            self.docked_open = !self.docked_open;
+        }
+    }
+
     pub fn overlay_visible(&self) -> bool {
         !self.wide && self.overlay_open
     }

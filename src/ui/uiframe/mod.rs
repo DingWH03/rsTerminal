@@ -2,22 +2,27 @@
 //!
 //! Business UI (`shell`, `function_pane`, `page`, `workspace_pane`) should
 //! *compose* these primitives; avoid putting app-specific session logic here.
+//!
+//! | Module | Role |
+//! |--------|------|
+//! | [`menu_bar`] | Declarative menu bar chrome |
+//! | [`dialog`] | Centered dialog window frame |
+//! | [`tab_bar`] / [`file_list`] / [`components`] | Shared widgets |
+//! | [`style`] / [`vector_icons`] | Visual tokens |
 
 pub mod animation;
 pub mod clipboard;
 pub mod components;
 pub mod dialog;
-pub mod dialogs;
 pub mod file_list;
 pub mod keyboard;
-pub mod sidebar;
+pub mod menu_bar;
 pub mod split_handle;
 pub mod style;
 pub mod tab_bar;
-pub mod top_bar;
 pub mod vector_icons;
 
 pub use dialog::{DialogFrame, DialogOutcome};
 pub use file_list::{FileListAction, FileListView};
+pub use menu_bar::{MenuBar, MenuBarSpec, MenuEntry, MenuEntryId, MenuGroup};
 pub use tab_bar::{TabBar, TabBarItem};
-pub use top_bar::{TopBar, TopBarAction};

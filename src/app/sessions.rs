@@ -1,0 +1,289 @@
+//! Session open/close/duplicate/drain/reconnect/file-manager.
+
+use log::info;
+
+use super::RsTerminalApp;
+use crate::connection::ssh;
+#[cfg(not(target_os = "android"))]
+use crate::connection::local;
+use crate::session::{
+    drain_connection, ActiveSession, ConnectionViewAction, FileManagerMode,
+    FileManagerSession, WorkspaceSession,
+};
+use crate::storage::types::{ConnectionType, SavedConnection};
+use crate::terminal::{DEFAULT_GRID_COLS, DEFAULT_GRID_ROWS};
+use crate::terminal::Terminal;
+use crate::ui::shell::coordinator::ShellCoordinator;
+use crate::ui::uiframe::keyboard::VirtualKeyboard;
+
+impl RsTerminalApp {
+    pub(crate) fn push_session(&mut self, session: WorkspaceSession) {
+        let id = session.id().to_string();
+        self.sessions.push(session);
+        ShellCoordinator::assign_new_session(&mut self.shell.layout, id);
+    }
+
+    pub(crate) fn open_file_manager_ssh(&mut self, conn_id: &str) {
+        let config = match self.saved_connections.iter().find(|c| c.id == conn_id) {
+            Some(c) => c.clone(),
+            None => return,
+        };
+        match FileManagerSession::open_ssh(&config) {
+            Ok(fm) => self.push_session(WorkspaceSession::FileManager(fm)),
+            Err(e) => info!("SFTP failed: {e}"),
+        }
+    }
+
+    pub(crate) fn open_file_manager_local(&mut self) {
+        self.push_session(WorkspaceSession::FileManager(FileManagerSession::open_local()));
+    }
+
+    #[cfg(not(target_os = "android"))]
+    pub(crate) fn reconnect_local_session(&mut self, session_id: &str, config: &SavedConnection) {
+        let Some(idx) = self.sessions.iter().position(|s| s.id() == session_id) else {
+            return;
+        };
+        let WorkspaceSession::Terminal(term) = &mut self.sessions[idx] else {
+            return;
+        };
+        if term.conn_type != ConnectionType::Local {
+            return;
+        }
+        term.handle.close();
+        let profile = self.settings.default_profile().clone();
+        let rows = term.last_pty_rows.max(1);
+        let cols = term.last_pty_cols.max(1);
+        match local::connect_local(config, &profile, rows, cols) {
+            Ok(handle) => {
+                term.handle = handle;
+                term.saved_conn_id = Some(config.id.clone());
+                term.name = config.name.clone();
+                term.user_at_host = crate::platform::get().local_user_at_host();
+                term.want_terminal_focus = true;
+                term.selection = None;
+                term.selection_pointer = None;
+            }
+            Err(e) => term.disconnect_message = Some(e),
+        }
+    }
+
+    pub(crate) fn duplicate_session(&mut self, session_id: &str) {
+        enum DupPlan {
+            #[cfg(not(target_os = "android"))]
+            TerminalLocal,
+            TerminalSsh(String),
+            FileSsh(String),
+            FileLocal,
+        }
+        let plan = self.sessions.iter().find(|s| s.id() == session_id).and_then(|s| {
+            match s {
+                WorkspaceSession::Terminal(term) => match term.conn_type {
+                    #[cfg(not(target_os = "android"))]
+                    ConnectionType::Local => Some(DupPlan::TerminalLocal),
+                    #[cfg(target_os = "android")]
+                    ConnectionType::Local => None,
+                    ConnectionType::Ssh => term.saved_conn_id.clone().map(DupPlan::TerminalSsh),
+                    ConnectionType::Serial | ConnectionType::Ble => None,
+                },
+                WorkspaceSession::FileManager(fm) => match fm.mode {
+                    FileManagerMode::SshSftp => fm.saved_conn_id.clone().map(DupPlan::FileSsh),
+                    FileManagerMode::LocalDual => Some(DupPlan::FileLocal),
+                },
+            }
+        });
+        match plan {
+            #[cfg(not(target_os = "android"))]
+            Some(DupPlan::TerminalLocal) => self.connect_local(),
+            Some(DupPlan::TerminalSsh(id)) => self.connect_to(&id),
+            Some(DupPlan::FileSsh(id)) => self.open_file_manager_ssh(&id),
+            Some(DupPlan::FileLocal) => self.open_file_manager_local(),
+            None => {}
+        }
+    }
+
+    pub(crate) fn open_session(
+        &mut self,
+        handle: crate::connection::ConnectionHandle,
+        config: &SavedConnection,
+        scrollback_lines: usize,
+    ) {
+        self.open_session_in_pane(
+            handle,
+            config,
+            scrollback_lines,
+            self.shell.layout.workspace.focused_pane,
+            None,
+        );
+    }
+
+    pub(crate) fn open_session_in_pane(
+        &mut self,
+        handle: crate::connection::ConnectionHandle,
+        config: &SavedConnection,
+        scrollback_lines: usize,
+        pane: crate::ui::shell::layout_state::PaneId,
+        ssh_extras: Option<(
+            crate::remote::SessionMetrics,
+            std::sync::Arc<crate::fs::sftp::SftpClient>,
+        )>,
+    ) {
+        let profile = self.settings.default_profile();
+        let mut terminal = Terminal::new(DEFAULT_GRID_ROWS, DEFAULT_GRID_COLS);
+        terminal.set_scrollback_limit(scrollback_lines);
+        self.live_font_size = profile.font_size;
+        self.virtual_keyboard = VirtualKeyboard::new(profile.keyboard_mode);
+
+        let user_at_host = match config.conn_type {
+            ConnectionType::Local => crate::platform::get().local_user_at_host(),
+            ConnectionType::Ssh => {
+                let user = config.ssh_user.as_deref().unwrap_or("root");
+                let host = config.ssh_host.as_deref().unwrap_or("host");
+                crate::platform::get().ssh_user_at_host(user, host)
+            }
+            _ => String::new(),
+        };
+
+        let (metrics, session_sftp) = match ssh_extras {
+            Some((m, s)) => (m, Some(s)),
+            None => (crate::remote::SessionMetrics::new(), None),
+        };
+
+        let id = uuid::Uuid::new_v4().to_string();
+        self.sessions.push(WorkspaceSession::Terminal(ActiveSession {
+            id: id.clone(),
+            conn_type: config.conn_type.clone(),
+            saved_conn_id: Some(config.id.clone()),
+            name: config.name.clone(),
+            user_at_host,
+            handle,
+            terminal,
+            active_port: 0,
+            ports: Vec::new(),
+            inactive_port_states: Default::default(),
+            port_unread: Default::default(),
+            scrollback_lines,
+            scroll_offset: 0,
+            selection: None,
+            selection_pointer: None,
+            touch_state: Default::default(),
+            want_terminal_focus: true,
+            terminal_had_focus: false,
+            row_galley_cache: Default::default(),
+            layout_font_size: self.live_font_size,
+            grid_rows: DEFAULT_GRID_ROWS,
+            grid_cols: DEFAULT_GRID_COLS,
+            last_pty_rows: DEFAULT_GRID_ROWS as u16,
+            last_pty_cols: DEFAULT_GRID_COLS as u16,
+            size_label_dims: (DEFAULT_GRID_COLS, DEFAULT_GRID_ROWS),
+            size_label_hide_at: None,
+            size_label_active: false,
+            mouse_motion_last: None,
+            font_generation: crate::fonts::font_generation(),
+            disconnect_message: None,
+            metrics,
+            session_sftp,
+            files: Default::default(),
+        }));
+        ShellCoordinator::assign_session_to_pane(&mut self.shell.layout, pane, id);
+    }
+
+    pub(crate) fn has_open_sessions(&self) -> bool {
+        !self.sessions.is_empty()
+    }
+
+    pub(crate) fn close_all_sessions(&mut self) {
+        let ids: Vec<String> = self.sessions.iter().map(|s| s.id().to_string()).collect();
+        for id in ids {
+            self.close_session(&id);
+        }
+    }
+
+    pub(crate) fn close_pane_and_maybe_session(
+        &mut self,
+        pane: crate::ui::shell::layout_state::PaneId,
+    ) {
+        let sid = self
+            .shell
+            .layout
+            .workspace
+            .panes
+            .get(&pane)
+            .and_then(|p| p.session_id.clone());
+        if self.shell.layout.workspace.pane_count() > 1 {
+            self.shell.layout.workspace.close_pane(pane);
+        }
+        if let Some(id) = sid {
+            self.close_session(&id);
+        }
+    }
+
+    pub(crate) fn close_session(&mut self, id: &str) {
+        if let Some(pos) = self.sessions.iter().position(|s| s.id() == id) {
+            if let WorkspaceSession::Terminal(s) = &mut self.sessions[pos] {
+                s.handle.close();
+            }
+            self.sessions.remove(pos);
+        }
+        ShellCoordinator::on_sessions_closed(&mut self.shell.layout, id);
+        if self.sessions.is_empty() {
+            self.save_profile_tweaks();
+        }
+    }
+
+    pub(crate) fn drain_inactive_sessions(&mut self) {
+        let active = self.shell.focused_session_id();
+        for session in &mut self.sessions {
+            if active == Some(session.id()) {
+                continue;
+            }
+            if let Some(term) = session.terminal_mut() {
+                let mut noop = ConnectionViewAction::None;
+                drain_connection(term, &mut noop);
+            }
+        }
+    }
+
+    pub(crate) fn focused_session_index(&self) -> Option<usize> {
+        self.shell
+            .focused_session_id()
+            .and_then(|id| self.sessions.iter().position(|s| s.id() == id))
+    }
+
+    pub(crate) fn reconnect_ssh_session(&mut self, pane: crate::ui::shell::layout_state::PaneId, conn_id: &str) {
+        if let Some(sid) = self
+            .shell
+            .layout
+            .workspace
+            .panes
+            .get(&pane)
+            .and_then(|p| p.session_id.clone())
+        {
+            if let Some(idx) = self.sessions.iter().position(|s| s.id() == sid) {
+                if let WorkspaceSession::Terminal(session) = &mut self.sessions[idx] {
+                    if matches!(session.conn_type, ConnectionType::Ssh) {
+                        if let Some(config) =
+                            self.saved_connections.iter().find(|c| c.id == *conn_id)
+                        {
+                            match ssh::connect_ssh_session(
+                                config,
+                                &self.settings.ssh_env_vars,
+                                24,
+                                80,
+                            ) {
+                                Ok(out) => {
+                                    session.handle = out.handle;
+                                    session.metrics = out.metrics;
+                                    session.session_sftp = Some(out.sftp);
+                                    session.files.invalidate_pending();
+                                    session.disconnect_message = None;
+                                    session.want_terminal_focus = true;
+                                }
+                                Err(e) => self.connection_notice = Some(e),
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

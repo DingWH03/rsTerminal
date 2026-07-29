@@ -4,11 +4,38 @@
 //! 包含自动扫描串口设备和 BLE 设备的功能。
 //! 以居中弹出 Window 显示；窗口内顶部用下拉框选择类型，下方按类型显示配置。
 
+pub mod notices;
+
+pub use notices::{paint_connection_notice, paint_quit_confirm};
+
 use std::sync::mpsc;
 
-use crate::storage::types::{ConnectionType, SavedConnection};
 use crate::connection::enumeration::{enumerate_serial_ports, scan_ble_devices_blocking};
+use crate::storage::types::{ConnectionType, SavedConnection};
 use crate::ui::uiframe::style;
+
+/// On Android, show the soft keyboard for a focused dialog text field.
+///
+/// The terminal canvas uses a custom IME bridge with `IMEPurpose::Terminal`;
+/// dialogs must reset to `Normal` and explicitly request soft input.
+fn android_ime_for_text_edit(ui: &egui::Ui, resp: &egui::Response, force: bool) {
+    #[cfg(target_os = "android")]
+    {
+        if force || resp.gained_focus() || resp.clicked() {
+            crate::platform::android_ime::prepare_text_field_ime(ui.ctx(), resp.rect);
+        }
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (ui, resp, force);
+    }
+}
+
+fn dialog_text_edit(ui: &mut egui::Ui, text: &mut String) -> egui::Response {
+    let resp = ui.text_edit_singleline(text);
+    android_ime_for_text_edit(ui, &resp, false);
+    resp
+}
 
 /// Outcome of painting the connection form for one frame.
 pub enum ConnectionFormOutcome {
@@ -215,10 +242,12 @@ impl NewConnectionDialog {
         ui.horizontal(|ui| {
             ui.label(rust_i18n::t!("dialog_name"));
             let name_edit = ui.text_edit_singleline(&mut self.name);
+            let force_ime = self.request_name_focus;
             if self.request_name_focus {
                 name_edit.request_focus();
                 self.request_name_focus = false;
             }
+            android_ime_for_text_edit(ui, &name_edit, force_ime);
         });
 
         ui.add_space(12.0);
@@ -229,31 +258,32 @@ impl NewConnectionDialog {
             ConnectionType::Local => {
                 ui.horizontal(|ui| {
                     ui.label(rust_i18n::t!("dialog_shell"));
-                    ui.text_edit_singleline(&mut self.shell);
+                    dialog_text_edit(ui, &mut self.shell);
                 });
                 ui.horizontal(|ui| {
                     ui.label(rust_i18n::t!("dialog_working_dir"));
-                    ui.text_edit_singleline(&mut self.working_dir);
+                    dialog_text_edit(ui, &mut self.working_dir);
                 });
             }
             ConnectionType::Ssh => {
                 ui.horizontal(|ui| {
                     ui.label(rust_i18n::t!("dialog_host"));
-                    ui.text_edit_singleline(&mut self.ssh_host);
+                    dialog_text_edit(ui, &mut self.ssh_host);
                 });
                 ui.horizontal(|ui| {
                     ui.label(rust_i18n::t!("dialog_port"));
-                    ui.text_edit_singleline(&mut self.ssh_port);
+                    dialog_text_edit(ui, &mut self.ssh_port);
                 });
                 ui.horizontal(|ui| {
                     ui.label(rust_i18n::t!("dialog_user"));
-                    ui.text_edit_singleline(&mut self.ssh_user);
+                    dialog_text_edit(ui, &mut self.ssh_user);
                 });
                 ui.horizontal(|ui| {
                     ui.label(rust_i18n::t!("dialog_password"));
-                    ui.add(
+                    let resp = ui.add(
                         egui::TextEdit::singleline(&mut self.ssh_password).password(true),
                     );
+                    android_ime_for_text_edit(ui, &resp, false);
                 });
                 ui.label(
                     egui::RichText::new(rust_i18n::t!("dialog_ssh_password_hint"))
@@ -270,7 +300,7 @@ impl NewConnectionDialog {
                 if self.serial_devices.is_empty() {
                     ui.horizontal(|ui| {
                         ui.label(rust_i18n::t!("dialog_device"));
-                        ui.text_edit_singleline(&mut self.serial_port);
+                        dialog_text_edit(ui, &mut self.serial_port);
                     });
                 } else {
                     let selected_text = self
@@ -294,7 +324,7 @@ impl NewConnectionDialog {
                 }
                 ui.horizontal(|ui| {
                     ui.label(rust_i18n::t!("dialog_baud_rate"));
-                    ui.text_edit_singleline(&mut self.serial_baud);
+                    dialog_text_edit(ui, &mut self.serial_baud);
                 });
             }
             ConnectionType::Ble => {
@@ -324,7 +354,7 @@ impl NewConnectionDialog {
                     );
                     ui.horizontal(|ui| {
                         ui.label(rust_i18n::t!("dialog_device_name"));
-                        ui.text_edit_singleline(&mut self.ble_device);
+                        dialog_text_edit(ui, &mut self.ble_device);
                     });
                 } else if !self.ble_devices.is_empty() {
                     let selected = if self.ble_device.is_empty() {
@@ -675,11 +705,11 @@ impl LocalTerminalSettingsDialog {
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
                     ui.label(rust_i18n::t!("dialog_shell"));
-                    ui.text_edit_singleline(&mut self.shell);
+                    dialog_text_edit(ui, &mut self.shell);
                 });
                 ui.horizontal(|ui| {
                     ui.label(rust_i18n::t!("dialog_working_dir"));
-                    ui.text_edit_singleline(&mut self.working_dir);
+                    dialog_text_edit(ui, &mut self.working_dir);
                 });
                 let hint = if self.session_id.is_some() {
                     rust_i18n::t!("dialog_reconnect_hint")
