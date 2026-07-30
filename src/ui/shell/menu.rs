@@ -27,6 +27,7 @@ pub enum AppMenuAction {
     ManageFavoriteCommands,
     ToggleSidebar,
     OpenSettings,
+    ManageAuthUsers,
     OpenHelp,
 }
 
@@ -37,6 +38,7 @@ const ID_PREF_SETTINGS: MenuEntryId = 4;
 const ID_HELP_ABOUT: MenuEntryId = 5;
 const ID_CMD_NEW: MenuEntryId = 6;
 const ID_CMD_MANAGE: MenuEntryId = 7;
+const ID_PREF_USERS: MenuEntryId = 8;
 
 /// Height of the menu bar chrome.
 pub const HEIGHT: f32 = MenuBar::HEIGHT;
@@ -53,6 +55,7 @@ pub fn show(ui: &mut egui::Ui, state: AppMenuState) -> AppMenuAction {
     let t_sidebar = rust_i18n::t!("menu_view_sidebar");
     let t_pref = rust_i18n::t!("menu_preferences");
     let t_settings = rust_i18n::t!("menu_settings");
+    let t_users = rust_i18n::t!("menu_preferences_users");
     let t_help = rust_i18n::t!("menu_help");
     let t_about = rust_i18n::t!("menu_about");
 
@@ -82,10 +85,16 @@ pub fn show(ui: &mut egui::Ui, state: AppMenuState) -> AppMenuAction {
         checked: state.sidebar_visible,
         enabled: state.sidebar_toggle_enabled,
     }];
-    let pref_entries = [MenuEntry::Button {
-        id: ID_PREF_SETTINGS,
-        label: t_settings.as_ref(),
-    }];
+    let pref_entries = [
+        MenuEntry::Button {
+            id: ID_PREF_SETTINGS,
+            label: t_settings.as_ref(),
+        },
+        MenuEntry::Button {
+            id: ID_PREF_USERS,
+            label: t_users.as_ref(),
+        },
+    ];
     let help_entries = [MenuEntry::Button {
         id: ID_HELP_ABOUT,
         label: t_about.as_ref(),
@@ -121,6 +130,7 @@ pub fn show(ui: &mut egui::Ui, state: AppMenuState) -> AppMenuAction {
         Some(ID_CMD_MANAGE) => AppMenuAction::ManageFavoriteCommands,
         Some(ID_VIEW_SIDEBAR) => AppMenuAction::ToggleSidebar,
         Some(ID_PREF_SETTINGS) => AppMenuAction::OpenSettings,
+        Some(ID_PREF_USERS) => AppMenuAction::ManageAuthUsers,
         Some(ID_HELP_ABOUT) => AppMenuAction::OpenHelp,
         _ => AppMenuAction::None,
     }
@@ -152,6 +162,9 @@ pub fn apply(
         AppMenuAction::OpenSettings => {
             layout.settings_dialog_open = true;
             result.settings_opened = true;
+        }
+        AppMenuAction::ManageAuthUsers => {
+            layout.users_manage_dialog_open = true;
         }
         AppMenuAction::OpenHelp => {
             layout.help_dialog_open = true;

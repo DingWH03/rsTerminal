@@ -53,14 +53,11 @@ impl SettingsTab {
 
 // ─── 公开入口函数 ──────────────────────────────────────────────────────
 
-/// Settings as a centered dialog window. Returns `true` when the user closes it.
+/// Settings as an independent dialog window. Returns `true` when the user closes it.
 pub fn settings_dialog(ctx: &egui::Context, settings: &mut AppSettings) -> bool {
     use crate::ui::uiframe::{DialogFrame, DialogOutcome};
 
-    let frame = DialogFrame::new(rust_i18n::t!("settings").to_string())
-        .width(560.0)
-        .height(Some(520.0))
-        .resizable(true);
+    let frame = DialogFrame::new(rust_i18n::t!("settings").to_string());
 
     let outcome = frame.show(ctx, "settings_dialog", |ui| {
         settings_scroll_body(ui, settings, SettingsLayout::Dialog);
@@ -115,6 +112,8 @@ pub fn settings_side_panel(ui: &mut egui::Ui, settings: &mut AppSettings) -> boo
         });
     });
     ui.add_space(2.0);
+    ui.separator();
+    ui.add_space(4.0);
     settings_scroll_body(ui, settings, SettingsLayout::Workspace);
     close
 }
@@ -132,8 +131,34 @@ enum SettingsLayout {
     Dialog,
 }
 
-fn settings_scroll_body(ui: &mut egui::Ui, settings: &mut AppSettings, layout: SettingsLayout) {
+fn settings_scroll_body(
+    ui: &mut egui::Ui,
+    settings: &mut AppSettings,
+    layout: SettingsLayout,
+) {
     let scroll_w = page_content_width(ui);
+    let mut paint = |ui: &mut egui::Ui| {
+        ui.set_width(scroll_w);
+        ui.set_max_width(scroll_w);
+        ui.push_id(
+            match layout {
+                SettingsLayout::Home => "home",
+                SettingsLayout::Workspace => "workspace",
+                SettingsLayout::Dialog => "dialog",
+            },
+            |ui| {
+                fill_page_width(ui);
+                settings_page_body(ui, settings);
+            },
+        );
+    };
+
+    // DialogFrame already provides vertical scroll — avoid nested scrollbars.
+    if matches!(layout, SettingsLayout::Dialog) {
+        paint(ui);
+        return;
+    }
+
     egui::ScrollArea::vertical()
         .id_salt(match layout {
             SettingsLayout::Home => "settings_page_scroll",
@@ -141,18 +166,7 @@ fn settings_scroll_body(ui: &mut egui::Ui, settings: &mut AppSettings, layout: S
             SettingsLayout::Dialog => "settings_dialog_scroll",
         })
         .auto_shrink([false; 2])
-        .show(ui, |ui| {
-            ui.set_width(scroll_w);
-            ui.set_max_width(scroll_w);
-            ui.push_id(match layout {
-                SettingsLayout::Home => "home",
-                SettingsLayout::Workspace => "workspace",
-                SettingsLayout::Dialog => "dialog",
-            }, |ui| {
-                fill_page_width(ui);
-                settings_page_body(ui, settings);
-            });
-        });
+        .show(ui, paint);
 }
 
 #[derive(Clone, Copy)]
@@ -227,7 +241,7 @@ pub fn settings_page_body(ui: &mut egui::Ui, settings: &mut AppSettings) {
     let layout = SettingsFormLayout::from_ui(ui);
 
     let mut state: TabState = ui.memory_mut(|mem|
-        mem.data.get_persisted::<TabState>(ui.id().with("settings_tab_state"))
+        mem.data.get_persisted::<TabState>(ui.id().with("settings_tab_state_v2"))
     ).unwrap_or_default();
 
     tab_bar(ui, layout, &mut state);
@@ -246,7 +260,7 @@ pub fn settings_page_body(ui: &mut egui::Ui, settings: &mut AppSettings) {
     }
 
     ui.memory_mut(|mem| {
-        mem.data.insert_persisted(ui.id().with("settings_tab_state"), state);
+        mem.data.insert_persisted(ui.id().with("settings_tab_state_v2"), state);
     });
 }
 

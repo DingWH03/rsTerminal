@@ -63,6 +63,10 @@ impl RsTerminalApp {
             self.new_conn_dialog.close();
             return true;
         }
+        if self.auth_user_dialog.open {
+            self.auth_user_dialog.close();
+            return true;
+        }
         if self.favorite_cmd_dialog.open {
             self.favorite_cmd_dialog.close();
             return true;
@@ -70,6 +74,10 @@ impl RsTerminalApp {
         if self.manage_commands_dialog.open {
             self.manage_commands_dialog.open = false;
             self.shell.layout.commands_manage_dialog_open = false;
+            return true;
+        }
+        if self.shell.layout.users_manage_dialog_open {
+            self.shell.layout.users_manage_dialog_open = false;
             return true;
         }
         if self.local_term_dialog.open {

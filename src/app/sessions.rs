@@ -28,7 +28,12 @@ impl RsTerminalApp {
             Some(c) => c.clone(),
             None => return,
         };
-        match FileManagerSession::open_ssh(&config) {
+        let auth = config
+            .auth_user_id
+            .as_ref()
+            .and_then(|id| self.auth_users.iter().find(|u| u.id == *id))
+            .cloned();
+        match FileManagerSession::open_ssh(&config, auth.as_ref()) {
             Ok(fm) => self.push_session(WorkspaceSession::FileManager(fm)),
             Err(e) => info!("SFTP failed: {e}"),
         }
@@ -250,40 +255,54 @@ impl RsTerminalApp {
     }
 
     pub(crate) fn reconnect_ssh_session(&mut self, pane: crate::ui::shell::layout_state::PaneId, conn_id: &str) {
-        if let Some(sid) = self
+        let Some(config) = self
+            .saved_connections
+            .iter()
+            .find(|c| c.id == *conn_id)
+            .cloned()
+        else {
+            return;
+        };
+        let auth = config
+            .auth_user_id
+            .as_ref()
+            .and_then(|id| self.auth_users.iter().find(|u| u.id == *id))
+            .cloned();
+        let Some(sid) = self
             .shell
             .layout
             .workspace
             .panes
             .get(&pane)
             .and_then(|p| p.session_id.clone())
-        {
-            if let Some(idx) = self.sessions.iter().position(|s| s.id() == sid) {
-                if let WorkspaceSession::Terminal(session) = &mut self.sessions[idx] {
-                    if matches!(session.conn_type, ConnectionType::Ssh) {
-                        if let Some(config) =
-                            self.saved_connections.iter().find(|c| c.id == *conn_id)
-                        {
-                            match ssh::connect_ssh_session(
-                                config,
-                                &self.settings.ssh_env_vars,
-                                24,
-                                80,
-                            ) {
-                                Ok(out) => {
-                                    session.handle = out.handle;
-                                    session.metrics = out.metrics;
-                                    session.session_sftp = Some(out.sftp);
-                                    session.files.invalidate_pending();
-                                    session.disconnect_message = None;
-                                    session.want_terminal_focus = true;
-                                }
-                                Err(e) => self.connection_notice = Some(e),
-                            }
-                        }
-                    }
-                }
+        else {
+            return;
+        };
+        let Some(idx) = self.sessions.iter().position(|s| s.id() == sid) else {
+            return;
+        };
+        let WorkspaceSession::Terminal(session) = &mut self.sessions[idx] else {
+            return;
+        };
+        if !matches!(session.conn_type, ConnectionType::Ssh) {
+            return;
+        }
+        match ssh::connect_ssh_session(
+            &config,
+            &self.settings.ssh_env_vars,
+            24,
+            80,
+            auth.as_ref(),
+        ) {
+            Ok(out) => {
+                session.handle = out.handle;
+                session.metrics = out.metrics;
+                session.session_sftp = Some(out.sftp);
+                session.files.invalidate_pending();
+                session.disconnect_message = None;
+                session.want_terminal_focus = true;
             }
+            Err(e) => self.connection_notice = Some(e),
         }
     }
 }

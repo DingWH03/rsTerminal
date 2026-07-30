@@ -2,7 +2,7 @@
 
 use rusqlite::Connection;
 
-const SCHEMA_VERSION: i32 = 1;
+const SCHEMA_VERSION: i32 = 2;
 
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     let version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
@@ -45,6 +45,41 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             );
             "#,
         )?;
+        conn.pragma_update(None, "user_version", 1)?;
+    }
+
+    let version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if version < 2 {
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS auth_users (
+                id TEXT PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL,
+                username TEXT NOT NULL,
+                auth_method TEXT NOT NULL,
+                password TEXT,
+                private_key TEXT,
+                key_passphrase TEXT,
+                created_at INTEGER NOT NULL DEFAULT 0,
+                updated_at INTEGER NOT NULL DEFAULT 0
+            );
+            "#,
+        )?;
+        // Add column if missing (fresh v1 DBs and in-memory after v1).
+        let has_col: bool = conn
+            .prepare("PRAGMA table_info(connections)")?
+            .query_map([], |row| {
+                let name: String = row.get(1)?;
+                Ok(name)
+            })?
+            .filter_map(|r| r.ok())
+            .any(|n| n == "auth_user_id");
+        if !has_col {
+            conn.execute(
+                "ALTER TABLE connections ADD COLUMN auth_user_id TEXT",
+                [],
+            )?;
+        }
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     }
     Ok(())

@@ -22,7 +22,10 @@ pub mod style;
 pub mod tab_bar;
 pub mod vector_icons;
 
-pub use dialog::{DialogFrame, DialogOutcome};
+pub use dialog::{
+    host_blocked_this_frame, DialogFrame, DialogOutcome, ALERT_HEIGHT, ALERT_WIDTH, DEFAULT_HEIGHT,
+    DEFAULT_WIDTH,
+};
 pub use file_list::{FileListAction, FileListView};
 pub use menu_bar::{MenuBar, MenuBarSpec, MenuEntry, MenuEntryId, MenuGroup};
 pub use tab_bar::{TabBar, TabBarItem};

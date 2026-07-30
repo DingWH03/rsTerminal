@@ -11,6 +11,7 @@ use crate::session::WorkspaceSession;
 use crate::settings::AppSettings;
 use crate::persist::types::SavedConnection;
 use crate::ui::function_pane::{self, drag_split_enabled, split_enabled, FunctionPane};
+use crate::ui::page::dialogs::{manage_auth_users_dialog, ManageAuthUsersAction};
 use crate::ui::page::settings::settings_dialog;
 use crate::ui::uiframe::{DialogFrame, DialogOutcome};
 use crate::ui::uiframe::keyboard::VirtualKeyboard;
@@ -127,6 +128,7 @@ impl AppShell {
         settings: &mut AppSettings,
         saved_connections: &[SavedConnection],
         favorite_commands: &[crate::persist::types::FavoriteCommand],
+        auth_users: &[crate::persist::types::AuthUser],
         virtual_keyboard: &mut VirtualKeyboard,
         live_font_size: &mut f32,
         suppress_terminal_input: bool,
@@ -204,6 +206,7 @@ impl AppShell {
                     self.layout.workspace.highlighted_session_id(),
                     saved_connections,
                     favorite_commands,
+                    auth_users,
                     settings,
                     self.animations.page_slide.current,
                 );
@@ -305,10 +308,7 @@ impl AppShell {
 
         // Open Connection dialog (same list as sidebar Connections tab)
         if self.layout.connections_dialog_open {
-            let frame = DialogFrame::new(rust_i18n::t!("dialog_open_connections").to_string())
-                .width(420.0)
-                .height(Some(480.0))
-                .resizable(true);
+            let frame = DialogFrame::new(rust_i18n::t!("dialog_open_connections").to_string());
             let mut conn_action = FunctionAction::empty();
             let outcome = frame.show(ui.ctx(), "open_connections_dialog", |ui| {
                 conn_action = function_pane::connections::render_with_id(
@@ -348,12 +348,18 @@ impl AppShell {
             }
         }
 
+        // Preferences → Users manage page (same frame the menu sets the flag)
+        if self.layout.users_manage_dialog_open {
+            let mut manage = ManageAuthUsersAction::default();
+            if manage_auth_users_dialog(ui.ctx(), auth_users, &mut manage) {
+                self.layout.users_manage_dialog_open = false;
+            }
+            result.auth_users_action = manage;
+        }
+
         // Help / About placeholder
         if self.layout.help_dialog_open {
-            let frame = DialogFrame::new(rust_i18n::t!("menu_about").to_string())
-                .width(360.0)
-                .height(Some(160.0))
-                .resizable(false);
+            let frame = DialogFrame::alert(rust_i18n::t!("menu_about").to_string());
             if frame.show(ui.ctx(), "about_dialog", |ui| {
                 ui.label(egui::RichText::new("rsTerminal").size(18.0).strong());
                 ui.add_space(6.0);
@@ -400,4 +406,5 @@ pub struct ShellRenderResult {
     pub workspace_action: WorkspaceAction,
     pub settings_closed: bool,
     pub settings_opened: bool,
+    pub auth_users_action: ManageAuthUsersAction,
 }

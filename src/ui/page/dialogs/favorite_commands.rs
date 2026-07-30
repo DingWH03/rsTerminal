@@ -74,7 +74,6 @@ impl FavoriteCommandDialog {
             return FavoriteCommandOutcome::None;
         }
 
-        let mut open = true;
         let mut close_requested = false;
         let mut saved = None;
         let title = if self.edit_id.is_some() {
@@ -83,15 +82,9 @@ impl FavoriteCommandDialog {
             rust_i18n::t!("cmd_dialog_new_title")
         };
 
-        egui::Window::new(title.as_ref())
-            .id(egui::Id::new("favorite_command_dialog"))
-            .open(&mut open)
-            .collapsible(false)
-            .resizable(false)
-            .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
-            .default_width(420.0)
-            .show(ctx, |ui| {
-                ui.set_max_width(420.0);
+        use crate::ui::uiframe::{DialogFrame, DialogOutcome};
+        let frame = DialogFrame::new(title.to_string()).foreground();
+        let closed = frame.show(ctx, "favorite_command_dialog", |ui| {
                 ui.add_space(4.0);
 
                 ui.label(rust_i18n::t!("cmd_dialog_name"));
@@ -158,9 +151,9 @@ impl FavoriteCommandDialog {
                         close_requested = true;
                     }
                 });
-            });
+        }) == DialogOutcome::Closed;
 
-        if !open || close_requested {
+        if closed || close_requested {
             self.open = false;
         }
 
@@ -200,16 +193,9 @@ impl ManageFavoriteCommandsDialog {
             return action;
         }
 
-        let mut open = true;
-        egui::Window::new(rust_i18n::t!("cmd_manage_title").as_ref())
-            .id(egui::Id::new("manage_favorite_commands"))
-            .open(&mut open)
-            .collapsible(false)
-            .resizable(true)
-            .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
-            .default_width(480.0)
-            .default_height(420.0)
-            .show(ctx, |ui| {
+        use crate::ui::uiframe::{DialogFrame, DialogOutcome};
+        let frame = DialogFrame::new(rust_i18n::t!("cmd_manage_title").to_string());
+        if frame.show(ctx, "manage_favorite_commands", |ui| {
                 ui.horizontal(|ui| {
                     let new_btn = egui::Button::new(
                         egui::RichText::new(rust_i18n::t!("cmd_manage_new"))
@@ -231,57 +217,47 @@ impl ManageFavoriteCommandsDialog {
                             .color(ui.visuals().weak_text_color()),
                     );
                 } else {
-                    egui::ScrollArea::vertical()
-                        .auto_shrink([false; 2])
-                        .show(ui, |ui| {
-                            for cmd in commands {
-                                ui.horizontal(|ui| {
-                                    ui.vertical(|ui| {
-                                        ui.label(
-                                            egui::RichText::new(&cmd.name).strong().size(13.0),
-                                        );
-                                        let preview = if cmd.command.len() > 60 {
-                                            format!("{}…", &cmd.command[..60])
-                                        } else {
-                                            cmd.command.clone()
-                                        };
-                                        ui.label(
-                                            egui::RichText::new(preview)
-                                                .size(11.0)
-                                                .color(ui.visuals().weak_text_color()),
-                                        );
-                                        if cmd.auto_execute {
-                                            ui.label(
-                                                egui::RichText::new(rust_i18n::t!(
-                                                    "cmd_badge_auto"
-                                                ))
-                                                .size(10.0)
-                                                .color(style::ACCENT),
-                                            );
-                                        }
-                                    });
-                                    ui.with_layout(
-                                        egui::Layout::right_to_left(egui::Align::Center),
-                                        |ui| {
-                                            if ui
-                                                .small_button(rust_i18n::t!("delete"))
-                                                .clicked()
-                                            {
-                                                action.delete_id = Some(cmd.id.clone());
-                                            }
-                                            if ui.small_button(rust_i18n::t!("edit")).clicked() {
-                                                action.edit_id = Some(cmd.id.clone());
-                                            }
-                                        },
+                    for cmd in commands {
+                        ui.horizontal(|ui| {
+                            ui.vertical(|ui| {
+                                ui.label(
+                                    egui::RichText::new(&cmd.name).strong().size(13.0),
+                                );
+                                let preview = if cmd.command.len() > 60 {
+                                    format!("{}…", &cmd.command[..60])
+                                } else {
+                                    cmd.command.clone()
+                                };
+                                ui.label(
+                                    egui::RichText::new(preview)
+                                        .size(11.0)
+                                        .color(ui.visuals().weak_text_color()),
+                                );
+                                if cmd.auto_execute {
+                                    ui.label(
+                                        egui::RichText::new(rust_i18n::t!("cmd_badge_auto"))
+                                            .size(10.0)
+                                            .color(style::ACCENT),
                                     );
-                                });
-                                ui.separator();
-                            }
+                                }
+                            });
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    if ui.small_button(rust_i18n::t!("delete")).clicked() {
+                                        action.delete_id = Some(cmd.id.clone());
+                                    }
+                                    if ui.small_button(rust_i18n::t!("edit")).clicked() {
+                                        action.edit_id = Some(cmd.id.clone());
+                                    }
+                                },
+                            );
                         });
+                        ui.separator();
+                    }
                 }
-            });
-
-        if !open {
+        }) == DialogOutcome::Closed
+        {
             self.open = false;
         }
         action

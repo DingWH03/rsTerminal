@@ -6,17 +6,21 @@
 
 pub mod notices;
 pub mod favorite_commands;
+pub mod auth_user;
 
 pub use notices::{paint_connection_notice, paint_quit_confirm};
 pub use favorite_commands::{
     FavoriteCommandDialog, FavoriteCommandOutcome, ManageCommandsAction,
     ManageFavoriteCommandsDialog,
 };
+pub use auth_user::{
+    manage_auth_users_dialog, AuthUserDialog, ManageAuthUsersAction,
+};
 
 use std::sync::mpsc;
 
 use crate::connection::enumeration::{enumerate_serial_ports, scan_ble_devices_blocking};
-use crate::persist::types::{ConnectionType, SavedConnection};
+use crate::persist::types::{AuthUser, ConnectionType, SavedConnection};
 use crate::ui::uiframe::style;
 
 /// On Android, show the soft keyboard for a focused dialog text field.
@@ -64,8 +68,10 @@ pub struct NewConnectionDialog {
     // SSH
     pub ssh_host: String,
     pub ssh_port: String,
-    pub ssh_user: String,
-    pub ssh_password: String,
+    /// Selected Preferences auth user id (required for SSH).
+    pub selected_auth_user_id: Option<String>,
+    /// Set when user picks "New user…" in the SSH combo.
+    pub request_new_auth_user: bool,
     // Serial
     pub serial_port: String,
     pub serial_baud: String,
@@ -90,8 +96,8 @@ impl Default for NewConnectionDialog {
             working_dir: String::new(),
             ssh_host: String::new(),
             ssh_port: "22".to_string(),
-            ssh_user: String::new(),
-            ssh_password: String::new(),
+            selected_auth_user_id: None,
+            request_new_auth_user: false,
             serial_port: String::new(),
             serial_baud: "115200".to_string(),
             serial_devices: Vec::new(),
@@ -129,8 +135,7 @@ impl NewConnectionDialog {
         self.working_dir = conn.working_dir.clone().unwrap_or_default();
         self.ssh_host = conn.ssh_host.clone().unwrap_or_default();
         self.ssh_port = conn.ssh_port.map(|p| p.to_string()).unwrap_or_else(|| "22".into());
-        self.ssh_user = conn.ssh_user.clone().unwrap_or_default();
-        self.ssh_password = conn.ssh_password.clone().unwrap_or_default();
+        self.selected_auth_user_id = conn.auth_user_id.clone();
         self.serial_port = conn.serial_port.clone().unwrap_or_default();
         self.serial_baud = conn
             .serial_baud
@@ -176,8 +181,18 @@ impl NewConnectionDialog {
         }
     }
 
+    /// Select an auth user after creating one from the nested dialog.
+    pub fn select_auth_user(&mut self, id: String) {
+        self.selected_auth_user_id = Some(id);
+        self.conn_type = ConnectionType::Ssh;
+    }
+
     /// 显示居中弹出窗口并处理交互。返回 `Some(SavedConnection)` 表示保存。
-    pub fn show(&mut self, ctx: &egui::Context) -> Option<SavedConnection> {
+    pub fn show(
+        &mut self,
+        ctx: &egui::Context,
+        auth_users: &[AuthUser],
+    ) -> Option<SavedConnection> {
         if !self.open {
             return None;
         }
@@ -195,14 +210,16 @@ impl NewConnectionDialog {
             rust_i18n::t!("dialog_new_connection")
         };
 
-        egui::Window::new(title)
-            .collapsible(false)
-            .resizable(false)
-            .order(egui::Order::Foreground)
-            .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
-            .show(ctx, |ui| {
-                outcome = self.paint_form(ui, ctx);
-            });
+        use crate::ui::uiframe::{DialogFrame, DialogOutcome};
+        let frame = DialogFrame::new(title.to_string()).foreground();
+        let closed = frame.show(ctx, "new_connection_dialog", |ui| {
+            outcome = self.paint_form(ui, ctx, auth_users);
+        }) == DialogOutcome::Closed;
+
+        if closed {
+            self.close();
+            return None;
+        }
 
         match outcome {
             ConnectionFormOutcome::Saved(conn) => {
@@ -218,7 +235,12 @@ impl NewConnectionDialog {
     }
 
     /// 绘制窗口内表单（类型下拉 + 名称 + 按类型配置）。
-    fn paint_form(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) -> ConnectionFormOutcome {
+    fn paint_form(
+        &mut self,
+        ui: &mut egui::Ui,
+        ctx: &egui::Context,
+        auth_users: &[AuthUser],
+    ) -> ConnectionFormOutcome {
         let mut outcome = ConnectionFormOutcome::None;
         let editing = self.edit_id.is_some();
         let available_types = Self::available_types();
@@ -280,21 +302,46 @@ impl NewConnectionDialog {
                     dialog_text_edit(ui, &mut self.ssh_port);
                 });
                 ui.horizontal(|ui| {
-                    ui.label(rust_i18n::t!("dialog_user"));
-                    dialog_text_edit(ui, &mut self.ssh_user);
+                    ui.label(rust_i18n::t!("dialog_auth_user"));
+                    let selected_label = self
+                        .selected_auth_user_id
+                        .as_ref()
+                        .and_then(|id| auth_users.iter().find(|u| u.id == *id))
+                        .map(|u| format!("{} ({})", u.name, u.username))
+                        .unwrap_or_else(|| rust_i18n::t!("dialog_auth_user_none").into_owned());
+                    egui::ComboBox::from_id_salt("ssh_auth_user_combo")
+                        .selected_text(selected_label)
+                        .width(220.0)
+                        .show_ui(ui, |ui| {
+                            if ui
+                                .selectable_label(false, rust_i18n::t!("dialog_auth_user_new"))
+                                .clicked()
+                            {
+                                self.request_new_auth_user = true;
+                            }
+                            ui.separator();
+                            for u in auth_users {
+                                let label = format!("{} ({})", u.name, u.username);
+                                if ui
+                                    .selectable_value(
+                                        &mut self.selected_auth_user_id,
+                                        Some(u.id.clone()),
+                                        label,
+                                    )
+                                    .clicked()
+                                {
+                                    // selection applied via selectable_value
+                                }
+                            }
+                        });
                 });
-                ui.horizontal(|ui| {
-                    ui.label(rust_i18n::t!("dialog_password"));
-                    let resp = ui.add(
-                        egui::TextEdit::singleline(&mut self.ssh_password).password(true),
+                if auth_users.is_empty() {
+                    ui.label(
+                        egui::RichText::new(rust_i18n::t!("dialog_auth_user_hint"))
+                            .small()
+                            .weak(),
                     );
-                    android_ime_for_text_edit(ui, &resp, false);
-                });
-                ui.label(
-                    egui::RichText::new(rust_i18n::t!("dialog_ssh_password_hint"))
-                        .small()
-                        .weak(),
-                );
+                }
             }
             ConnectionType::Serial => {
                 ui.horizontal(|ui| {
@@ -399,7 +446,9 @@ impl NewConnectionDialog {
 
             let can_create = !self.name.trim().is_empty()
                 && match self.conn_type {
-                    ConnectionType::Ssh => !self.ssh_host.trim().is_empty(),
+                    ConnectionType::Ssh => {
+                        !self.ssh_host.trim().is_empty() && self.selected_auth_user_id.is_some()
+                    }
                     ConnectionType::Serial => !self.serial_port.trim().is_empty(),
                     ConnectionType::Ble => !self.ble_device.trim().is_empty(),
                     ConnectionType::Local => true,
@@ -433,15 +482,20 @@ impl NewConnectionDialog {
                         c
                     }
                     ConnectionType::Ssh => {
+                        let auth_id = self.selected_auth_user_id.clone().unwrap_or_default();
+                        let username = auth_users
+                            .iter()
+                            .find(|u| u.id == auth_id)
+                            .map(|u| u.username.as_str())
+                            .unwrap_or("root");
                         let mut c = SavedConnection::new_ssh(
                             &self.name,
                             &self.ssh_host,
                             self.ssh_port.parse().unwrap_or(22),
-                            &self.ssh_user,
+                            username,
                         );
-                        if !self.ssh_password.is_empty() {
-                            c.ssh_password = Some(self.ssh_password.clone());
-                        }
+                        c.auth_user_id = Some(auth_id);
+                        c.ssh_password = None;
                         c
                     }
                     ConnectionType::Serial => SavedConnection::new_serial(
@@ -670,11 +724,9 @@ impl LocalTerminalSettingsDialog {
         let mut result = None;
         let mut close = false;
 
-        egui::Window::new(rust_i18n::t!("dialog_local_terminal_settings"))
-            .collapsible(false)
-            .resizable(true)
-            .default_width(420.0)
-            .show(ctx, |ui| {
+        use crate::ui::uiframe::{DialogFrame, DialogOutcome};
+        let frame = DialogFrame::new(rust_i18n::t!("dialog_local_terminal_settings").to_string());
+        let closed = frame.show(ctx, "local_terminal_settings", |ui| {
                 let local_profiles: Vec<&SavedConnection> = connections
                     .iter()
                     .filter(|c| c.conn_type == ConnectionType::Local)
@@ -766,9 +818,9 @@ impl LocalTerminalSettingsDialog {
                         close = true;
                     }
                 });
-            });
+        }) == DialogOutcome::Closed;
 
-        if close {
+        if closed || close {
             self.open = false;
             *self = Self::default();
         }

@@ -203,10 +203,14 @@ impl SessionFilesCache {
 /// Advance listing state from session signals (cwd, marks, SFTP replies).
 ///
 /// Call from the session drain path so caches stay hot even when the Files tab is hidden.
-pub fn tick_session_files(session: &mut ActiveSession, connections: &[SavedConnection]) {
+pub fn tick_session_files(
+    session: &mut ActiveSession,
+    connections: &[SavedConnection],
+    auth_users: &[crate::persist::types::AuthUser],
+) {
     match session.conn_type {
         ConnectionType::Local => tick_local(session),
-        ConnectionType::Ssh => tick_ssh(session, connections),
+        ConnectionType::Ssh => tick_ssh(session, connections, auth_users),
         ConnectionType::Serial | ConnectionType::Ble => {}
     }
 }
@@ -258,7 +262,11 @@ fn tick_local(session: &mut ActiveSession) {
     }
 }
 
-fn tick_ssh(session: &mut ActiveSession, connections: &[SavedConnection]) {
+fn tick_ssh(
+    session: &mut ActiveSession,
+    connections: &[SavedConnection],
+    auth_users: &[crate::persist::types::AuthUser],
+) {
     if let Some(cwd) = session.terminal.screen.cwd.as_deref() {
         if !cwd.is_empty() {
             session.metrics.note_osc_cwd(Some(cwd));
@@ -278,7 +286,7 @@ fn tick_ssh(session: &mut ActiveSession, connections: &[SavedConnection]) {
         poll_pending(cache);
     }
 
-    ensure_session_sftp(session, connections);
+    ensure_session_sftp(session, connections, auth_users);
 
     let Some(client) = session.session_sftp.clone() else {
         return;
@@ -312,7 +320,11 @@ fn tick_ssh(session: &mut ActiveSession, connections: &[SavedConnection]) {
     poll_pending(cache);
 }
 
-fn ensure_session_sftp(session: &mut ActiveSession, connections: &[SavedConnection]) {
+fn ensure_session_sftp(
+    session: &mut ActiveSession,
+    connections: &[SavedConnection],
+    auth_users: &[crate::persist::types::AuthUser],
+) {
     if session.session_sftp.is_some() {
         return;
     }
@@ -322,8 +334,12 @@ fn ensure_session_sftp(session: &mut ActiveSession, connections: &[SavedConnecti
     let Some(conn) = connections.iter().find(|c| c.id == conn_id) else {
         return;
     };
+    let auth = conn
+        .auth_user_id
+        .as_ref()
+        .and_then(|id| auth_users.iter().find(|u| u.id == *id));
     let repaint = session.handle.repaint.clone();
-    match SftpClient::connect_with_repaint(conn, Some(repaint)) {
+    match SftpClient::connect_with_auth(conn, auth, Some(repaint)) {
         Ok(client) => {
             session.session_sftp = Some(Arc::new(client));
             session.files.invalidate_pending();
@@ -429,10 +445,11 @@ fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<(), String> {
 pub fn tick_all_session_files(
     sessions: &mut [WorkspaceSession],
     connections: &[SavedConnection],
+    auth_users: &[crate::persist::types::AuthUser],
 ) {
     for session in sessions {
         if let Some(term) = session.terminal_mut() {
-            tick_session_files(term, connections);
+            tick_session_files(term, connections, auth_users);
         }
     }
 }

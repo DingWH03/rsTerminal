@@ -15,7 +15,7 @@ use log::info;
 use rusqlite::Connection;
 
 use crate::persist::db::schema;
-use crate::persist::types::{FavoriteCommand, SavedConnection, SecretRecord};
+use crate::persist::types::{AuthUser, FavoriteCommand, SavedConnection, SecretRecord};
 
 #[cfg(target_os = "android")]
 static ANDROID_BASE_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
@@ -122,6 +122,21 @@ impl Persist {
     pub fn delete_secret(&self, id: &str) -> Result<(), String> {
         let db = self.db.lock().unwrap();
         db::secrets::delete(&db, id).map_err(|e| e.to_string())
+    }
+
+    pub fn list_auth_users(&self) -> Vec<AuthUser> {
+        let db = self.db.lock().unwrap();
+        db::auth_users::list_all(&db).unwrap_or_default()
+    }
+
+    pub fn upsert_auth_user(&self, user: &AuthUser) -> Result<(), String> {
+        let db = self.db.lock().unwrap();
+        db::auth_users::upsert(&db, user).map_err(|e| e.to_string())
+    }
+
+    pub fn delete_auth_user(&self, id: &str) -> Result<(), String> {
+        let db = self.db.lock().unwrap();
+        db::auth_users::delete(&db, id).map_err(|e| e.to_string())
     }
 }
 

@@ -2,6 +2,7 @@ pub mod ble;
 #[cfg(not(target_os = "android"))]
 pub mod local;
 pub mod pty_burst;
+pub mod ssh_auth;
 pub mod ssh_keys;
 pub mod winchg;
 pub mod serial;

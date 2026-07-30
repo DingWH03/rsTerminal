@@ -41,6 +41,10 @@ pub fn run_app(native_options: eframe::NativeOptions) {
             );
             fonts::preload_monospace_catalog();
             fonts::tune_android_display(&cc.egui_ctx);
+            // Desktop: real OS child windows for DialogFrame.
+            // Android keeps embedding (single Activity window).
+            #[cfg(not(target_os = "android"))]
+            cc.egui_ctx.set_embed_viewports(false);
             Ok(Box::new(RsTerminalApp::default()))
         }),
     ) {

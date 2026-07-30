@@ -168,6 +168,7 @@ pub fn render(
     highlighted_session: Option<&str>,
     connections: &[SavedConnection],
     favorite_commands: &[FavoriteCommand],
+    auth_users: &[crate::persist::types::AuthUser],
     settings: &AppSettings,
     _page_slide: f32,
 ) -> FunctionAction {
@@ -254,7 +255,7 @@ pub fn render(
                 FunctionPage::Connections => connections::render(ui, connections),
                 FunctionPage::Commands => commands_view::render(ui, favorite_commands),
                 FunctionPage::Files => {
-                    files_view::render(ui, sessions, focused, connections)
+                    files_view::render(ui, sessions, focused, connections, auth_users)
                 }
                 FunctionPage::Monitor => monitor_view::render(ui, sessions, focused),
             };

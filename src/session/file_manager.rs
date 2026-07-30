@@ -197,8 +197,11 @@ impl FileManagerSession {
         }
     }
 
-    pub fn open_ssh(config: &crate::persist::types::SavedConnection) -> Result<Self, String> {
-        let client = SftpClient::connect(config)?;
+    pub fn open_ssh(
+        config: &crate::persist::types::SavedConnection,
+        auth_user: Option<&crate::persist::types::AuthUser>,
+    ) -> Result<Self, String> {
+        let client = SftpClient::connect_with_auth(config, auth_user, None)?;
         let host = config.ssh_host.as_deref().unwrap_or("host");
         let title = format!("Remote: {host}");
         Ok(Self {

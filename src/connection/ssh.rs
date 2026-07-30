@@ -6,13 +6,14 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
 use russh::client::{self, Handle, KeyboardInteractiveAuthResponse};
-use russh::keys::{load_secret_key, PrivateKeyWithHashAlg};
+use russh::keys::{decode_secret_key, load_secret_key, PrivateKeyWithHashAlg};
 use russh::{Channel, ChannelMsg, Disconnect};
 use tokio::sync::mpsc::unbounded_channel;
 use tokio::time::timeout;
 
 use crate::connection::{
-    emit_conn_data, ssh_keys, ConnIn, ConnOut, ConnectionHandle, ConnectionState, RepaintNotifier,
+    emit_conn_data, ssh_auth::ResolvedSshAuth, ssh_keys, ConnIn, ConnOut, ConnectionHandle,
+    ConnectionState, RepaintNotifier,
 };
 use crate::fs::sftp::{self, SftpClient, SftpRequest};
 use crate::remote::protocol::{push_bytes, AgentToClient};
@@ -55,7 +56,7 @@ pub fn connect_ssh(
     rows: u16,
     cols: u16,
 ) -> Result<ConnectionHandle, String> {
-    Ok(connect_ssh_session(config, env_vars, rows, cols)?.handle)
+    Ok(connect_ssh_session(config, env_vars, rows, cols, None)?.handle)
 }
 
 /// Preferred entry: returns PTY handle, metrics bus, and shared-session SFTP.
@@ -64,17 +65,17 @@ pub fn connect_ssh_session(
     env_vars: &HashMap<String, String>,
     rows: u16,
     cols: u16,
+    auth_user: Option<&crate::persist::types::AuthUser>,
 ) -> Result<SshConnectOutcome, String> {
     let host = config
         .ssh_host
         .clone()
         .ok_or_else(|| "SSH host not configured".to_string())?;
     let port = config.ssh_port.unwrap_or(22);
-    let user = config
-        .ssh_user
-        .clone()
-        .ok_or_else(|| "SSH user not configured".to_string())?;
-    let saved_password = config.ssh_password.clone();
+    let auth = ResolvedSshAuth::from_connection(config, auth_user);
+    if auth.username.is_empty() {
+        return Err("SSH user not configured".to_string());
+    }
     let session_tag = config.id.clone();
 
     let (to_conn_tx, to_conn_rx) = mpsc::channel::<ConnOut>();
@@ -107,8 +108,7 @@ pub fn connect_ssh_session(
         if let Err(msg) = rt.block_on(run_ssh_session(
             &host_clone,
             port,
-            &user,
-            saved_password,
+            auth,
             rows,
             cols,
             &env_vars,
@@ -140,8 +140,7 @@ pub fn connect_ssh_session(
 async fn run_ssh_session(
     host: &str,
     port: u16,
-    user: &str,
-    saved_password: Option<String>,
+    auth: ResolvedSshAuth,
     rows: u16,
     cols: u16,
     env_vars: &HashMap<String, String>,
@@ -188,13 +187,16 @@ async fn run_ssh_session(
     .map_err(|_| format!("SSH connection to {host}:{port} timed out (20s)"))?
     .map_err(|e| e.to_string())?;
 
-    let password = saved_password
-        .or_else(|| std::env::var("SSH_PASSWORD").ok())
-        .or_else(|| std::env::var("RSTERMINAL_SSH_PASSWORD").ok());
+    let mut password = auth.password.clone();
+    if auth.allow_default_keys {
+        password = password
+            .or_else(|| std::env::var("SSH_PASSWORD").ok())
+            .or_else(|| std::env::var("RSTERMINAL_SSH_PASSWORD").ok());
+    }
 
     timeout(
         Duration::from_secs(30),
-        authenticate(&mut handle, user, password.as_deref()),
+        authenticate(&mut handle, &auth.username, &auth, password.as_deref()),
     )
     .await
     .map_err(|_| "SSH authentication timed out (30s)".to_string())?
@@ -540,28 +542,61 @@ async fn wait_channel_success(
 async fn authenticate(
     handle: &mut Handle<SshClient>,
     user: &str,
+    auth: &ResolvedSshAuth,
     password: Option<&str>,
 ) -> Result<(), String> {
-    for path in ssh_keys::default_key_paths() {
-        if !path.is_file() {
-            continue;
+    // Prefer in-memory private key from AuthUser when present.
+    if let Some(pem) = auth
+        .private_key_pem
+        .as_deref()
+        .filter(|p| !p.trim().is_empty())
+    {
+        let passphrase = auth.key_passphrase.as_deref().filter(|p| !p.is_empty());
+        match decode_secret_key(pem, passphrase) {
+            Ok(key) => {
+                let hash = handle
+                    .best_supported_rsa_hash()
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .flatten();
+                let key = PrivateKeyWithHashAlg::new(Arc::new(key), hash);
+                if handle
+                    .authenticate_publickey(user, key)
+                    .await
+                    .map(|r| r.success())
+                    .unwrap_or(false)
+                {
+                    return Ok(());
+                }
+            }
+            Err(e) => {
+                return Err(format!("Failed to parse private key: {e}"));
+            }
         }
-        let Ok(key) = load_secret_key(&path, None) else {
-            continue;
-        };
-        let hash = handle
-            .best_supported_rsa_hash()
-            .await
-            .map_err(|e| e.to_string())?
-            .flatten();
-        let key = PrivateKeyWithHashAlg::new(Arc::new(key), hash);
-        if handle
-            .authenticate_publickey(user, key)
-            .await
-            .map(|r| r.success())
-            .unwrap_or(false)
-        {
-            return Ok(());
+    }
+
+    if auth.allow_default_keys {
+        for path in ssh_keys::default_key_paths() {
+            if !path.is_file() {
+                continue;
+            }
+            let Ok(key) = load_secret_key(&path, None) else {
+                continue;
+            };
+            let hash = handle
+                .best_supported_rsa_hash()
+                .await
+                .map_err(|e| e.to_string())?
+                .flatten();
+            let key = PrivateKeyWithHashAlg::new(Arc::new(key), hash);
+            if handle
+                .authenticate_publickey(user, key)
+                .await
+                .map(|r| r.success())
+                .unwrap_or(false)
+            {
+                return Ok(());
+            }
         }
     }
 

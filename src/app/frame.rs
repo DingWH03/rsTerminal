@@ -66,6 +66,7 @@ impl RsTerminalApp {
         crate::session::tick_all_session_files(
             &mut self.sessions,
             &self.saved_connections,
+            &self.auth_users,
         );
 
         if let Some(idx) = self.focused_session_index() {
@@ -74,18 +75,10 @@ impl RsTerminalApp {
             }
         }
 
-        if self.shell.layout.commands_manage_dialog_open {
-            self.manage_commands_dialog.open = true;
-        }
-
-        let suppress_terminal_input = self.new_conn_dialog.open
-            || self.local_term_dialog.open
-            || self.favorite_cmd_dialog.open
-            || self.manage_commands_dialog.open
-            || self.show_quit_dialog
-            || self.shell.layout.settings_dialog_open
-            || self.shell.layout.help_dialog_open
-            || self.shell.layout.connections_dialog_open;
+        // Only modal dialogs block the host (quit / connection failure).
+        // Ordinary windows stay interactive with the main UI underneath.
+        let suppress_terminal_input =
+            self.show_quit_dialog || self.connection_notice.is_some();
 
         let render = self.shell.render(
             ui,
@@ -94,6 +87,7 @@ impl RsTerminalApp {
             &mut self.settings,
             &self.saved_connections,
             &self.favorite_commands,
+            &self.auth_users,
             &mut self.virtual_keyboard,
             &mut self.live_font_size,
             suppress_terminal_input,
@@ -102,6 +96,7 @@ impl RsTerminalApp {
         crate::session::tick_all_session_files(
             &mut self.sessions,
             &self.saved_connections,
+            &self.auth_users,
         );
 
         self.shell.sync_focus_change(&mut self.sessions);
@@ -111,6 +106,21 @@ impl RsTerminalApp {
             save_settings(&self.settings);
             self.live_font_size = self.settings.font_size();
             self.reload_terminal_fonts(&ctx);
+        }
+
+        // Preferences → Users tab actions.
+        if render.auth_users_action.new {
+            self.auth_user_dialog.open_new();
+            self.release_terminal_keyboard_focus(&ctx);
+        }
+        if let Some(id) = render.auth_users_action.edit_id.clone() {
+            if let Some(user) = self.auth_users.iter().find(|u| u.id == id).cloned() {
+                self.auth_user_dialog.open_edit(&user);
+                self.release_terminal_keyboard_focus(&ctx);
+            }
+        }
+        if let Some(id) = render.auth_users_action.delete_id.clone() {
+            self.delete_auth_user(&id);
         }
 
         let fa = &render.function_action;
@@ -180,8 +190,22 @@ impl RsTerminalApp {
             self.reload_terminal_fonts(&ctx);
         }
 
-        if let Some(new_conn) = self.new_conn_dialog.show(&ctx) {
+        if self.new_conn_dialog.request_new_auth_user {
+            self.new_conn_dialog.request_new_auth_user = false;
+            self.auth_user_dialog.open_new();
+            self.release_terminal_keyboard_focus(&ctx);
+        }
+
+        if let Some(new_conn) = self.new_conn_dialog.show(&ctx, &self.auth_users) {
             self.save_connection(new_conn);
+        }
+
+        if let Some(user) = self.auth_user_dialog.show(&ctx) {
+            let id = user.id.clone();
+            self.save_auth_user(user);
+            if self.new_conn_dialog.open {
+                self.new_conn_dialog.select_auth_user(id);
+            }
         }
 
         match self.favorite_cmd_dialog.show(&ctx) {
@@ -189,6 +213,10 @@ impl RsTerminalApp {
             FavoriteCommandOutcome::None => {}
         }
 
+        // Sync after shell.render so menu "Manage" opens same frame (not cleared).
+        if self.shell.layout.commands_manage_dialog_open {
+            self.manage_commands_dialog.open = true;
+        }
         let manage = self
             .manage_commands_dialog
             .show(&ctx, &self.favorite_commands);

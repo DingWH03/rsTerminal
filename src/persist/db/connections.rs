@@ -8,7 +8,8 @@ pub fn list_all(conn: &Connection) -> rusqlite::Result<Vec<SavedConnection>> {
     let mut stmt = conn.prepare(
         r#"
         SELECT id, name, conn_type, favorite, last_connected, shell, working_dir,
-               ssh_host, ssh_port, ssh_user, ssh_password, serial_port, serial_baud, ble_device
+               ssh_host, ssh_port, ssh_user, ssh_password, serial_port, serial_baud, ble_device,
+               auth_user_id
         FROM connections
         ORDER BY favorite DESC, name COLLATE NOCASE ASC
         "#,
@@ -25,7 +26,8 @@ pub fn get(conn: &Connection, id: &str) -> rusqlite::Result<Option<SavedConnecti
     conn.query_row(
         r#"
         SELECT id, name, conn_type, favorite, last_connected, shell, working_dir,
-               ssh_host, ssh_port, ssh_user, ssh_password, serial_port, serial_baud, ble_device
+               ssh_host, ssh_port, ssh_user, ssh_password, serial_port, serial_baud, ble_device,
+               auth_user_id
         FROM connections WHERE id = ?1
         "#,
         params![id],
@@ -39,9 +41,10 @@ pub fn upsert(conn: &Connection, c: &SavedConnection) -> rusqlite::Result<()> {
         r#"
         INSERT INTO connections (
             id, name, conn_type, favorite, last_connected, shell, working_dir,
-            ssh_host, ssh_port, ssh_user, ssh_password, serial_port, serial_baud, ble_device
+            ssh_host, ssh_port, ssh_user, ssh_password, serial_port, serial_baud, ble_device,
+            auth_user_id
         ) VALUES (
-            ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14
+            ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15
         )
         ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
@@ -56,7 +59,8 @@ pub fn upsert(conn: &Connection, c: &SavedConnection) -> rusqlite::Result<()> {
             ssh_password = excluded.ssh_password,
             serial_port = excluded.serial_port,
             serial_baud = excluded.serial_baud,
-            ble_device = excluded.ble_device
+            ble_device = excluded.ble_device,
+            auth_user_id = excluded.auth_user_id
         "#,
         params![
             c.id,
@@ -73,6 +77,7 @@ pub fn upsert(conn: &Connection, c: &SavedConnection) -> rusqlite::Result<()> {
             c.serial_port,
             c.serial_baud.map(|b| b as i64),
             c.ble_device,
+            c.auth_user_id,
         ],
     )?;
     Ok(())
@@ -104,5 +109,6 @@ fn row_to_conn(row: &rusqlite::Row<'_>) -> rusqlite::Result<SavedConnection> {
         serial_port: row.get(11)?,
         serial_baud: serial_baud.map(|b| b as u32),
         ble_device: row.get(13)?,
+        auth_user_id: row.get(14)?,
     })
 }

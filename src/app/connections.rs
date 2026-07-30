@@ -83,7 +83,18 @@ impl RsTerminalApp {
                     Some("Local terminal is not supported on Android".into());
             }
             ConnectionType::Ssh => {
-                match ssh::connect_ssh_session(&config, &self.settings.ssh_env_vars, 24, 80) {
+                let auth = config
+                    .auth_user_id
+                    .as_ref()
+                    .and_then(|id| self.auth_users.iter().find(|u| u.id == *id))
+                    .cloned();
+                match ssh::connect_ssh_session(
+                    &config,
+                    &self.settings.ssh_env_vars,
+                    24,
+                    80,
+                    auth.as_ref(),
+                ) {
                     Ok(out) => self.open_session_in_pane(
                         out.handle,
                         &config,

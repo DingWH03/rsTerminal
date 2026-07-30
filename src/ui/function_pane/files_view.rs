@@ -4,7 +4,7 @@
 //! and applies browse / DnD gestures.
 
 use crate::session::{tick_session_files, WorkspaceSession};
-use crate::persist::types::{ConnectionType, SavedConnection};
+use crate::persist::types::{AuthUser, ConnectionType, SavedConnection};
 use crate::ui::shell::messages::FunctionAction;
 use crate::ui::uiframe::components::empty_state::{paint_empty_state, EmptyStateConfig};
 use crate::ui::uiframe::file_list::FileListView;
@@ -14,6 +14,7 @@ pub fn render(
     sessions: &mut [WorkspaceSession],
     focused_session_id: Option<&str>,
     connections: &[SavedConnection],
+    auth_users: &[AuthUser],
 ) -> FunctionAction {
     let action = FunctionAction::empty();
 
@@ -60,7 +61,7 @@ pub fn render(
         ConnectionType::Local | ConnectionType::Ssh => {}
     }
 
-    tick_session_files(term, connections);
+    tick_session_files(term, connections, auth_users);
 
     if term.conn_type == ConnectionType::Ssh {
         if let Some(err) = term

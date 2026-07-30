@@ -535,6 +535,8 @@ pub struct ShellLayout {
     pub connections_dialog_open: bool,
     /// Favorite commands manager (Commands → Manage).
     pub commands_manage_dialog_open: bool,
+    /// Auth users manager (Preferences → Users).
+    pub users_manage_dialog_open: bool,
 }
 
 impl Default for ShellLayout {
@@ -547,6 +549,7 @@ impl Default for ShellLayout {
             help_dialog_open: false,
             connections_dialog_open: false,
             commands_manage_dialog_open: false,
+            users_manage_dialog_open: false,
         }
     }
 }

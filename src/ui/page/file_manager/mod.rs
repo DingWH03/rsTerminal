@@ -1244,13 +1244,11 @@ fn show_info_dialog(ctx: &egui::Context, session: &mut FileManagerSession) {
         return;
     }
 
+    use crate::ui::uiframe::{DialogFrame, DialogOutcome};
+
     let mut close = false;
-    egui::Window::new("Info")
-        .collapsible(false)
-        .resizable(true)
-        .default_width(420.0)
-        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-        .show(ctx, |ui| {
+    let frame = DialogFrame::new("Info").size(420.0, 360.0);
+    if frame.show(ctx, "file_info_dialog", |ui| {
             egui::Grid::new("file_info_grid")
                 .num_columns(2)
                 .spacing([12.0, 6.0])
@@ -1268,7 +1266,10 @@ fn show_info_dialog(ctx: &egui::Context, session: &mut FileManagerSession) {
             if ui.input(|i| i.key_pressed(Key::Escape)) {
                 close = true;
             }
-        });
+    }) == DialogOutcome::Closed
+    {
+        close = true;
+    }
 
     if close {
         session.info_dialog.open = false;
@@ -1280,15 +1281,13 @@ fn show_rename_dialog(ctx: &egui::Context, session: &mut FileManagerSession) {
         return;
     }
 
+    use crate::ui::uiframe::{DialogFrame, DialogOutcome};
+
     let mut close = false;
     let mut confirm = false;
 
-    egui::Window::new("Rename")
-        .collapsible(false)
-        .resizable(false)
-        .default_width(360.0)
-        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-        .show(ctx, |ui| {
+    let frame = DialogFrame::alert("Rename").size(360.0, 220.0);
+    if frame.show(ctx, "file_rename_dialog", |ui| {
             ui.label(format!("Original: {}", session.rename_dialog.old_name()));
             ui.add_space(6.0);
             ui.label("New name:");
@@ -1309,7 +1308,10 @@ fn show_rename_dialog(ctx: &egui::Context, session: &mut FileManagerSession) {
             if ui.input(|i| i.key_pressed(Key::Enter)) {
                 confirm = true;
             }
-        });
+    }) == DialogOutcome::Closed
+    {
+        close = true;
+    }
 
     if close {
         session.rename_dialog.open = false;

@@ -56,6 +56,7 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 fontdb = "0.23"
+rfd = "0.15"
 
 # Linux/macOS: wgpu (Vulkan / Metal). Windows: glow until windows crate versions unify in upstream.
 [target.'cfg(all(not(target_os = "android"), not(windows)))'.dependencies]

@@ -6,16 +6,17 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, UNIX_EPOCH};
 
 use russh::client::{self, Handle, KeyboardInteractiveAuthResponse};
-use russh::keys::{load_secret_key, PrivateKeyWithHashAlg};
+use russh::keys::{decode_secret_key, load_secret_key, PrivateKeyWithHashAlg};
 use russh_sftp::client::SftpSession;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::time::timeout;
 
+use crate::connection::ssh_auth::ResolvedSshAuth;
 use crate::connection::ssh_keys;
 use crate::fs::entry_info::{self, EntryInfo};
 use crate::fs::transfer_progress::ByteProgress;
 use crate::fs::FileEntry;
-use crate::persist::types::SavedConnection;
+use crate::persist::types::{AuthUser, SavedConnection};
 
 #[derive(Clone)]
 pub(crate) enum SftpStatus {
@@ -102,11 +103,19 @@ impl client::Handler for SftpSshClient {
 
 impl SftpClient {
     pub fn connect(conn: &SavedConnection) -> Result<Self, String> {
-        Self::connect_with_repaint(conn, None)
+        Self::connect_with_auth(conn, None, None)
     }
 
     pub fn connect_with_repaint(
         conn: &SavedConnection,
+        repaint: Option<crate::connection::RepaintNotifier>,
+    ) -> Result<Self, String> {
+        Self::connect_with_auth(conn, None, repaint)
+    }
+
+    pub fn connect_with_auth(
+        conn: &SavedConnection,
+        auth_user: Option<&AuthUser>,
         repaint: Option<crate::connection::RepaintNotifier>,
     ) -> Result<Self, String> {
         let host = conn
@@ -114,11 +123,10 @@ impl SftpClient {
             .clone()
             .ok_or_else(|| "SSH host not configured".to_string())?;
         let port = conn.ssh_port.unwrap_or(22);
-        let user = conn
-            .ssh_user
-            .clone()
-            .ok_or_else(|| "SSH user not configured".to_string())?;
-        let password = conn.ssh_password.clone();
+        let auth = ResolvedSshAuth::from_connection(conn, auth_user);
+        if auth.username.is_empty() {
+            return Err("SSH user not configured".to_string());
+        }
 
         let (req_tx, req_rx) = mpsc::channel();
         let status: Arc<Mutex<SftpStatus>> = Arc::new(Mutex::new(SftpStatus::Connecting));
@@ -128,8 +136,7 @@ impl SftpClient {
             if let Err(e) = sftp_worker(
                 &host,
                 port,
-                &user,
-                password,
+                auth,
                 req_rx,
                 thread_status,
                 thread_repaint,
@@ -337,8 +344,7 @@ macro_rules! reply_err {
 fn sftp_worker(
     host: &str,
     port: u16,
-    user: &str,
-    password: Option<String>,
+    auth: ResolvedSshAuth,
     req_rx: mpsc::Receiver<SftpRequest>,
     status: Arc<Mutex<SftpStatus>>,
     repaint: Option<crate::connection::RepaintNotifier>,
@@ -358,7 +364,7 @@ fn sftp_worker(
     let sftp = match rt.block_on(async {
         timeout(
             Duration::from_secs(25),
-            connect_sftp(host, port, user, password.as_deref()),
+            connect_sftp(host, port, &auth),
         )
         .await
     }) {
@@ -488,8 +494,7 @@ fn sftp_worker(
 async fn connect_sftp(
     host: &str,
     port: u16,
-    user: &str,
-    password: Option<&str>,
+    auth: &ResolvedSshAuth,
 ) -> Result<SftpSession, String> {
     let ssh_config = Arc::new(client::Config {
         keepalive_interval: Some(Duration::from_secs(15)),
@@ -503,7 +508,7 @@ async fn connect_sftp(
             .await
             .map_err(|e| e.to_string())?;
 
-    authenticate(&mut handle, user, password).await?;
+    authenticate(&mut handle, auth).await?;
 
     let channel = handle
         .channel_open_session()
@@ -521,40 +526,74 @@ async fn connect_sftp(
 
 async fn authenticate(
     handle: &mut Handle<SftpSshClient>,
-    user: &str,
-    password: Option<&str>,
+    auth: &ResolvedSshAuth,
 ) -> Result<(), String> {
-    for path in ssh_keys::default_key_paths() {
-        if !path.is_file() {
-            continue;
-        }
-        let Ok(key) = load_secret_key(&path, None) else {
-            continue;
-        };
-        let hash = handle
-            .best_supported_rsa_hash()
-            .await
-            .map_err(|e| e.to_string())?
-            .flatten();
-        let key = PrivateKeyWithHashAlg::new(Arc::new(key), hash);
-        if handle
-            .authenticate_publickey(user, key)
-            .await
-            .map(|r| r.success())
-            .unwrap_or(false)
-        {
-            return Ok(());
+    let user = auth.username.as_str();
+
+    if let Some(pem) = auth
+        .private_key_pem
+        .as_deref()
+        .filter(|p| !p.trim().is_empty())
+    {
+        let passphrase = auth.key_passphrase.as_deref().filter(|p| !p.is_empty());
+        match decode_secret_key(pem, passphrase) {
+            Ok(key) => {
+                let hash = handle
+                    .best_supported_rsa_hash()
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .flatten();
+                let key = PrivateKeyWithHashAlg::new(Arc::new(key), hash);
+                if handle
+                    .authenticate_publickey(user, key)
+                    .await
+                    .map(|r| r.success())
+                    .unwrap_or(false)
+                {
+                    return Ok(());
+                }
+            }
+            Err(e) => {
+                return Err(format!("Failed to parse private key: {e}"));
+            }
         }
     }
 
-    let env_pw = std::env::var("SSH_PASSWORD")
-        .ok()
-        .filter(|p| !p.is_empty());
-    let password = password
-        .filter(|p| !p.is_empty())
-        .or(env_pw.as_deref());
+    if auth.allow_default_keys {
+        for path in ssh_keys::default_key_paths() {
+            if !path.is_file() {
+                continue;
+            }
+            let Ok(key) = load_secret_key(&path, None) else {
+                continue;
+            };
+            let hash = handle
+                .best_supported_rsa_hash()
+                .await
+                .map_err(|e| e.to_string())?
+                .flatten();
+            let key = PrivateKeyWithHashAlg::new(Arc::new(key), hash);
+            if handle
+                .authenticate_publickey(user, key)
+                .await
+                .map(|r| r.success())
+                .unwrap_or(false)
+            {
+                return Ok(());
+            }
+        }
+    }
 
-    if let Some(pw) = password {
+    let mut password = auth.password.clone();
+    if auth.allow_default_keys {
+        password = password.or_else(|| {
+            std::env::var("SSH_PASSWORD")
+                .ok()
+                .filter(|p| !p.is_empty())
+        });
+    }
+
+    if let Some(pw) = password.as_deref().filter(|p| !p.is_empty()) {
         if handle
             .authenticate_password(user, pw)
             .await
@@ -577,7 +616,7 @@ async fn authenticate(
         return Ok(());
     }
 
-    Err("SSH authentication failed (tried public keys, password, and keyboard-interactive)".into())
+    Err("SFTP authentication failed".into())
 }
 
 async fn try_keyboard_interactive(
