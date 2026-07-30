@@ -1,6 +1,6 @@
 [package]
 name = "rsTerminal"
-version = "0.5.1"
+version = "0.6.0"
 edition = "2024"
 description = "Multi terminal emulator with SSH, serial, BLE, and dual-pane file manager"
 license = "MIT"
