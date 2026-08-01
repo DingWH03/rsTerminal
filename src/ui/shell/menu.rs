@@ -15,6 +15,8 @@ pub struct AppMenuState {
     pub sidebar_toggle_enabled: bool,
     /// Whether the docked sidebar is currently open.
     pub sidebar_visible: bool,
+    /// Whether the root OS window is borderless-fullscreen.
+    pub fullscreen: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -26,6 +28,7 @@ pub enum AppMenuAction {
     NewFavoriteCommand,
     ManageFavoriteCommands,
     ToggleSidebar,
+    ToggleFullscreen,
     OpenSettings,
     ManageAuthUsers,
     OpenHelp,
@@ -39,6 +42,7 @@ const ID_HELP_ABOUT: MenuEntryId = 5;
 const ID_CMD_NEW: MenuEntryId = 6;
 const ID_CMD_MANAGE: MenuEntryId = 7;
 const ID_PREF_USERS: MenuEntryId = 8;
+const ID_VIEW_FULLSCREEN: MenuEntryId = 9;
 
 /// Height of the menu bar chrome.
 pub const HEIGHT: f32 = MenuBar::HEIGHT;
@@ -53,6 +57,7 @@ pub fn show(ui: &mut egui::Ui, state: AppMenuState) -> AppMenuAction {
     let t_cmd_manage = rust_i18n::t!("menu_commands_manage");
     let t_view = rust_i18n::t!("menu_view");
     let t_sidebar = rust_i18n::t!("menu_view_sidebar");
+    let t_fullscreen = rust_i18n::t!("menu_view_fullscreen");
     let t_pref = rust_i18n::t!("menu_preferences");
     let t_settings = rust_i18n::t!("menu_settings");
     let t_users = rust_i18n::t!("menu_preferences_users");
@@ -79,12 +84,20 @@ pub fn show(ui: &mut egui::Ui, state: AppMenuState) -> AppMenuAction {
             label: t_cmd_manage.as_ref(),
         },
     ];
-    let view_entries = [MenuEntry::Checkbox {
-        id: ID_VIEW_SIDEBAR,
-        label: t_sidebar.as_ref(),
-        checked: state.sidebar_visible,
-        enabled: state.sidebar_toggle_enabled,
-    }];
+    let view_entries = [
+        MenuEntry::Checkbox {
+            id: ID_VIEW_SIDEBAR,
+            label: t_sidebar.as_ref(),
+            checked: state.sidebar_visible,
+            enabled: state.sidebar_toggle_enabled,
+        },
+        MenuEntry::Checkbox {
+            id: ID_VIEW_FULLSCREEN,
+            label: t_fullscreen.as_ref(),
+            checked: state.fullscreen,
+            enabled: true,
+        },
+    ];
     let pref_entries = [
         MenuEntry::Button {
             id: ID_PREF_SETTINGS,
@@ -129,6 +142,7 @@ pub fn show(ui: &mut egui::Ui, state: AppMenuState) -> AppMenuAction {
         Some(ID_CMD_NEW) => AppMenuAction::NewFavoriteCommand,
         Some(ID_CMD_MANAGE) => AppMenuAction::ManageFavoriteCommands,
         Some(ID_VIEW_SIDEBAR) => AppMenuAction::ToggleSidebar,
+        Some(ID_VIEW_FULLSCREEN) => AppMenuAction::ToggleFullscreen,
         Some(ID_PREF_SETTINGS) => AppMenuAction::OpenSettings,
         Some(ID_PREF_USERS) => AppMenuAction::ManageAuthUsers,
         Some(ID_HELP_ABOUT) => AppMenuAction::OpenHelp,
@@ -158,6 +172,9 @@ pub fn apply(
         }
         AppMenuAction::ToggleSidebar => {
             function_pane.toggle_docked_sidebar();
+        }
+        AppMenuAction::ToggleFullscreen => {
+            result.toggle_app_fullscreen = true;
         }
         AppMenuAction::OpenSettings => {
             layout.settings_dialog_open = true;

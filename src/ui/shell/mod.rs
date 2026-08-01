@@ -153,11 +153,15 @@ impl AppShell {
         egui::Panel::top("app_top_bar")
             .exact_size(menu::HEIGHT)
             .show_inside(ui, |ui| {
+                let app_fullscreen = ui
+                    .ctx()
+                    .input(|i| i.viewport().fullscreen.unwrap_or(false));
                 menu::show_and_apply(
                     ui,
                     menu::AppMenuState {
                         sidebar_toggle_enabled: self.function_pane.wide,
                         sidebar_visible: self.function_pane.docked_open(),
+                        fullscreen: app_fullscreen,
                     },
                     &mut self.layout,
                     &mut self.function_pane,
@@ -396,6 +400,14 @@ impl AppShell {
             self.function_pane.close_overlay();
         }
 
+        if result.toggle_app_fullscreen {
+            let currently = ui
+                .ctx()
+                .input(|i| i.viewport().fullscreen.unwrap_or(false));
+            ui.ctx()
+                .send_viewport_cmd(egui::ViewportCommand::Fullscreen(!currently));
+        }
+
         result
     }
 }
@@ -407,4 +419,5 @@ pub struct ShellRenderResult {
     pub settings_closed: bool,
     pub settings_opened: bool,
     pub auth_users_action: ManageAuthUsersAction,
+    pub toggle_app_fullscreen: bool,
 }

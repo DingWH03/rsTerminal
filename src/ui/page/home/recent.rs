@@ -17,7 +17,7 @@ const RECENT_ROW_GAP: f32 = 2.0;
 /// 底部"查看全部"按钮区域高度
 const RECENT_FOOTER_HEIGHT: f32 = 30.0;
 
-/// 分屏空窗格顶栏操作。
+/// 工作区窗格顶栏操作。
 pub struct SplitPaneChrome<'a> {
     pub hide_pane: Option<&'a mut bool>,
     pub close_pane: Option<&'a mut bool>,

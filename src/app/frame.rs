@@ -49,6 +49,12 @@ impl RsTerminalApp {
         self.settings.ui_theme.apply(&ctx);
         self.shell.sync_width(ctx.content_rect().width());
 
+        // F11 toggles OS fullscreen (consume so the terminal does not receive it).
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F11)) {
+            let currently = ctx.input(|i| i.viewport().fullscreen.unwrap_or(false));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(!currently));
+        }
+
         self.paint_notices(&ctx);
 
         let top_inset: f32 = {

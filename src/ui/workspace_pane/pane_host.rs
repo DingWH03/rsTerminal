@@ -107,7 +107,12 @@ pub fn render_pane(
                                 }
                             }
                             WorkspaceSession::FileManager(fm) => {
-                                let fm_action = file_manager_view(ui, fm, ctx.function_pane, in_split);
+                                let fm_action = file_manager_view(
+                                    ui,
+                                    fm,
+                                    ctx.function_pane,
+                                    in_split,
+                                );
                                 if fm_action.close {
                                     action.file_manager = fm_action;
                                     action.terminal_pane = Some(pane_id);
@@ -130,7 +135,7 @@ pub fn render_pane(
                     &mut connect,
                     &mut more,
                     in_split,
-                    in_split.then(|| SplitPaneChrome {
+                    in_split.then_some(SplitPaneChrome {
                         hide_pane: Some(&mut hide_pane),
                         close_pane: Some(&mut close_pane),
                     }),

@@ -8,6 +8,10 @@ pub enum Icon {
     Settings,
     Close,
     Minimize,
+    /// Maximize workspace pane to fill the workspace.
+    Maximize,
+    /// Restore from pane fullscreen.
+    Restore,
     NewWindow,
     Back,
     Plus,
@@ -58,6 +62,8 @@ fn shapes_for_icon(icon: Icon, rect: Rect, color: Color32, stroke: f32) -> Vec<S
         Icon::Settings => settings(rect, color, stroke),
         Icon::Close => close(rect, color, stroke),
         Icon::Minimize => minimize(rect, color, stroke),
+        Icon::Maximize => maximize(rect, color, stroke),
+        Icon::Restore => restore(rect, color, stroke),
         Icon::NewWindow => new_window(rect, color, stroke),
         Icon::Back => back(rect, color, stroke),
         Icon::Plus => plus(rect, color, stroke),
@@ -111,6 +117,36 @@ fn close(rect: Rect, color: Color32, stroke: f32) -> Vec<Shape> {
 
 fn minimize(rect: Rect, color: Color32, stroke: f32) -> Vec<Shape> {
     vec![line(rect, color, stroke, (0.18, 0.62), (0.82, 0.62))]
+}
+
+fn maximize(rect: Rect, color: Color32, stroke: f32) -> Vec<Shape> {
+    let r = egui::Rect::from_min_max(map_pt(rect, 0.22, 0.22), map_pt(rect, 0.78, 0.78));
+    vec![Shape::rect_stroke(
+        r,
+        1.0,
+        Stroke::new(stroke, color),
+        egui::StrokeKind::Inside,
+    )]
+}
+
+fn restore(rect: Rect, color: Color32, stroke: f32) -> Vec<Shape> {
+    let back = egui::Rect::from_min_max(map_pt(rect, 0.30, 0.18), map_pt(rect, 0.82, 0.62));
+    let front = egui::Rect::from_min_max(map_pt(rect, 0.18, 0.38), map_pt(rect, 0.70, 0.82));
+    vec![
+        Shape::rect_stroke(
+            back,
+            1.0,
+            Stroke::new(stroke, color),
+            egui::StrokeKind::Inside,
+        ),
+        Shape::rect_filled(front, 1.0, Color32::TRANSPARENT),
+        Shape::rect_stroke(
+            front,
+            1.0,
+            Stroke::new(stroke, color),
+            egui::StrokeKind::Inside,
+        ),
+    ]
 }
 
 fn new_window(rect: Rect, color: Color32, stroke: f32) -> Vec<Shape> {

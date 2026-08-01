@@ -193,6 +193,14 @@ pub fn connection_view(
                 {
                     action = ConnectionViewAction::CloseSession;
                 }
+            } else if icon_toolbar_danger(ui, ui.id().with(("hdr_close", pane_id)), Icon::Close)
+                .on_hover_text(rust_i18n::t!("close_pane"))
+                .clicked()
+            {
+                action = ConnectionViewAction::CloseSession;
+            }
+
+            if in_split {
                 if icon_toolbar_button(ui, ui.id().with(("hdr_hide", pane_id)), Icon::Minimize)
                     .on_hover_text(rust_i18n::t!("minimize_pane"))
                     .clicked()
@@ -200,13 +208,6 @@ pub fn connection_view(
                     action = ConnectionViewAction::MinimizePane;
                 }
             } else {
-                if icon_toolbar_danger(ui, ui.id().with(("hdr_close", pane_id)), Icon::Close)
-                    .on_hover_text(rust_i18n::t!("close_pane"))
-                    .clicked()
-                {
-                    action = ConnectionViewAction::CloseSession;
-                }
-
                 let mode_label = match keyboard.mode {
                     crate::ui::uiframe::keyboard::KeyboardMode::Special => "Sp",
                     crate::ui::uiframe::keyboard::KeyboardMode::Full => "Full",

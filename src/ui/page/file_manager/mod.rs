@@ -23,7 +23,6 @@ use crate::session::{
 use crate::ui::page::file_manager::transfer::{apply_transfer_done, PasteTarget};
 use crate::ui::function_pane::FunctionPane;
 use crate::ui::uiframe::style;
-use crate::ui::uiframe::components::toolbar_button::toolbar_button;
 
 /// 文件管理器操作结果。
 #[derive(Debug, Default)]
@@ -102,6 +101,9 @@ pub fn file_manager_view(
     let transfer_ui = session.transfer.read_ui();
 
     ui.horizontal(|ui| {
+        use crate::ui::uiframe::components::toolbar_button::icon_toolbar_danger;
+        use crate::ui::uiframe::vector_icons::Icon;
+
         if !in_split
             && function_pane.show_content_hamburger()
             && function_pane.hamburger(ui).clicked()
@@ -115,7 +117,8 @@ pub fn file_manager_view(
                 .color(ui.visuals().text_color()),
         );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if toolbar_button(ui, egui::RichText::new("✕").size(14.0).color(style::RED))
+            if icon_toolbar_danger(ui, ui.id().with("fm_close"), Icon::Close)
+                .on_hover_text(rust_i18n::t!("close_pane"))
                 .clicked()
             {
                 action.close = true;
