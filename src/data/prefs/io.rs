@@ -3,10 +3,10 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 
+use crate::data::paths::config_dir;
+use crate::data::persist::types::LegacyProfileJson;
+use crate::data::prefs::{AppearancePrefs, ChromePrefs, GeneralPrefs, Prefs};
 use crate::i18n::{Language, UiTheme};
-use crate::persist::config_dir;
-use crate::persist::types::LegacyProfileJson;
-use crate::prefs::{AppearancePrefs, ChromePrefs, GeneralPrefs, Prefs};
 
 fn prefs_path() -> Option<std::path::PathBuf> {
     config_dir().map(|p| p.join("prefs.json"))

@@ -1,8 +1,8 @@
 //! Auth user CRUD for Preferences → Users.
 
 use super::RsTerminalApp;
-use crate::persist::types::AuthUser;
-use crate::persist::PersistError;
+use crate::data::persist::types::AuthUser;
+use crate::data::persist::PersistError;
 
 impl RsTerminalApp {
     pub(crate) fn save_auth_user(&mut self, user: AuthUser) {

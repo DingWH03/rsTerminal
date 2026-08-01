@@ -2,7 +2,7 @@
 
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::persist::types::{AuthMethod, AuthUser};
+use crate::data::persist::types::{AuthMethod, AuthUser};
 
 fn now_secs() -> i64 {
     std::time::SystemTime::now()

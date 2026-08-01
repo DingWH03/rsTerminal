@@ -10,7 +10,7 @@ use crate::session::{
     drain_connection, ActiveSession, ConnectionViewAction, FileManagerMode,
     FileManagerSession, WorkspaceSession,
 };
-use crate::persist::types::{ConnectionType, SavedConnection};
+use crate::data::persist::types::{ConnectionType, SavedConnection};
 use crate::terminal::{DEFAULT_GRID_COLS, DEFAULT_GRID_ROWS};
 use crate::terminal::Terminal;
 use crate::ui::shell::coordinator::ShellCoordinator;

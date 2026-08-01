@@ -1,7 +1,7 @@
 //! Favorite command CRUD and injection into the focused terminal.
 
 use super::RsTerminalApp;
-use crate::persist::types::FavoriteCommand;
+use crate::data::persist::types::FavoriteCommand;
 use crate::session::{ConnectionViewAction, WorkspaceSession};
 use crate::ui::page::terminal::paste_to_session;
 

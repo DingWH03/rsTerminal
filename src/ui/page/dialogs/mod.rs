@@ -24,7 +24,7 @@ use std::sync::mpsc;
 use std::collections::HashMap;
 
 use crate::connection::enumeration::{enumerate_serial_ports, scan_ble_devices_blocking};
-use crate::persist::types::{
+use crate::data::persist::types::{
     default_local_env_vars, default_ssh_env_vars, AuthUser, ConnectionType, SavedConnection,
     TerminalProfile,
 };

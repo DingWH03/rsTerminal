@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::prefs::Prefs;
+use crate::data::prefs::Prefs;
 use crate::ui::shell::layout_state::{PaneId, WorkspaceLayout};
 use crate::ui::uiframe::style;
 

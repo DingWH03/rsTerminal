@@ -2,7 +2,7 @@
 
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::persist::types::{SecretBackendKind, SecretRecord};
+use crate::data::persist::types::{SecretBackendKind, SecretRecord};
 
 pub fn list_all(conn: &Connection) -> rusqlite::Result<Vec<SecretRecord>> {
     let mut stmt = conn.prepare(

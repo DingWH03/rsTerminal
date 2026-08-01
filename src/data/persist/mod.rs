@@ -1,47 +1,27 @@
-//! Persistence facade — prefs JSON + SQLite for connections / profiles / users / commands.
+//! SQLite persistence for connections / profiles / users / commands / secrets.
 //!
-//! Callers should use this module only; do not open `app.db` or prefs paths directly.
+//! Shell prefs live in [`crate::data::prefs`]. Do not open `app.db` outside this module.
 
 pub mod db;
 pub mod error;
-pub(crate) mod prefs;
 pub mod secret_backend;
 pub mod types;
 
 pub use error::PersistError;
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Mutex;
 
-use directories::ProjectDirs;
 use log::info;
 use rusqlite::Connection;
 
-use crate::persist::db::schema;
-use crate::persist::types::{
+use crate::data::paths::config_dir;
+use crate::data::persist::db::schema;
+use crate::data::persist::types::{
     default_local_env_vars, default_ssh_env_vars, AuthUser, FavoriteCommand, SavedConnection,
     SecretRecord, TerminalProfile,
 };
-
-#[cfg(target_os = "android")]
-static ANDROID_BASE_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
-
-#[cfg(target_os = "android")]
-pub fn init_android_base_dir(path: PathBuf) {
-    let _ = ANDROID_BASE_DIR.set(path);
-}
-
-pub fn config_dir() -> Option<PathBuf> {
-    #[cfg(target_os = "android")]
-    {
-        if let Some(dir) = ANDROID_BASE_DIR.get() {
-            return Some(dir.join("config"));
-        }
-    }
-    ProjectDirs::from("io", "rsTerminal", "rsTerminal")
-        .map(|d| d.config_dir().to_path_buf())
-}
+use crate::data::prefs::io;
 
 pub struct Persist {
     db: Mutex<Connection>,
@@ -89,7 +69,7 @@ impl Persist {
     fn migrate_legacy_data(&self) -> Result<(), String> {
         let db = self.db.lock().unwrap();
         let count = db::profiles::count(&db).map_err(|e| e.to_string())?;
-        let legacy = prefs::load_legacy_settings();
+        let legacy = io::load_legacy_settings();
 
         if count == 0 {
             if let Some(legacy) = &legacy {
@@ -152,9 +132,7 @@ impl Persist {
         let migrate_names: Vec<(String, String)> = {
             let exists: bool = db
                 .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='_migrate_profile_names'")
-                .and_then(|mut s| {
-                    s.query_row([], |_| Ok(true))
-                })
+                .and_then(|mut s| s.query_row([], |_| Ok(true)))
                 .unwrap_or(false);
             if !exists {
                 Vec::new()
@@ -190,8 +168,8 @@ impl Persist {
             }
             if c.env_vars.is_empty() || c.env_vars == HashMap::new() {
                 c.env_vars = match c.conn_type {
-                    crate::persist::types::ConnectionType::Local => default_local_env_vars(),
-                    crate::persist::types::ConnectionType::Ssh => {
+                    types::ConnectionType::Local => default_local_env_vars(),
+                    types::ConnectionType::Ssh => {
                         let mut e = ssh_env.clone();
                         if e.is_empty() {
                             e = default_ssh_env_vars();
@@ -201,8 +179,7 @@ impl Persist {
                     _ => HashMap::new(),
                 };
                 changed = true;
-            } else if matches!(c.conn_type, crate::persist::types::ConnectionType::Ssh) {
-                // Merge legacy global ssh env under connection keys.
+            } else if matches!(c.conn_type, types::ConnectionType::Ssh) {
                 for (k, v) in &ssh_env {
                     c.env_vars.entry(k.clone()).or_insert_with(|| v.clone());
                 }

@@ -8,9 +8,9 @@ pub mod menu;
 pub mod messages;
 
 use crate::session::WorkspaceSession;
-use crate::prefs::Prefs;
-use crate::persist::types::TerminalProfile;
-use crate::persist::types::SavedConnection;
+use crate::data::prefs::Prefs;
+use crate::data::persist::types::TerminalProfile;
+use crate::data::persist::types::SavedConnection;
 use crate::ui::function_pane::{self, drag_split_enabled, split_enabled, FunctionPane};
 use crate::ui::page::dialogs::ManageAuthUsersAction;
 use crate::ui::page::settings::{settings_dialog, settings_page_dialog, SettingsUiAction};
@@ -131,8 +131,8 @@ impl AppShell {
         prefs: &mut Prefs,
         profiles: &[TerminalProfile],
         saved_connections: &[SavedConnection],
-        favorite_commands: &[crate::persist::types::FavoriteCommand],
-        auth_users: &[crate::persist::types::AuthUser],
+        favorite_commands: &[crate::data::persist::types::FavoriteCommand],
+        auth_users: &[crate::data::persist::types::AuthUser],
         virtual_keyboard: &mut VirtualKeyboard,
         live_font_size: &mut f32,
         suppress_terminal_input: bool,

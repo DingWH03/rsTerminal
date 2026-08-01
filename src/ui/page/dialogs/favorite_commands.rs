@@ -1,6 +1,6 @@
 //! Favorite command create/edit dialog and manage list dialog.
 
-use crate::persist::types::FavoriteCommand;
+use crate::data::persist::types::FavoriteCommand;
 use crate::ui::uiframe::style;
 
 fn android_ime_for_text_edit(ui: &egui::Ui, resp: &egui::Response, force: bool) {

@@ -4,7 +4,7 @@ use crate::connection::ssh_auth::ResolvedSshAuth;
 use crate::connection::{
     BleConnectParams, LocalConnectParams, SerialConnectParams, SshConnectParams,
 };
-use crate::persist::types::{AuthUser, SavedConnection};
+use crate::data::persist::types::{AuthUser, SavedConnection};
 
 pub fn local_params(conn: &SavedConnection) -> LocalConnectParams {
     LocalConnectParams {

@@ -1,6 +1,6 @@
 //! Resolved SSH credentials passed into connect (no persist DTOs).
 
-use crate::persist::types::{AuthMethod, AuthUser};
+use crate::data::persist::types::{AuthMethod, AuthUser};
 
 /// Authentication material for one SSH connect attempt.
 #[derive(Debug, Clone, Default)]

@@ -1,6 +1,6 @@
 //! Connections management page in the function pane.
 
-use crate::persist::types::{ConnectionType, SavedConnection};
+use crate::data::persist::types::{ConnectionType, SavedConnection};
 use crate::ui::shell::messages::FunctionAction;
 use crate::ui::uiframe::components::empty_state::{paint_empty_state, EmptyStateConfig};
 use crate::ui::uiframe::components::filter_chips::{self, CONNECTION_TYPE_FILTERS};

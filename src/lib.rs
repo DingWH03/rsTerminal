@@ -20,8 +20,7 @@ pub mod session;
 pub mod fonts;
 pub mod i18n;
 pub mod platform;
-pub mod prefs;
-pub mod persist;
+pub mod data;
 pub mod terminal;
 pub mod ui;
 
@@ -33,7 +32,7 @@ pub fn run_app(native_options: eframe::NativeOptions) {
         "rsTerminal",
         native_options,
         Box::new(|cc| {
-            let persist = crate::persist::Persist::open();
+            let persist = crate::data::Persist::open();
             let app = RsTerminalApp::new(persist);
             fonts::setup_fonts(&cc.egui_ctx, app.default_terminal_font());
             fonts::preload_monospace_catalog();
@@ -99,8 +98,8 @@ fn android_main(app: winit::platform::android::activity::AndroidApp) {
     // the `directories` crate returns None and config is lost on restart.
     // Use the app-internal data path provided by the system instead.
     if let Some(data_dir) = app.internal_data_path() {
-        persist::init_android_base_dir(data_dir);
-        log::info!("Android config dir: {:?}", persist::config_dir());
+        crate::data::init_android_base_dir(data_dir);
+        log::info!("Android config dir: {:?}", crate::data::config_dir());
     }
 
     let native_options = eframe::NativeOptions {

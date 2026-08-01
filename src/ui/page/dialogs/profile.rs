@@ -2,7 +2,7 @@
 
 use crate::config::{BellStyle, CursorStyle, TerminalTheme, TerminalType};
 use crate::fonts;
-use crate::persist::types::TerminalProfile;
+use crate::data::persist::types::TerminalProfile;
 use crate::config::KeyboardMode;
 use crate::ui::uiframe::style;
 

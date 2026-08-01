@@ -5,8 +5,8 @@ use super::RsTerminalApp;
 use crate::connection::{ble, serial, ssh};
 #[cfg(not(target_os = "android"))]
 use crate::connection::local;
-use crate::persist::types::ConnectionType;
-use crate::prefs::save_prefs;
+use crate::data::persist::types::ConnectionType;
+use crate::data::prefs::save_prefs;
 use crate::ui::function_pane::pages::FunctionPage;
 
 impl RsTerminalApp {
@@ -127,7 +127,7 @@ impl RsTerminalApp {
         }
     }
 
-    pub(crate) fn save_connection(&mut self, new_conn: crate::persist::types::SavedConnection) {
+    pub(crate) fn save_connection(&mut self, new_conn: crate::data::persist::types::SavedConnection) {
         if let Some(pos) = self
             .saved_connections
             .iter()

@@ -1,6 +1,6 @@
 //! Secret storage backends (local DB vs system keyring stub).
 
-use crate::persist::types::{SecretBackendKind, SecretRecord};
+use crate::data::persist::types::{SecretBackendKind, SecretRecord};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SecretError {

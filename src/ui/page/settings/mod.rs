@@ -8,8 +8,8 @@ mod general;
 mod terminal;
 mod users;
 
-use crate::persist::types::{AuthUser, TerminalProfile};
-use crate::prefs::Prefs;
+use crate::data::persist::types::{AuthUser, TerminalProfile};
+use crate::data::prefs::Prefs;
 use crate::ui::page::dialogs::ManageAuthUsersAction;
 use crate::ui::uiframe::style;
 

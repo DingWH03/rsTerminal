@@ -2,7 +2,7 @@
 
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::persist::types::FavoriteCommand;
+use crate::data::persist::types::FavoriteCommand;
 
 fn now_secs() -> i64 {
     std::time::SystemTime::now()

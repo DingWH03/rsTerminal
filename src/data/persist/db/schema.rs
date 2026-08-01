@@ -293,8 +293,8 @@ fn migrate_v4(conn: &Connection) -> rusqlite::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::persist::db::{connections, profiles};
-    use crate::persist::types::{SavedConnection, TerminalProfile};
+    use crate::data::persist::db::{connections, profiles};
+    use crate::data::persist::types::{SavedConnection, TerminalProfile};
 
     fn open_migrated() -> Connection {
         let conn = Connection::open_in_memory().unwrap();

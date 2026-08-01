@@ -12,7 +12,7 @@ use crate::fs::sftp::{join_remote, SftpClient};
 use crate::fs::FileEntry;
 use crate::session::terminal::ActiveSession;
 use crate::session::workspace::WorkspaceSession;
-use crate::persist::types::{ConnectionType, SavedConnection};
+use crate::data::persist::types::{ConnectionType, SavedConnection};
 
 enum PendingOp {
     Home(mpsc::Receiver<Result<String, String>>),
@@ -206,7 +206,7 @@ impl SessionFilesCache {
 pub fn tick_session_files(
     session: &mut ActiveSession,
     connections: &[SavedConnection],
-    auth_users: &[crate::persist::types::AuthUser],
+    auth_users: &[crate::data::persist::types::AuthUser],
 ) {
     match session.conn_type {
         ConnectionType::Local => tick_local(session),
@@ -265,7 +265,7 @@ fn tick_local(session: &mut ActiveSession) {
 fn tick_ssh(
     session: &mut ActiveSession,
     connections: &[SavedConnection],
-    auth_users: &[crate::persist::types::AuthUser],
+    auth_users: &[crate::data::persist::types::AuthUser],
 ) {
     if let Some(cwd) = session.terminal.screen.cwd.as_deref() {
         if !cwd.is_empty() {
@@ -323,7 +323,7 @@ fn tick_ssh(
 fn ensure_session_sftp(
     session: &mut ActiveSession,
     connections: &[SavedConnection],
-    auth_users: &[crate::persist::types::AuthUser],
+    auth_users: &[crate::data::persist::types::AuthUser],
 ) {
     if session.session_sftp.is_some() {
         return;
@@ -445,7 +445,7 @@ fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<(), String> {
 pub fn tick_all_session_files(
     sessions: &mut [WorkspaceSession],
     connections: &[SavedConnection],
-    auth_users: &[crate::persist::types::AuthUser],
+    auth_users: &[crate::data::persist::types::AuthUser],
 ) {
     for session in sessions {
         if let Some(term) = session.terminal_mut() {

@@ -74,7 +74,7 @@ pub fn render_pane(
                             WorkspaceSession::Terminal(term) => {
                                 let profile_id = term.profile_id.clone();
                                 let (theme, cursor_style, cell_width_scale) = {
-                                    let profile = crate::persist::types::resolve_profile(
+                                    let profile = crate::data::persist::types::resolve_profile(
                                         ctx.profiles,
                                         Some(profile_id.as_str()),
                                     );

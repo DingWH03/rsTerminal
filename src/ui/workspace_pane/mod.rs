@@ -8,8 +8,8 @@ pub mod split_widget;
 use std::collections::HashMap;
 
 use crate::session::WorkspaceSession;
-use crate::prefs::Prefs;
-use crate::persist::types::{SavedConnection, TerminalProfile};
+use crate::data::prefs::Prefs;
+use crate::data::persist::types::{SavedConnection, TerminalProfile};
 use crate::ui::function_pane::FunctionPane;
 use crate::ui::shell::layout_preview::pane_rects_from_tree;
 use crate::ui::shell::layout_state::WorkspaceLayout;

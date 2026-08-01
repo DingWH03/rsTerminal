@@ -9,11 +9,11 @@ mod lifecycle;
 mod notices;
 mod sessions;
 
-use crate::persist::{
+use crate::data::persist::{
     types::{resolve_profile, AuthUser, FavoriteCommand, SavedConnection, TerminalProfile},
     Persist,
 };
-use crate::prefs::{load_prefs, Prefs};
+use crate::data::prefs::{load_prefs, Prefs};
 use crate::session::WorkspaceSession;
 use crate::ui::shell::AppShell;
 use crate::ui::page::dialogs::{

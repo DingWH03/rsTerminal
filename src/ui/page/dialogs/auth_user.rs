@@ -1,6 +1,6 @@
 //! Auth user (SSH identity) create/edit dialog.
 
-use crate::persist::types::{AuthMethod, AuthUser};
+use crate::data::persist::types::{AuthMethod, AuthUser};
 use crate::ui::uiframe::style;
 
 fn android_ime_for_text_edit(ui: &egui::Ui, resp: &egui::Response, force: bool) {

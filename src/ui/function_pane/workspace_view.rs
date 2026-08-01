@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use crate::prefs::Prefs;
+use crate::data::prefs::Prefs;
 use crate::session::WorkspaceSession;
 use crate::ui::function_pane::session_list::{paint_session_rows, SessionListContext};
 use crate::ui::function_pane::{drag_split_enabled, FunctionPane};

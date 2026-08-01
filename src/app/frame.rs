@@ -1,7 +1,7 @@
 //! Per-frame orchestration: tick → shell.render → dispatch actions → dialogs.
 
 use super::RsTerminalApp;
-use crate::prefs::save_prefs;
+use crate::data::prefs::save_prefs;
 use crate::session::{ConnectionViewAction, WorkspaceSession};
 use crate::ui::function_pane::pages::FunctionPage;
 use crate::ui::page::dialogs::{FavoriteCommandOutcome, ProfileDialogOutcome};

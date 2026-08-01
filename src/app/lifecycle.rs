@@ -2,10 +2,10 @@
 
 use super::RsTerminalApp;
 use crate::fonts;
-use crate::persist::types::TerminalProfile;
-use crate::prefs::save_prefs;
+use crate::data::persist::types::TerminalProfile;
+use crate::data::prefs::save_prefs;
 use crate::session::WorkspaceSession;
-use crate::persist::types::resolve_profile;
+use crate::data::persist::types::resolve_profile;
 use crate::ui::function_pane::pages::FunctionPage;
 use crate::ui::page::dialogs::LocalTerminalSettingsDialog;
 
@@ -72,7 +72,7 @@ impl RsTerminalApp {
     pub(crate) fn delete_profile(&mut self, id: &str) {
         match self.persist.delete_profile(id) {
             Ok(()) => self.reload_profiles(),
-            Err(crate::persist::PersistError::ProfileInUse { count }) => {
+            Err(crate::data::persist::PersistError::ProfileInUse { count }) => {
                 self.connection_notice = Some(
                     rust_i18n::t!("err_profile_in_use", count = count).into_owned(),
                 );

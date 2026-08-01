@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::persist::types::{
+use crate::data::persist::types::{
     default_local_env_vars, default_ssh_env_vars, ConnectionType, SavedConnection,
 };
 

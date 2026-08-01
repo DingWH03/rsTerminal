@@ -3,7 +3,7 @@
 use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::config::{BellStyle, CursorStyle, TerminalTheme, TerminalType};
-use crate::persist::types::TerminalProfile;
+use crate::data::persist::types::TerminalProfile;
 use crate::config::KeyboardMode;
 
 pub fn list_all(conn: &Connection) -> rusqlite::Result<Vec<TerminalProfile>> {

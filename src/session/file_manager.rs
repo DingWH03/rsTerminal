@@ -198,8 +198,8 @@ impl FileManagerSession {
     }
 
     pub fn open_ssh(
-        config: &crate::persist::types::SavedConnection,
-        auth_user: Option<&crate::persist::types::AuthUser>,
+        config: &crate::data::persist::types::SavedConnection,
+        auth_user: Option<&crate::data::persist::types::AuthUser>,
     ) -> Result<Self, String> {
         let client = SftpClient::connect_with_auth(config, auth_user, None)?;
         let host = config.ssh_host.as_deref().unwrap_or("host");

@@ -7,7 +7,7 @@ use crate::connection::{ConnectionPort, ConnectionPortKind};
 use crate::session::files_cache::SessionFilesCache;
 use crate::session::galley_cache::RowGalleyCache;
 use crate::session::selection_state::{CellPos, TerminalSelection, TerminalTouchState};
-use crate::persist::types::ConnectionType;
+use crate::data::persist::types::ConnectionType;
 use crate::terminal::Terminal;
 
 /// 单个端口（多路复用连接中的子通道）的 UI 状态。

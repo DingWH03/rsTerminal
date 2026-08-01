@@ -9,9 +9,9 @@ pub mod pages;
 pub mod session_list;
 pub mod workspace_view;
 
-use crate::persist::types::{ConnectionType, FavoriteCommand, SavedConnection};
+use crate::data::persist::types::{ConnectionType, FavoriteCommand, SavedConnection};
 use crate::session::WorkspaceSession;
-use crate::prefs::Prefs;
+use crate::data::prefs::Prefs;
 use crate::ui::function_pane::pages::FunctionPage;
 use crate::ui::shell::layout_state::WorkspaceLayout;
 use crate::ui::shell::messages::FunctionAction;
@@ -168,7 +168,7 @@ pub fn render(
     highlighted_session: Option<&str>,
     connections: &[SavedConnection],
     favorite_commands: &[FavoriteCommand],
-    auth_users: &[crate::persist::types::AuthUser],
+    auth_users: &[crate::data::persist::types::AuthUser],
     prefs: &Prefs,
     _page_slide: f32,
 ) -> FunctionAction {

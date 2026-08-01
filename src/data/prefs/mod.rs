@@ -1,10 +1,11 @@
 //! Lightweight application preferences (JSON).
 //!
-//! Terminal profiles, connections, and auth users live in SQLite — not here.
+//! Terminal profiles, connections, and auth users live in SQLite — see [`super::persist`].
 
 mod appearance;
 mod chrome;
 mod general;
+pub(crate) mod io;
 
 pub use appearance::AppearancePrefs;
 pub use chrome::ChromePrefs;
@@ -84,9 +85,9 @@ impl<'de> Deserialize<'de> for Prefs {
 }
 
 pub fn load_prefs() -> Prefs {
-    crate::persist::prefs::load_prefs()
+    io::load_prefs()
 }
 
 pub fn save_prefs(prefs: &Prefs) {
-    crate::persist::prefs::save_prefs(prefs)
+    io::save_prefs(prefs)
 }
