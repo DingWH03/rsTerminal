@@ -1,10 +1,10 @@
 //! Per-frame orchestration: tick → shell.render → dispatch actions → dialogs.
 
 use super::RsTerminalApp;
-use crate::settings::save_settings;
+use crate::prefs::save_prefs;
 use crate::session::{ConnectionViewAction, WorkspaceSession};
 use crate::ui::function_pane::pages::FunctionPage;
-use crate::ui::page::dialogs::FavoriteCommandOutcome;
+use crate::ui::page::dialogs::{FavoriteCommandOutcome, ProfileDialogOutcome};
 
 impl RsTerminalApp {
     pub(crate) fn frame_logic(&mut self, ctx: &egui::Context) {
@@ -46,7 +46,7 @@ impl RsTerminalApp {
             }
         }
 
-        self.settings.ui_theme.apply(&ctx);
+        self.prefs.ui_theme().apply(&ctx);
         self.shell.sync_width(ctx.content_rect().width());
 
         // F11 toggles OS fullscreen (consume so the terminal does not receive it).
@@ -90,7 +90,8 @@ impl RsTerminalApp {
             ui,
             top_inset,
             &mut self.sessions,
-            &mut self.settings,
+            &mut self.prefs,
+            &self.profiles,
             &self.saved_connections,
             &self.favorite_commands,
             &self.auth_users,
@@ -105,16 +106,18 @@ impl RsTerminalApp {
             &self.auth_users,
         );
 
-        self.shell.sync_focus_change(&mut self.sessions);
+        if self.shell.sync_focus_change(&mut self.sessions) {
+            self.apply_focused_session_terminal_font(&ctx);
+        }
 
         if render.settings_closed {
             self.shell.layout.settings_dialog_open = false;
-            save_settings(&self.settings);
-            self.live_font_size = self.settings.font_size();
+            save_prefs(&self.prefs);
+            self.live_font_size = self.resolve_profile(None).font_size;
             self.reload_terminal_fonts(&ctx);
         }
 
-        // Preferences → Users tab actions.
+        // Settings → Users / Profiles nested page actions.
         if render.auth_users_action.new {
             self.auth_user_dialog.open_new();
             self.release_terminal_keyboard_focus(&ctx);
@@ -127,6 +130,22 @@ impl RsTerminalApp {
         }
         if let Some(id) = render.auth_users_action.delete_id.clone() {
             self.delete_auth_user(&id);
+        }
+        if render.request_new_profile {
+            self.profile_dialog.open_new();
+            self.release_terminal_keyboard_focus(&ctx);
+        }
+        if let Some(id) = render.request_edit_profile.clone() {
+            if let Some(profile) = self.profiles.iter().find(|p| p.id == id).cloned() {
+                self.profile_dialog.open_edit(&profile);
+                self.release_terminal_keyboard_focus(&ctx);
+            }
+        }
+        if let Some(id) = render.delete_profile_id.clone() {
+            self.delete_profile(&id);
+        }
+        if let Some(id) = render.set_default_profile_id.clone() {
+            self.set_default_profile(&id);
         }
 
         let fa = &render.function_action;
@@ -191,8 +210,8 @@ impl RsTerminalApp {
         }
 
         if fa.toggle_settings || render.settings_closed {
-            save_settings(&self.settings);
-            self.live_font_size = self.settings.font_size();
+            save_prefs(&self.prefs);
+            self.live_font_size = self.resolve_profile(None).font_size;
             self.reload_terminal_fonts(&ctx);
         }
 
@@ -201,8 +220,16 @@ impl RsTerminalApp {
             self.auth_user_dialog.open_new();
             self.release_terminal_keyboard_focus(&ctx);
         }
+        if self.new_conn_dialog.request_new_profile {
+            self.new_conn_dialog.request_new_profile = false;
+            self.profile_dialog.open_new();
+            self.release_terminal_keyboard_focus(&ctx);
+        }
 
-        if let Some(new_conn) = self.new_conn_dialog.show(&ctx, &self.auth_users) {
+        if let Some(new_conn) =
+            self.new_conn_dialog
+                .show(&ctx, &self.auth_users, &self.profiles)
+        {
             self.save_connection(new_conn);
         }
 
@@ -212,6 +239,13 @@ impl RsTerminalApp {
             if self.new_conn_dialog.open {
                 self.new_conn_dialog.select_auth_user(id);
             }
+        }
+
+        match self.profile_dialog.show(&ctx) {
+            ProfileDialogOutcome::Saved(profile) => {
+                self.apply_saved_profile(profile);
+            }
+            ProfileDialogOutcome::None => {}
         }
 
         match self.favorite_cmd_dialog.show(&ctx) {
@@ -260,7 +294,7 @@ impl RsTerminalApp {
             self.reconnect_ssh_session(pane, conn_id);
         }
 
-        self.settings.function_pane_width = Some(self.shell.layout.function_width);
+        self.prefs.function_pane_width = Some(self.shell.layout.function_width);
         ctx.request_repaint_after(std::time::Duration::from_millis(400));
     }
 }

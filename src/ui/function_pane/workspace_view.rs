@@ -2,8 +2,8 @@
 
 use std::collections::HashSet;
 
+use crate::prefs::Prefs;
 use crate::session::WorkspaceSession;
-use crate::settings::AppSettings;
 use crate::ui::function_pane::session_list::{paint_session_rows, SessionListContext};
 use crate::ui::function_pane::{drag_split_enabled, FunctionPane};
 use crate::ui::pane_colors::session_accent_map;
@@ -16,7 +16,7 @@ pub fn render(
     sessions: &[WorkspaceSession],
     workspace: &WorkspaceLayout,
     highlighted_session: Option<&str>,
-    settings: &AppSettings,
+    prefs: &Prefs,
 ) -> FunctionAction {
     let mut action = FunctionAction::empty();
 
@@ -29,7 +29,7 @@ pub fn render(
         .filter_map(|p| p.session_id.clone())
         .collect();
 
-    let accents = session_accent_map(workspace, settings);
+    let accents = session_accent_map(workspace, prefs);
 
     let ctx = SessionListContext {
         split_enabled: drag_split_enabled(pane, sessions.len()),

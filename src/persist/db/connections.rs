@@ -1,15 +1,19 @@
 //! Connections table CRUD.
 
+use std::collections::HashMap;
+
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::persist::types::{ConnectionType, SavedConnection};
+use crate::persist::types::{
+    default_local_env_vars, default_ssh_env_vars, ConnectionType, SavedConnection,
+};
 
 pub fn list_all(conn: &Connection) -> rusqlite::Result<Vec<SavedConnection>> {
     let mut stmt = conn.prepare(
         r#"
         SELECT id, name, conn_type, favorite, last_connected, shell, working_dir,
                ssh_host, ssh_port, ssh_user, ssh_password, serial_port, serial_baud, ble_device,
-               auth_user_id
+               auth_user_id, profile_id, env_vars
         FROM connections
         ORDER BY favorite DESC, name COLLATE NOCASE ASC
         "#,
@@ -27,7 +31,7 @@ pub fn get(conn: &Connection, id: &str) -> rusqlite::Result<Option<SavedConnecti
         r#"
         SELECT id, name, conn_type, favorite, last_connected, shell, working_dir,
                ssh_host, ssh_port, ssh_user, ssh_password, serial_port, serial_baud, ble_device,
-               auth_user_id
+               auth_user_id, profile_id, env_vars
         FROM connections WHERE id = ?1
         "#,
         params![id],
@@ -37,14 +41,15 @@ pub fn get(conn: &Connection, id: &str) -> rusqlite::Result<Option<SavedConnecti
 }
 
 pub fn upsert(conn: &Connection, c: &SavedConnection) -> rusqlite::Result<()> {
+    let env_json = serde_json::to_string(&c.env_vars).unwrap_or_else(|_| "{}".into());
     conn.execute(
         r#"
         INSERT INTO connections (
             id, name, conn_type, favorite, last_connected, shell, working_dir,
             ssh_host, ssh_port, ssh_user, ssh_password, serial_port, serial_baud, ble_device,
-            auth_user_id
+            auth_user_id, profile_id, env_vars
         ) VALUES (
-            ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15
+            ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17
         )
         ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
@@ -60,7 +65,9 @@ pub fn upsert(conn: &Connection, c: &SavedConnection) -> rusqlite::Result<()> {
             serial_port = excluded.serial_port,
             serial_baud = excluded.serial_baud,
             ble_device = excluded.ble_device,
-            auth_user_id = excluded.auth_user_id
+            auth_user_id = excluded.auth_user_id,
+            profile_id = excluded.profile_id,
+            env_vars = excluded.env_vars
         "#,
         params![
             c.id,
@@ -78,6 +85,8 @@ pub fn upsert(conn: &Connection, c: &SavedConnection) -> rusqlite::Result<()> {
             c.serial_baud.map(|b| b as i64),
             c.ble_device,
             c.auth_user_id,
+            c.profile_id,
+            env_json,
         ],
     )?;
     Ok(())
@@ -88,12 +97,38 @@ pub fn delete(conn: &Connection, id: &str) -> rusqlite::Result<()> {
     Ok(())
 }
 
+pub fn count_using_auth_user(conn: &Connection, auth_user_id: &str) -> rusqlite::Result<i64> {
+    conn.query_row(
+        "SELECT COUNT(*) FROM connections WHERE auth_user_id = ?1",
+        params![auth_user_id],
+        |r| r.get(0),
+    )
+}
+
+pub fn count_using_profile(conn: &Connection, profile_id: &str) -> rusqlite::Result<i64> {
+    conn.query_row(
+        "SELECT COUNT(*) FROM connections WHERE profile_id = ?1",
+        params![profile_id],
+        |r| r.get(0),
+    )
+}
+
 fn row_to_conn(row: &rusqlite::Row<'_>) -> rusqlite::Result<SavedConnection> {
     let conn_type_s: String = row.get(2)?;
     let conn_type = ConnectionType::from_str_db(&conn_type_s).unwrap_or(ConnectionType::Ssh);
     let favorite: i64 = row.get(3)?;
     let ssh_port: Option<i64> = row.get(8)?;
     let serial_baud: Option<i64> = row.get(12)?;
+    let env_json: String = row.get(16)?;
+    let mut env_vars: HashMap<String, String> =
+        serde_json::from_str(&env_json).unwrap_or_default();
+    if env_vars.is_empty() {
+        env_vars = match conn_type {
+            ConnectionType::Local => default_local_env_vars(),
+            ConnectionType::Ssh => default_ssh_env_vars(),
+            _ => HashMap::new(),
+        };
+    }
     Ok(SavedConnection {
         id: row.get(0)?,
         name: row.get(1)?,
@@ -110,5 +145,7 @@ fn row_to_conn(row: &rusqlite::Row<'_>) -> rusqlite::Result<SavedConnection> {
         serial_baud: serial_baud.map(|b| b as u32),
         ble_device: row.get(13)?,
         auth_user_id: row.get(14)?,
+        profile_id: row.get(15)?,
+        env_vars,
     })
 }

@@ -48,6 +48,7 @@ impl RsTerminalApp {
         let Some(idx) = self.sessions.iter().position(|s| s.id() == session_id) else {
             return;
         };
+        let profile = self.resolve_profile(config.profile_id.as_deref()).clone();
         let WorkspaceSession::Terminal(term) = &mut self.sessions[idx] else {
             return;
         };
@@ -55,13 +56,14 @@ impl RsTerminalApp {
             return;
         }
         term.handle.close();
-        let profile = self.settings.default_profile().clone();
         let rows = term.last_pty_rows.max(1);
         let cols = term.last_pty_cols.max(1);
-        match local::connect_local(config, &profile, rows, cols) {
+        match local::connect_local(config, rows, cols) {
             Ok(handle) => {
                 term.handle = handle;
                 term.saved_conn_id = Some(config.id.clone());
+                term.profile_id = profile.id.clone();
+                term.live_font_size = profile.font_size;
                 term.name = config.name.clone();
                 term.user_at_host = crate::platform::get().local_user_at_host();
                 term.want_terminal_focus = true;
@@ -132,11 +134,14 @@ impl RsTerminalApp {
             std::sync::Arc<crate::fs::sftp::SftpClient>,
         )>,
     ) {
-        let profile = self.settings.default_profile();
+        let profile = self.resolve_profile(config.profile_id.as_deref());
+        let profile_id = profile.id.clone();
+        let live_font_size = profile.font_size;
+        let keyboard_mode = profile.keyboard_mode;
         let mut terminal = Terminal::new(DEFAULT_GRID_ROWS, DEFAULT_GRID_COLS);
         terminal.set_scrollback_limit(scrollback_lines);
-        self.live_font_size = profile.font_size;
-        self.virtual_keyboard = VirtualKeyboard::new(profile.keyboard_mode);
+        self.live_font_size = live_font_size;
+        self.virtual_keyboard = VirtualKeyboard::new(keyboard_mode);
 
         let user_at_host = match config.conn_type {
             ConnectionType::Local => crate::platform::get().local_user_at_host(),
@@ -158,6 +163,8 @@ impl RsTerminalApp {
             id: id.clone(),
             conn_type: config.conn_type.clone(),
             saved_conn_id: Some(config.id.clone()),
+            profile_id,
+            live_font_size,
             name: config.name.clone(),
             user_at_host,
             handle,
@@ -174,7 +181,7 @@ impl RsTerminalApp {
             want_terminal_focus: true,
             terminal_had_focus: false,
             row_galley_cache: Default::default(),
-            layout_font_size: self.live_font_size,
+            layout_font_size: live_font_size,
             grid_rows: DEFAULT_GRID_ROWS,
             grid_cols: DEFAULT_GRID_COLS,
             last_pty_rows: DEFAULT_GRID_ROWS as u16,
@@ -289,7 +296,7 @@ impl RsTerminalApp {
         }
         match ssh::connect_ssh_session(
             &config,
-            &self.settings.ssh_env_vars,
+            &config.env_vars,
             24,
             80,
             auth.as_ref(),

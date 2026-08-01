@@ -8,7 +8,6 @@ use crate::connection::{
     ConnIn, ConnOut, ConnectionHandle, ConnectionState, RepaintNotifier, emit_conn_data, pty_burst,
     winchg,
 };
-use crate::settings::Profile;
 use crate::persist::types::SavedConnection;
 
 fn pty_size(rows: u16, cols: u16) -> PtySize {
@@ -62,7 +61,6 @@ fn apply_pty_resize(master: &dyn MasterPty, rows: u16, cols: u16, shell_pid: Opt
 
 pub fn connect_local(
     config: &SavedConnection,
-    profile: &Profile,
     rows: u16,
     cols: u16,
 ) -> Result<ConnectionHandle, String> {
@@ -93,8 +91,8 @@ pub fn connect_local(
     for (key, value) in std::env::vars() {
         cmd.env(&key, &value);
     }
-    // Override with profile settings
-    for (key, value) in &profile.env_vars {
+    // Override with per-connection environment.
+    for (key, value) in &config.env_vars {
         cmd.env(key, value);
     }
 

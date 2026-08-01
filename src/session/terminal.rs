@@ -77,6 +77,10 @@ pub struct ActiveSession {
     pub disconnect_message: Option<String>,
     /// 源已保存连接 ID（用于 SSH「新窗口」功能）；本地连接可能为空
     pub saved_conn_id: Option<String>,
+    /// Terminal profile id (resolved at open; unknown ids fall back at paint time).
+    pub profile_id: String,
+    /// Per-session zoom font size (initialized from profile).
+    pub live_font_size: f32,
     /// 已保存连接的显示名称（Serial/BLE 标签页标题）
     pub name: String,
     /// 空闲标签页标签（Local/SSH 显示为 `user@host`）

@@ -7,6 +7,7 @@
 pub mod notices;
 pub mod favorite_commands;
 pub mod auth_user;
+pub mod profile;
 
 pub use notices::{paint_connection_notice, paint_quit_confirm};
 pub use favorite_commands::{
@@ -14,13 +15,19 @@ pub use favorite_commands::{
     ManageFavoriteCommandsDialog,
 };
 pub use auth_user::{
-    manage_auth_users_dialog, AuthUserDialog, ManageAuthUsersAction,
+    auth_users_page, manage_auth_users_dialog, AuthUserDialog, ManageAuthUsersAction,
 };
+pub use profile::{ProfileDialog, ProfileDialogOutcome};
 
 use std::sync::mpsc;
 
+use std::collections::HashMap;
+
 use crate::connection::enumeration::{enumerate_serial_ports, scan_ble_devices_blocking};
-use crate::persist::types::{AuthUser, ConnectionType, SavedConnection};
+use crate::persist::types::{
+    default_local_env_vars, default_ssh_env_vars, AuthUser, ConnectionType, SavedConnection,
+    TerminalProfile,
+};
 use crate::ui::uiframe::style;
 
 /// On Android, show the soft keyboard for a focused dialog text field.
@@ -44,6 +51,19 @@ fn dialog_text_edit(ui: &mut egui::Ui, text: &mut String) -> egui::Response {
     let resp = ui.text_edit_singleline(text);
     android_ime_for_text_edit(ui, &resp, false);
     resp
+}
+
+fn env_map_to_rows(map: &HashMap<String, String>) -> Vec<(String, String)> {
+    let mut rows: Vec<(String, String)> = map.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    rows.sort_by(|a, b| a.0.cmp(&b.0));
+    rows
+}
+
+fn env_rows_to_map(rows: &[(String, String)]) -> HashMap<String, String> {
+    rows.iter()
+        .filter(|(k, _)| !k.trim().is_empty())
+        .map(|(k, v)| (k.trim().to_string(), v.clone()))
+        .collect()
 }
 
 /// Outcome of painting the connection form for one frame.
@@ -72,6 +92,12 @@ pub struct NewConnectionDialog {
     pub selected_auth_user_id: Option<String>,
     /// Set when user picks "New user…" in the SSH combo.
     pub request_new_auth_user: bool,
+    /// Terminal profile id (`None` = app default).
+    pub selected_profile_id: Option<String>,
+    /// Set when user picks "New profile…" in the profile combo.
+    pub request_new_profile: bool,
+    /// Per-connection environment variables (editable rows).
+    pub env_rows: Vec<(String, String)>,
     // Serial
     pub serial_port: String,
     pub serial_baud: String,
@@ -98,6 +124,9 @@ impl Default for NewConnectionDialog {
             ssh_port: "22".to_string(),
             selected_auth_user_id: None,
             request_new_auth_user: false,
+            selected_profile_id: None,
+            request_new_profile: false,
+            env_rows: env_map_to_rows(&default_local_env_vars()),
             serial_port: String::new(),
             serial_baud: "115200".to_string(),
             serial_devices: Vec::new(),
@@ -121,6 +150,7 @@ impl NewConnectionDialog {
         self.working_dir = std::env::var("HOME")
             .or_else(|_| std::env::var("USERPROFILE"))
             .unwrap_or_default();
+        self.env_rows = env_map_to_rows(&default_local_env_vars());
     }
 
     /// 打开编辑连接表单，用已有连接数据填充。
@@ -136,6 +166,8 @@ impl NewConnectionDialog {
         self.ssh_host = conn.ssh_host.clone().unwrap_or_default();
         self.ssh_port = conn.ssh_port.map(|p| p.to_string()).unwrap_or_else(|| "22".into());
         self.selected_auth_user_id = conn.auth_user_id.clone();
+        self.selected_profile_id = conn.profile_id.clone();
+        self.env_rows = env_map_to_rows(&conn.env_vars);
         self.serial_port = conn.serial_port.clone().unwrap_or_default();
         self.serial_baud = conn
             .serial_baud
@@ -187,11 +219,17 @@ impl NewConnectionDialog {
         self.conn_type = ConnectionType::Ssh;
     }
 
+    /// Select a terminal profile after creating one from the nested dialog.
+    pub fn select_profile(&mut self, id: String) {
+        self.selected_profile_id = Some(id);
+    }
+
     /// 显示居中弹出窗口并处理交互。返回 `Some(SavedConnection)` 表示保存。
     pub fn show(
         &mut self,
         ctx: &egui::Context,
         auth_users: &[AuthUser],
+        profiles: &[TerminalProfile],
     ) -> Option<SavedConnection> {
         if !self.open {
             return None;
@@ -213,7 +251,7 @@ impl NewConnectionDialog {
         use crate::ui::uiframe::{DialogFrame, DialogOutcome};
         let frame = DialogFrame::new(title.to_string()).foreground();
         let closed = frame.show(ctx, "new_connection_dialog", |ui| {
-            outcome = self.paint_form(ui, ctx, auth_users);
+            outcome = self.paint_form(ui, ctx, auth_users, profiles);
         }) == DialogOutcome::Closed;
 
         if closed {
@@ -240,10 +278,17 @@ impl NewConnectionDialog {
         ui: &mut egui::Ui,
         ctx: &egui::Context,
         auth_users: &[AuthUser],
+        profiles: &[TerminalProfile],
     ) -> ConnectionFormOutcome {
         let mut outcome = ConnectionFormOutcome::None;
         let editing = self.edit_id.is_some();
         let available_types = Self::available_types();
+        let default_profile_name = profiles
+            .iter()
+            .find(|p| p.is_default)
+            .or_else(|| profiles.first())
+            .map(|p| p.name.as_str())
+            .unwrap_or("Default");
 
         ui.horizontal(|ui| {
             ui.label(rust_i18n::t!("dialog_type"));
@@ -262,6 +307,13 @@ impl NewConnectionDialog {
                     if self.conn_type == ConnectionType::Serial {
                         self.refresh_serial_devices();
                     }
+                    if !editing {
+                        self.env_rows = match self.conn_type {
+                            ConnectionType::Local => env_map_to_rows(&default_local_env_vars()),
+                            ConnectionType::Ssh => env_map_to_rows(&default_ssh_env_vars()),
+                            ConnectionType::Serial | ConnectionType::Ble => Vec::new(),
+                        };
+                    }
                 }
             });
         });
@@ -275,6 +327,47 @@ impl NewConnectionDialog {
                 self.request_name_focus = false;
             }
             android_ime_for_text_edit(ui, &name_edit, force_ime);
+        });
+
+        ui.horizontal(|ui| {
+            ui.label(rust_i18n::t!("dialog_profile"));
+            let selected_label = self
+                .selected_profile_id
+                .as_ref()
+                .filter(|id| !id.is_empty())
+                .and_then(|id| profiles.iter().find(|p| p.id == *id).map(|p| p.name.clone()))
+                .unwrap_or_else(|| {
+                    format!(
+                        "{} ({})",
+                        rust_i18n::t!("dialog_profile_default"),
+                        default_profile_name
+                    )
+                });
+            egui::ComboBox::from_id_salt("conn_profile_combo")
+                .selected_text(selected_label)
+                .width(220.0)
+                .show_ui(ui, |ui| {
+                    if ui
+                        .selectable_label(false, rust_i18n::t!("dialog_profile_new"))
+                        .clicked()
+                    {
+                        self.request_new_profile = true;
+                    }
+                    ui.separator();
+                    let default_label = format!(
+                        "{} ({})",
+                        rust_i18n::t!("dialog_profile_default"),
+                        default_profile_name
+                    );
+                    ui.selectable_value(&mut self.selected_profile_id, None, default_label);
+                    for p in profiles {
+                        ui.selectable_value(
+                            &mut self.selected_profile_id,
+                            Some(p.id.clone()),
+                            &p.name,
+                        );
+                    }
+                });
         });
 
         ui.add_space(12.0);
@@ -429,6 +522,36 @@ impl NewConnectionDialog {
             }
         }
 
+        if matches!(self.conn_type, ConnectionType::Local | ConnectionType::Ssh) {
+            ui.add_space(12.0);
+            ui.separator();
+            ui.add_space(4.0);
+            ui.label(egui::RichText::new(rust_i18n::t!("dialog_env_vars")).strong());
+            let mut remove_idx = None;
+            for (i, (key, value)) in self.env_rows.iter_mut().enumerate() {
+                ui.horizontal(|ui| {
+                    let key_w = ui.available_width() * 0.35;
+                    ui.add(egui::TextEdit::singleline(key).desired_width(key_w));
+                    ui.add(
+                        egui::TextEdit::singleline(value)
+                            .desired_width(ui.available_width() - 36.0),
+                    );
+                    if ui
+                        .add(egui::Button::new("×").min_size(egui::vec2(28.0, 24.0)))
+                        .clicked()
+                    {
+                        remove_idx = Some(i);
+                    }
+                });
+            }
+            if let Some(i) = remove_idx {
+                self.env_rows.remove(i);
+            }
+            if ui.button(rust_i18n::t!("dialog_env_add")).clicked() {
+                self.env_rows.push((String::new(), String::new()));
+            }
+        }
+
         ui.add_space(20.0);
 
         ui.horizontal(|ui| {
@@ -510,6 +633,8 @@ impl NewConnectionDialog {
                 if let Some(id) = self.edit_id.take() {
                     conn.id = id;
                 }
+                conn.profile_id = self.selected_profile_id.clone().filter(|id| !id.is_empty());
+                conn.env_vars = env_rows_to_map(&self.env_rows);
                 outcome = ConnectionFormOutcome::Saved(conn);
             }
         });

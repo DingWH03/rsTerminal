@@ -65,7 +65,6 @@ pub fn connection_view(
     keyboard: &mut VirtualKeyboard,
     theme: &TerminalTheme,
     cursor_style: CursorStyle,
-    font_size: &mut f32,
     cell_width_scale: f32,
     function_pane: &mut FunctionPane,
     pane_id: u64,
@@ -77,6 +76,10 @@ pub fn connection_view(
     let ctx = ui.ctx().clone();
     let term_widget_id = terminal_widget_id(pane_id);
     let mut action = ConnectionViewAction::None;
+    let mut font_size = session
+        .as_ref()
+        .map(|s| s.live_font_size)
+        .unwrap_or(14.0);
 
     if let Some(session) = session.as_ref() {
         session.handle.repaint.set_context(ctx.clone());
@@ -246,7 +249,7 @@ pub fn connection_view(
                     .on_hover_text("A-")
                     .clicked()
                     {
-                        *font_size = (*font_size - 1.0).max(8.0);
+                        font_size = (font_size - 1.0).max(8.0);
                     }
                     if icon_toolbar_button(
                         ui,
@@ -256,7 +259,7 @@ pub fn connection_view(
                     .on_hover_text("A+")
                     .clicked()
                     {
-                        *font_size = (*font_size + 1.0).min(32.0);
+                        font_size = (font_size + 1.0).min(32.0);
                     }
                 }
             }
@@ -279,13 +282,13 @@ pub fn connection_view(
     let area_w = available.x.max(1.0);
     let area_h = (available.y - kb_total - ime_inset).max(1.0);
 
-    let (cell_w, cell_h) = measure_cell(ui, *font_size, cell_width_scale);
+    let (cell_w, cell_h) = measure_cell(ui, font_size, cell_width_scale);
     let desired_cols = (area_w / cell_w).floor().max(1.0) as usize;
     let desired_rows = (area_h / cell_h).floor().max(1.0) as usize;
     let mut resize_applied = false;
 
     if let Some(session) = session.as_mut() {
-        let font_changed = (session.layout_font_size - *font_size).abs() > f32::EPSILON;
+        let font_changed = (session.layout_font_size - font_size).abs() > f32::EPSILON;
         let in_alt = session.terminal.screen.in_alternate_screen();
 
         let pty_rows = session.last_pty_rows as usize;
@@ -297,7 +300,7 @@ pub fn connection_view(
             || font_changed;
 
         if size_changed {
-            apply_resize(session, desired_rows, desired_cols, *font_size, in_alt);
+            apply_resize(session, desired_rows, desired_cols, font_size, in_alt);
             drain_after_resize(session, &mut action, in_alt, drain_connection);
             ctx.request_repaint();
             resize_applied = true;
@@ -361,6 +364,7 @@ pub fn connection_view(
             if close {
                 action = ConnectionViewAction::CloseSession;
             }
+            session.live_font_size = font_size;
             return action;
         }
         if matches!(session.handle.state, ConnectionState::Connecting) {
@@ -373,6 +377,7 @@ pub fn connection_view(
                         ui.label(egui::RichText::new("Connecting…").size(16.0).weak());
                     });
                 });
+            session.live_font_size = font_size;
             return action;
         }
     }
@@ -390,7 +395,7 @@ pub fn connection_view(
         term_resp.mark_changed();
     }
     term_resp = term_resp.on_hover_cursor(egui::CursorIcon::Text);
-    if apply_touch_pinch_zoom(&ctx, font_size) {
+    if apply_touch_pinch_zoom(&ctx, &mut font_size) {
         if let Some(session) = session.as_mut() {
             session.size_label_active = true;
             session.size_label_hide_at = None;
@@ -734,7 +739,7 @@ pub fn connection_view(
                     &painter,
                     ui,
                     &mut session.row_galley_cache,
-                    *font_size,
+                    font_size,
                     theme,
                     cells,
                     grid_cols,
@@ -939,6 +944,10 @@ pub fn connection_view(
         if keyboard.terminal_ime_enabled && term_focused {
             update_android_terminal_ime_rect(ui.ctx(), grid_rect);
         }
+    }
+
+    if let Some(session) = session.as_mut() {
+        session.live_font_size = font_size;
     }
 
     action

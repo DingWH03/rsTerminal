@@ -71,7 +71,7 @@ pub enum SplitNode {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct PaneState {
     pub session_id: Option<String>,
-    /// Index into `AppSettings::pane_accent_colors` (or theme palette).
+    /// Index into `Prefs::appearance.pane_accent_colors` (or theme palette).
     #[serde(default)]
     pub color_index: usize,
 }
@@ -535,8 +535,8 @@ pub struct ShellLayout {
     pub connections_dialog_open: bool,
     /// Favorite commands manager (Commands → Manage).
     pub commands_manage_dialog_open: bool,
-    /// Auth users manager (Preferences → Users).
-    pub users_manage_dialog_open: bool,
+    /// Single settings tab opened as a standalone nested page (e.g. Preferences → Users).
+    pub settings_standalone_tab: Option<crate::ui::page::settings::SettingsTab>,
 }
 
 impl Default for ShellLayout {
@@ -549,7 +549,7 @@ impl Default for ShellLayout {
             help_dialog_open: false,
             connections_dialog_open: false,
             commands_manage_dialog_open: false,
-            users_manage_dialog_open: false,
+            settings_standalone_tab: None,
         }
     }
 }

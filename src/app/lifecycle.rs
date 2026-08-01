@@ -2,14 +2,21 @@
 
 use super::RsTerminalApp;
 use crate::fonts;
-use crate::settings::save_settings;
+use crate::persist::types::TerminalProfile;
+use crate::prefs::save_prefs;
 use crate::session::WorkspaceSession;
+use crate::settings::resolve_profile;
 use crate::ui::function_pane::pages::FunctionPage;
 use crate::ui::page::dialogs::LocalTerminalSettingsDialog;
 
 impl RsTerminalApp {
     pub(crate) fn reload_terminal_fonts(&mut self, ctx: &egui::Context) {
-        fonts::apply_terminal_fonts(ctx, &self.settings.default_profile().terminal_font);
+        let font = self.focused_terminal_profile_font().unwrap_or_else(|| {
+            resolve_profile(&self.profiles, None)
+                .terminal_font
+                .clone()
+        });
+        fonts::apply_terminal_fonts(ctx, &font);
         let font_gen = fonts::font_generation();
         for session in &mut self.sessions {
             if let WorkspaceSession::Terminal(term) = session {
@@ -19,20 +26,103 @@ impl RsTerminalApp {
         }
     }
 
-    pub(crate) fn save_profile_tweaks(&mut self) {
-        if let Some(profile) = self
-            .settings
-            .profiles
-            .iter_mut()
-            .find(|p| p.name == self.settings.default_profile_name)
-        {
-            profile.font_size = self.live_font_size;
-            profile.keyboard_mode = self.virtual_keyboard.mode;
-            save_settings(&self.settings);
+    fn focused_terminal_profile_font(&self) -> Option<String> {
+        let sid = self
+            .shell
+            .layout
+            .workspace
+            .panes
+            .get(&self.shell.layout.workspace.focused_pane)?
+            .session_id
+            .as_deref()?;
+        self.sessions.iter().find_map(|s| match s {
+            WorkspaceSession::Terminal(t) if t.id == sid => Some(
+                self.resolve_profile(Some(t.profile_id.as_str()))
+                    .terminal_font
+                    .clone(),
+            ),
+            _ => None,
+        })
+    }
+
+    pub(crate) fn apply_focused_session_terminal_font(&mut self, ctx: &egui::Context) {
+        let Some(font) = self.focused_terminal_profile_font() else {
+            return;
+        };
+        fonts::apply_terminal_fonts(ctx, &font);
+        let font_gen = fonts::font_generation();
+        for session in &mut self.sessions {
+            if let WorkspaceSession::Terminal(term) = session {
+                term.clear_all_galley_caches();
+                term.font_generation = font_gen;
+            }
         }
     }
 
-    /// Stop the terminal from reclaiming keyboard focus (modals / text fields).
+    /// Apply a profile created/edited in [`ProfileDialog`].
+    pub(crate) fn apply_saved_profile(&mut self, profile: TerminalProfile) {
+        let id = profile.id.clone();
+        let _ = self.persist.upsert_profile(&profile);
+        self.reload_profiles();
+        if self.new_conn_dialog.open {
+            self.new_conn_dialog.select_profile(id);
+        }
+    }
+
+    pub(crate) fn delete_profile(&mut self, id: &str) {
+        match self.persist.delete_profile(id) {
+            Ok(()) => self.reload_profiles(),
+            Err(e) if e.starts_with("profile_in_use:") => {
+                let n = e.strip_prefix("profile_in_use:").unwrap_or("?");
+                self.connection_notice = Some(
+                    rust_i18n::t!("err_profile_in_use", count = n).into_owned(),
+                );
+            }
+            Err(e) => {
+                self.connection_notice = Some(e);
+            }
+        }
+    }
+
+    pub(crate) fn set_default_profile(&mut self, id: &str) {
+        if let Err(e) = self.persist.set_default_profile(id) {
+            self.connection_notice = Some(e);
+            return;
+        }
+        self.reload_profiles();
+    }
+
+    pub(crate) fn save_profile_tweaks(&mut self) {
+        let focused_id = self
+            .shell
+            .layout
+            .workspace
+            .panes
+            .get(&self.shell.layout.workspace.focused_pane)
+            .and_then(|p| p.session_id.clone());
+        let (profile_id, font_size) = focused_id
+            .and_then(|id| {
+                self.sessions.iter().find_map(|s| match s {
+                    WorkspaceSession::Terminal(t) if t.id == id => {
+                        Some((t.profile_id.clone(), t.live_font_size))
+                    }
+                    _ => None,
+                })
+            })
+            .unwrap_or_else(|| {
+                (
+                    resolve_profile(&self.profiles, None).id.clone(),
+                    self.live_font_size,
+                )
+            });
+        if let Some(profile) = self.profiles.iter_mut().find(|p| p.id == profile_id) {
+            profile.font_size = font_size;
+            profile.keyboard_mode = self.virtual_keyboard.mode;
+            let p = profile.clone();
+            let _ = self.persist.upsert_profile(&p);
+        }
+    }
+
     pub(crate) fn release_terminal_keyboard_focus(&mut self, ctx: &egui::Context) {
         for session in &mut self.sessions {
             if let Some(term) = session.terminal_mut() {
@@ -76,8 +166,13 @@ impl RsTerminalApp {
             self.shell.layout.commands_manage_dialog_open = false;
             return true;
         }
-        if self.shell.layout.users_manage_dialog_open {
-            self.shell.layout.users_manage_dialog_open = false;
+        if self.profile_dialog.open {
+            self.profile_dialog.close();
+            return true;
+        }
+        if self.shell.layout.settings_standalone_tab.take().is_some() {
+            save_prefs(&self.prefs);
+            self.reload_terminal_fonts(ctx);
             return true;
         }
         if self.local_term_dialog.open {
@@ -96,8 +191,8 @@ impl RsTerminalApp {
         }
         if self.shell.layout.settings_dialog_open {
             self.shell.layout.settings_dialog_open = false;
-            save_settings(&self.settings);
-            self.live_font_size = self.settings.font_size();
+            save_prefs(&self.prefs);
+            self.live_font_size = resolve_profile(&self.profiles, None).font_size;
             self.reload_terminal_fonts(ctx);
             return true;
         }
@@ -119,8 +214,8 @@ impl RsTerminalApp {
 
     pub(crate) fn request_app_exit(&mut self, ctx: &egui::Context) {
         self.save_profile_tweaks();
-        self.settings.function_pane_width = Some(self.shell.layout.function_width);
-        save_settings(&self.settings);
+        self.prefs.function_pane_width = Some(self.shell.layout.function_width);
+        save_prefs(&self.prefs);
 
         #[cfg(target_os = "android")]
         {

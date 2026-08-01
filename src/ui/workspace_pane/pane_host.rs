@@ -37,7 +37,7 @@ pub fn render_pane(
     let session_id = panes.get(&pane_id).and_then(|p| p.session_id.clone());
     let accent = panes
         .get(&pane_id)
-        .map(|p| pane_color(ctx.settings, p.color_index))
+        .map(|p| pane_color(ctx.prefs, p.color_index))
         .unwrap_or(style::ACCENT);
     let fade = ctx.session_fade.get(&pane_id).copied().unwrap_or(1.0);
     let in_split = ctx.split_layout_active;
@@ -72,18 +72,25 @@ pub fn render_pane(
                     if let Some(idx) = ctx.sessions.iter().position(|s| s.id() == sid) {
                         match &mut ctx.sessions[idx] {
                             WorkspaceSession::Terminal(term) => {
-                                let theme = ctx.settings.theme();
-                                let cursor_style = ctx.settings.cursor_style();
-                                let cell_width_scale =
-                                    ctx.settings.default_profile().cell_width_scale;
+                                let profile_id = term.profile_id.clone();
+                                let (theme, cursor_style, cell_width_scale) = {
+                                    let profile = crate::settings::resolve_profile(
+                                        ctx.profiles,
+                                        Some(profile_id.as_str()),
+                                    );
+                                    (
+                                        profile.theme.clone(),
+                                        profile.cursor_style,
+                                        profile.cell_width_scale,
+                                    )
+                                };
                                 let mut pane_focus_click = false;
                                 let view_action = connection_view(
                                     ui,
                                     Some(term),
                                     ctx.virtual_keyboard,
-                                    theme,
+                                    &theme,
                                     cursor_style,
-                                    ctx.live_font_size,
                                     cell_width_scale,
                                     ctx.function_pane,
                                     pane_id.0,

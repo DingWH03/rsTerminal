@@ -181,7 +181,8 @@ pub fn apply(
             result.settings_opened = true;
         }
         AppMenuAction::ManageAuthUsers => {
-            layout.users_manage_dialog_open = true;
+            layout.settings_standalone_tab =
+                Some(crate::ui::page::settings::SettingsTab::Users);
         }
         AppMenuAction::OpenHelp => {
             layout.help_dialog_open = true;

@@ -11,7 +11,7 @@ pub mod workspace_view;
 
 use crate::persist::types::{ConnectionType, FavoriteCommand, SavedConnection};
 use crate::session::WorkspaceSession;
-use crate::settings::AppSettings;
+use crate::prefs::Prefs;
 use crate::ui::function_pane::pages::FunctionPage;
 use crate::ui::shell::layout_state::WorkspaceLayout;
 use crate::ui::shell::messages::FunctionAction;
@@ -169,7 +169,7 @@ pub fn render(
     connections: &[SavedConnection],
     favorite_commands: &[FavoriteCommand],
     auth_users: &[crate::persist::types::AuthUser],
-    settings: &AppSettings,
+    prefs: &Prefs,
     _page_slide: f32,
 ) -> FunctionAction {
     let focused = workspace.focused_session_id();
@@ -250,7 +250,7 @@ pub fn render(
                     sessions,
                     workspace,
                     highlighted_session,
-                    settings,
+                    prefs,
                 ),
                 FunctionPage::Connections => connections::render(ui, connections),
                 FunctionPage::Commands => commands_view::render(ui, favorite_commands),

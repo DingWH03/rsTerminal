@@ -8,11 +8,12 @@ pub mod menu;
 pub mod messages;
 
 use crate::session::WorkspaceSession;
-use crate::settings::AppSettings;
+use crate::prefs::Prefs;
+use crate::persist::types::TerminalProfile;
 use crate::persist::types::SavedConnection;
 use crate::ui::function_pane::{self, drag_split_enabled, split_enabled, FunctionPane};
-use crate::ui::page::dialogs::{manage_auth_users_dialog, ManageAuthUsersAction};
-use crate::ui::page::settings::settings_dialog;
+use crate::ui::page::dialogs::ManageAuthUsersAction;
+use crate::ui::page::settings::{settings_dialog, settings_page_dialog, SettingsUiAction};
 use crate::ui::uiframe::{DialogFrame, DialogOutcome};
 use crate::ui::uiframe::keyboard::VirtualKeyboard;
 use crate::ui::workspace_pane::{self, drag_drop::ActiveDrag, WorkspacePaneContext};
@@ -47,9 +48,9 @@ impl Default for AppShell {
 }
 
 impl AppShell {
-    pub fn from_settings(settings: &AppSettings) -> Self {
+    pub fn from_prefs(prefs: &Prefs) -> Self {
         Self {
-            layout: ShellLayout::from_settings(settings.function_pane_width),
+            layout: ShellLayout::from_settings(prefs.function_pane_width),
             function_pane: FunctionPane::new(),
             last_focused_pane: None,
             active_drag: None,
@@ -62,10 +63,11 @@ impl AppShell {
         self.layout.workspace.focused_session_id()
     }
 
-    pub fn sync_focus_change(&mut self, sessions: &mut [WorkspaceSession]) {
+    /// Returns `true` when the focused pane changed this call.
+    pub fn sync_focus_change(&mut self, sessions: &mut [WorkspaceSession]) -> bool {
         let current = self.layout.workspace.focused_pane;
         if self.last_focused_pane == Some(current) {
-            return;
+            return false;
         }
         self.last_focused_pane = Some(current);
         let focused_sid = self.focused_session_id().map(str::to_string);
@@ -79,6 +81,7 @@ impl AppShell {
                 }
             }
         }
+        true
     }
 
     pub fn sync_width(&mut self, width: f32) {
@@ -125,7 +128,8 @@ impl AppShell {
         ui: &mut egui::Ui,
         top_inset: f32,
         sessions: &mut [WorkspaceSession],
-        settings: &mut AppSettings,
+        prefs: &mut Prefs,
+        profiles: &[TerminalProfile],
         saved_connections: &[SavedConnection],
         favorite_commands: &[crate::persist::types::FavoriteCommand],
         auth_users: &[crate::persist::types::AuthUser],
@@ -211,7 +215,7 @@ impl AppShell {
                     saved_connections,
                     favorite_commands,
                     auth_users,
-                    settings,
+                    prefs,
                     self.animations.page_slide.current,
                 );
                 result.function_action.merge_from(pane_action);
@@ -251,7 +255,8 @@ impl AppShell {
                 let ws_result = {
                     let mut ws_ctx = WorkspacePaneContext {
                         sessions,
-                        settings,
+                        prefs,
+                        profiles,
                         saved_connections,
                         virtual_keyboard,
                         live_font_size,
@@ -293,7 +298,7 @@ impl AppShell {
             });
         } else if ui.input(|i| i.pointer.any_released()) {
             if let (Some(drag), Some(zone)) = (&self.active_drag, self.last_drop_zone) {
-                let palette_len = crate::ui::pane_colors::resolve_palette(settings).len().max(1);
+                let palette_len = crate::ui::pane_colors::resolve_palette(prefs).len().max(1);
                 if let Some(focused) = crate::ui::workspace_pane::drag_drop::apply_drop(
                     &mut self.layout.workspace,
                     drag,
@@ -344,21 +349,25 @@ impl AppShell {
             }
         }
 
-        // Settings dialog
+        // Settings dialog (all tabs, including Users)
         if self.layout.settings_dialog_open {
-            if settings_dialog(ui.ctx(), settings) {
+            let (closed, ui_action) = settings_dialog(ui.ctx(), prefs, profiles, auth_users);
+            merge_settings_ui_action(&mut result, ui_action);
+            if closed {
                 self.layout.settings_dialog_open = false;
                 result.settings_closed = true;
             }
         }
 
-        // Preferences → Users manage page (same frame the menu sets the flag)
-        if self.layout.users_manage_dialog_open {
-            let mut manage = ManageAuthUsersAction::default();
-            if manage_auth_users_dialog(ui.ctx(), auth_users, &mut manage) {
-                self.layout.users_manage_dialog_open = false;
+        // Preferences → Users (or other tab) as standalone nested page
+        if let Some(tab) = self.layout.settings_standalone_tab {
+            let (closed, ui_action) =
+                settings_page_dialog(ui.ctx(), tab, prefs, profiles, auth_users);
+            merge_settings_ui_action(&mut result, ui_action);
+            if closed {
+                self.layout.settings_standalone_tab = None;
+                result.settings_closed = true;
             }
-            result.auth_users_action = manage;
         }
 
         // Help / About placeholder
@@ -419,5 +428,33 @@ pub struct ShellRenderResult {
     pub settings_closed: bool,
     pub settings_opened: bool,
     pub auth_users_action: ManageAuthUsersAction,
+    pub request_new_profile: bool,
+    pub request_edit_profile: Option<String>,
+    pub delete_profile_id: Option<String>,
+    pub set_default_profile_id: Option<String>,
     pub toggle_app_fullscreen: bool,
+}
+
+fn merge_settings_ui_action(result: &mut ShellRenderResult, ui_action: SettingsUiAction) {
+    if ui_action.auth_users.new {
+        result.auth_users_action.new = true;
+    }
+    if ui_action.auth_users.edit_id.is_some() {
+        result.auth_users_action.edit_id = ui_action.auth_users.edit_id;
+    }
+    if ui_action.auth_users.delete_id.is_some() {
+        result.auth_users_action.delete_id = ui_action.auth_users.delete_id;
+    }
+    if ui_action.request_new_profile {
+        result.request_new_profile = true;
+    }
+    if ui_action.request_edit_profile.is_some() {
+        result.request_edit_profile = ui_action.request_edit_profile;
+    }
+    if ui_action.delete_profile_id.is_some() {
+        result.delete_profile_id = ui_action.delete_profile_id;
+    }
+    if ui_action.set_default_profile_id.is_some() {
+        result.set_default_profile_id = ui_action.set_default_profile_id;
+    }
 }

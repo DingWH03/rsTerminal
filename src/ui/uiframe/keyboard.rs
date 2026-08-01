@@ -8,11 +8,12 @@
 use serde::{Deserialize, Serialize};
 
 /// 虚拟键盘模式。
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 pub enum KeyboardMode {
     /// 特殊键模式：仅显示功能键和方向键
     Special,
     /// 全键盘模式：完整的字母数字键盘
+    #[default]
     Full,
 }
 

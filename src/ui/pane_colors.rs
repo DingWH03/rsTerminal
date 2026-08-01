@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::settings::AppSettings;
+use crate::prefs::Prefs;
 use crate::ui::shell::layout_state::{PaneId, WorkspaceLayout};
 use crate::ui::uiframe::style;
 
@@ -31,16 +31,16 @@ pub fn palette_for_theme(ui_theme: crate::i18n::UiTheme) -> Vec<[u8; 3]> {
     }
 }
 
-pub fn resolve_palette(settings: &AppSettings) -> Vec<[u8; 3]> {
-    if settings.pane_accent_colors.is_empty() {
-        palette_for_theme(settings.ui_theme)
+pub fn resolve_palette(prefs: &Prefs) -> Vec<[u8; 3]> {
+    if prefs.appearance.pane_accent_colors.is_empty() {
+        palette_for_theme(prefs.appearance.ui_theme)
     } else {
-        settings.pane_accent_colors.clone()
+        prefs.appearance.pane_accent_colors.clone()
     }
 }
 
-pub fn color_at_index(settings: &AppSettings, index: usize) -> egui::Color32 {
-    let palette = resolve_palette(settings);
+pub fn color_at_index(prefs: &Prefs, index: usize) -> egui::Color32 {
+    let palette = resolve_palette(prefs);
     if palette.is_empty() {
         return style::ACCENT;
     }
@@ -48,8 +48,8 @@ pub fn color_at_index(settings: &AppSettings, index: usize) -> egui::Color32 {
     egui::Color32::from_rgb(r, g, b)
 }
 
-pub fn pane_color(settings: &AppSettings, color_index: usize) -> egui::Color32 {
-    color_at_index(settings, color_index)
+pub fn pane_color(prefs: &Prefs, color_index: usize) -> egui::Color32 {
+    color_at_index(prefs, color_index)
 }
 
 pub fn next_color_index(workspace: &WorkspaceLayout, palette_len: usize) -> usize {
@@ -61,12 +61,12 @@ pub fn next_color_index(workspace: &WorkspaceLayout, palette_len: usize) -> usiz
 
 pub fn session_accent_map(
     workspace: &WorkspaceLayout,
-    settings: &AppSettings,
+    prefs: &Prefs,
 ) -> HashMap<String, egui::Color32> {
     let mut map = HashMap::new();
     for state in workspace.panes.values() {
         if let Some(ref sid) = state.session_id {
-            map.insert(sid.clone(), pane_color(settings, state.color_index));
+            map.insert(sid.clone(), pane_color(prefs, state.color_index));
         }
     }
     map
@@ -74,12 +74,12 @@ pub fn session_accent_map(
 
 pub fn pane_id_color(
     workspace: &WorkspaceLayout,
-    settings: &AppSettings,
+    prefs: &Prefs,
     pane_id: PaneId,
 ) -> egui::Color32 {
     workspace
         .panes
         .get(&pane_id)
-        .map(|p| pane_color(settings, p.color_index))
+        .map(|p| pane_color(prefs, p.color_index))
         .unwrap_or(style::ACCENT)
 }

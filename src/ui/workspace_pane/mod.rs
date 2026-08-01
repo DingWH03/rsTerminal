@@ -8,8 +8,8 @@ pub mod split_widget;
 use std::collections::HashMap;
 
 use crate::session::WorkspaceSession;
-use crate::settings::AppSettings;
-use crate::persist::types::SavedConnection;
+use crate::prefs::Prefs;
+use crate::persist::types::{SavedConnection, TerminalProfile};
 use crate::ui::function_pane::FunctionPane;
 use crate::ui::shell::layout_preview::pane_rects_from_tree;
 use crate::ui::shell::layout_state::WorkspaceLayout;
@@ -21,7 +21,8 @@ use split_widget::render_split_tree;
 
 pub struct WorkspacePaneContext<'a> {
     pub sessions: &'a mut [WorkspaceSession],
-    pub settings: &'a mut AppSettings,
+    pub prefs: &'a mut Prefs,
+    pub profiles: &'a [TerminalProfile],
     pub saved_connections: &'a [SavedConnection],
     pub virtual_keyboard: &'a mut VirtualKeyboard,
     pub live_font_size: &'a mut f32,
@@ -86,7 +87,7 @@ pub fn render(
             drag_ended = true;
             let effective = zone.or(*ctx.last_drop_zone);
             if let Some(zone) = effective {
-                let palette_len = crate::ui::pane_colors::resolve_palette(ctx.settings).len().max(1);
+                let palette_len = crate::ui::pane_colors::resolve_palette(ctx.prefs).len().max(1);
                 if let Some(focused) = apply_drop(layout, drag, zone, palette_len) {
                     layout.focused_pane = focused;
                     action.drop_applied = true;

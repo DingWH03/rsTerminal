@@ -20,6 +20,7 @@ pub mod session;
 pub mod fonts;
 pub mod i18n;
 pub mod platform;
+pub mod prefs;
 pub mod settings;
 pub mod persist;
 pub mod terminal;
@@ -33,12 +34,14 @@ pub fn run_app(native_options: eframe::NativeOptions) {
         "rsTerminal",
         native_options,
         Box::new(|cc| {
-            let settings = crate::settings::load_settings();
-            settings.language.apply();
-            fonts::setup_fonts(
-                &cc.egui_ctx,
-                &settings.default_profile().terminal_font,
-            );
+            let prefs = crate::prefs::load_prefs();
+            prefs.language.apply();
+            let persist = crate::persist::Persist::open();
+            let profiles = persist.list_profiles();
+            let font = crate::settings::resolve_profile(&profiles, None)
+                .terminal_font
+                .as_str();
+            fonts::setup_fonts(&cc.egui_ctx, font);
             fonts::preload_monospace_catalog();
             fonts::tune_android_display(&cc.egui_ctx);
             // Desktop: real OS child windows for DialogFrame.

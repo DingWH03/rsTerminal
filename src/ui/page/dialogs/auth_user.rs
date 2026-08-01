@@ -226,7 +226,7 @@ impl AuthUserDialog {
     }
 }
 
-/// Actions from Preferences → Users manage dialog.
+/// Actions from the Users settings page / standalone dialog.
 #[derive(Debug, Default, Clone)]
 pub struct ManageAuthUsersAction {
     pub new: bool,
@@ -234,7 +234,59 @@ pub struct ManageAuthUsersAction {
     pub delete_id: Option<String>,
 }
 
-/// Preferences → Users: centered manage page. Returns `true` when closed.
+/// Embeddable Users list (Settings tab or standalone page body).
+pub fn auth_users_page(ui: &mut egui::Ui, auth_users: &[AuthUser], action: &mut ManageAuthUsersAction) {
+    ui.horizontal(|ui| {
+        let new_btn = egui::Button::new(
+            egui::RichText::new(rust_i18n::t!("auth_users_manage_new"))
+                .color(egui::Color32::WHITE),
+        )
+        .fill(style::ACCENT)
+        .corner_radius(style::CORNER_RADIUS_SM);
+        if ui.add(new_btn).clicked() {
+            action.new = true;
+        }
+    });
+    ui.add_space(8.0);
+    ui.separator();
+
+    if auth_users.is_empty() {
+        ui.add_space(12.0);
+        ui.label(
+            egui::RichText::new(rust_i18n::t!("settings_users_empty"))
+                .color(ui.visuals().weak_text_color()),
+        );
+        return;
+    }
+
+    for user in auth_users {
+        let method = match user.auth_method {
+            AuthMethod::Password => rust_i18n::t!("auth_user_method_password"),
+            AuthMethod::PrivateKey => rust_i18n::t!("auth_user_method_key"),
+        };
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                ui.label(egui::RichText::new(&user.name).strong().size(13.0));
+                ui.label(
+                    egui::RichText::new(format!("{} · {}", user.username, method))
+                        .size(11.0)
+                        .color(ui.visuals().weak_text_color()),
+                );
+            });
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.small_button(rust_i18n::t!("delete")).clicked() {
+                    action.delete_id = Some(user.id.clone());
+                }
+                if ui.small_button(rust_i18n::t!("edit")).clicked() {
+                    action.edit_id = Some(user.id.clone());
+                }
+            });
+        });
+        ui.separator();
+    }
+}
+
+/// Preferences → Users standalone window. Returns `true` when closed.
 pub fn manage_auth_users_dialog(
     ctx: &egui::Context,
     auth_users: &[AuthUser],
@@ -245,54 +297,7 @@ pub fn manage_auth_users_dialog(
     let frame = DialogFrame::new(rust_i18n::t!("auth_users_manage_title").to_string());
 
     let outcome = frame.show(ctx, "manage_auth_users_dialog", |ui| {
-        ui.horizontal(|ui| {
-            let new_btn = egui::Button::new(
-                egui::RichText::new(rust_i18n::t!("auth_users_manage_new"))
-                    .color(egui::Color32::WHITE),
-            )
-            .fill(style::ACCENT)
-            .corner_radius(style::CORNER_RADIUS_SM);
-            if ui.add(new_btn).clicked() {
-                action.new = true;
-            }
-        });
-        ui.add_space(8.0);
-        ui.separator();
-
-        if auth_users.is_empty() {
-            ui.add_space(12.0);
-            ui.label(
-                egui::RichText::new(rust_i18n::t!("settings_users_empty"))
-                    .color(ui.visuals().weak_text_color()),
-            );
-            return;
-        }
-
-        for user in auth_users {
-            let method = match user.auth_method {
-                AuthMethod::Password => rust_i18n::t!("auth_user_method_password"),
-                AuthMethod::PrivateKey => rust_i18n::t!("auth_user_method_key"),
-            };
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.label(egui::RichText::new(&user.name).strong().size(13.0));
-                    ui.label(
-                        egui::RichText::new(format!("{} · {}", user.username, method))
-                            .size(11.0)
-                            .color(ui.visuals().weak_text_color()),
-                    );
-                });
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button(rust_i18n::t!("delete")).clicked() {
-                        action.delete_id = Some(user.id.clone());
-                    }
-                    if ui.small_button(rust_i18n::t!("edit")).clicked() {
-                        action.edit_id = Some(user.id.clone());
-                    }
-                });
-            });
-            ui.separator();
-        }
+        auth_users_page(ui, auth_users, action);
     });
 
     matches!(outcome, DialogOutcome::Closed)

@@ -9,21 +9,23 @@ mod notices;
 mod sessions;
 
 use crate::persist::{
-    types::{AuthUser, FavoriteCommand, SavedConnection},
+    types::{AuthUser, FavoriteCommand, SavedConnection, TerminalProfile},
     Persist,
 };
-use crate::settings::AppSettings;
+use crate::prefs::{load_prefs, Prefs};
 use crate::session::WorkspaceSession;
+use crate::settings::resolve_profile;
 use crate::ui::shell::AppShell;
 use crate::ui::page::dialogs::{
     AuthUserDialog, FavoriteCommandDialog, LocalTerminalSettingsDialog,
-    ManageFavoriteCommandsDialog, NewConnectionDialog,
+    ManageFavoriteCommandsDialog, NewConnectionDialog, ProfileDialog,
 };
 use crate::ui::uiframe::keyboard::VirtualKeyboard;
 
 pub struct RsTerminalApp {
     persist: Persist,
-    settings: AppSettings,
+    prefs: Prefs,
+    profiles: Vec<TerminalProfile>,
     saved_connections: Vec<SavedConnection>,
     favorite_commands: Vec<FavoriteCommand>,
     auth_users: Vec<AuthUser>,
@@ -35,6 +37,7 @@ pub struct RsTerminalApp {
     favorite_cmd_dialog: FavoriteCommandDialog,
     manage_commands_dialog: ManageFavoriteCommandsDialog,
     auth_user_dialog: AuthUserDialog,
+    profile_dialog: ProfileDialog,
     live_font_size: f32,
     connection_notice: Option<String>,
     quit_after_close: bool,
@@ -45,17 +48,20 @@ pub struct RsTerminalApp {
 impl Default for RsTerminalApp {
     fn default() -> Self {
         let persist = Persist::open();
-        let settings = crate::settings::load_settings();
-        settings.language.apply();
-        let live_font_size = settings.font_size();
-        let kbd_mode = settings.default_profile().keyboard_mode;
+        let prefs = load_prefs();
+        prefs.language.apply();
+        let profiles = persist.list_profiles();
+        let default_profile = resolve_profile(&profiles, None);
+        let live_font_size = default_profile.font_size;
+        let kbd_mode = default_profile.keyboard_mode;
         let saved = persist.list_connections();
         let favorite_commands = persist.list_commands();
         let auth_users = persist.list_auth_users();
         Self {
             persist,
-            shell: AppShell::from_settings(&settings),
-            settings,
+            shell: AppShell::from_prefs(&prefs),
+            prefs,
+            profiles,
             saved_connections: saved,
             favorite_commands,
             auth_users,
@@ -66,12 +72,23 @@ impl Default for RsTerminalApp {
             favorite_cmd_dialog: FavoriteCommandDialog::default(),
             manage_commands_dialog: ManageFavoriteCommandsDialog::default(),
             auth_user_dialog: AuthUserDialog::default(),
+            profile_dialog: ProfileDialog::default(),
             live_font_size,
             connection_notice: None,
             quit_after_close: false,
             first_frame: true,
             show_quit_dialog: false,
         }
+    }
+}
+
+impl RsTerminalApp {
+    pub(crate) fn resolve_profile(&self, id: Option<&str>) -> &TerminalProfile {
+        resolve_profile(&self.profiles, id)
+    }
+
+    pub(crate) fn reload_profiles(&mut self) {
+        self.profiles = self.persist.list_profiles();
     }
 }
 

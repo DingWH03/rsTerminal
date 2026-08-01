@@ -14,13 +14,17 @@ impl RsTerminalApp {
     }
 
     pub(crate) fn delete_auth_user(&mut self, id: &str) {
-        self.auth_users.retain(|u| u.id != *id);
-        let _ = self.persist.delete_auth_user(id);
-        // Clear dangling refs on connections.
-        for conn in &mut self.saved_connections {
-            if conn.auth_user_id.as_deref() == Some(id) {
-                conn.auth_user_id = None;
-                let _ = self.persist.upsert_connection(conn);
+        match self.persist.delete_auth_user(id) {
+            Ok(()) => {
+                self.auth_users.retain(|u| u.id != *id);
+            }
+            Err(e) if e.starts_with("auth_user_in_use:") => {
+                let n = e.strip_prefix("auth_user_in_use:").unwrap_or("?");
+                self.connection_notice =
+                    Some(rust_i18n::t!("err_auth_user_in_use", count = n).into_owned());
+            }
+            Err(e) => {
+                self.connection_notice = Some(e);
             }
         }
     }

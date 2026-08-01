@@ -4,8 +4,8 @@ use super::RsTerminalApp;
 use crate::connection::{ble, serial, ssh};
 #[cfg(not(target_os = "android"))]
 use crate::connection::local;
-use crate::settings::save_settings;
 use crate::persist::types::ConnectionType;
+use crate::prefs::save_prefs;
 use crate::ui::function_pane::pages::FunctionPage;
 
 impl RsTerminalApp {
@@ -22,8 +22,8 @@ impl RsTerminalApp {
             );
             return;
         };
-        let profile = self.settings.default_profile().clone();
-        match local::connect_local(&config, &profile, 24, 80) {
+        let profile = self.resolve_profile(config.profile_id.as_deref()).clone();
+        match local::connect_local(&config, 24, 80) {
             Ok(handle) => self.open_session(handle, &config, profile.scrollback_lines),
             Err(e) => self.connection_notice = Some(e),
         }
@@ -46,8 +46,8 @@ impl RsTerminalApp {
                 self.saved_connections[pos] = apply.config.clone();
             }
             let _ = self.persist.upsert_connection(&apply.config);
-            self.settings.default_local_connection_id = Some(apply.config.id.clone());
-            save_settings(&self.settings);
+            self.prefs.default_local_connection_id = Some(apply.config.id.clone());
+            save_prefs(&self.prefs);
         }
         #[cfg(not(target_os = "android"))]
         if let Some(session_id) = &apply.session_id {
@@ -68,10 +68,10 @@ impl RsTerminalApp {
             Some(c) => c.clone(),
             None => return,
         };
-        let profile = self.settings.default_profile().clone();
+        let profile = self.resolve_profile(config.profile_id.as_deref()).clone();
         match config.conn_type {
             #[cfg(not(target_os = "android"))]
-            ConnectionType::Local => match local::connect_local(&config, &profile, 24, 80) {
+            ConnectionType::Local => match local::connect_local(&config, 24, 80) {
                 Ok(handle) => {
                     self.open_session_in_pane(handle, &config, profile.scrollback_lines, pane, None)
                 }
@@ -90,7 +90,7 @@ impl RsTerminalApp {
                     .cloned();
                 match ssh::connect_ssh_session(
                     &config,
-                    &self.settings.ssh_env_vars,
+                    &config.env_vars,
                     24,
                     80,
                     auth.as_ref(),
