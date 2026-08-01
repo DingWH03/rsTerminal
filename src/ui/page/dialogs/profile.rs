@@ -3,7 +3,7 @@
 use crate::config::{BellStyle, CursorStyle, TerminalTheme, TerminalType};
 use crate::fonts;
 use crate::persist::types::TerminalProfile;
-use crate::ui::uiframe::keyboard::KeyboardMode;
+use crate::config::KeyboardMode;
 use crate::ui::uiframe::style;
 
 fn android_ime_for_text_edit(ui: &egui::Ui, resp: &egui::Response, force: bool) {
@@ -264,15 +264,15 @@ impl ProfileDialog {
     }
 }
 
-fn color_edit(ui: &mut egui::Ui, label: &str, color: &mut egui::Color32) {
+fn color_edit(ui: &mut egui::Ui, label: &str, color: &mut crate::config::Rgba) {
     ui.label(label);
     let mut rgb = [
-        color.r() as f32 / 255.0,
-        color.g() as f32 / 255.0,
-        color.b() as f32 / 255.0,
+        color.r as f32 / 255.0,
+        color.g as f32 / 255.0,
+        color.b as f32 / 255.0,
     ];
     if ui.color_edit_button_rgb(&mut rgb).changed() {
-        *color = egui::Color32::from_rgb(
+        *color = crate::config::Rgba::from_rgb(
             (rgb[0] * 255.0) as u8,
             (rgb[1] * 255.0) as u8,
             (rgb[2] * 255.0) as u8,

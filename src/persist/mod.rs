@@ -3,9 +3,12 @@
 //! Callers should use this module only; do not open `app.db` or prefs paths directly.
 
 pub mod db;
-pub mod prefs;
+pub mod error;
+pub(crate) mod prefs;
 pub mod secret_backend;
 pub mod types;
+
+pub use error::PersistError;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -239,13 +242,13 @@ impl Persist {
         db::profiles::upsert(&db, profile).map_err(|e| e.to_string())
     }
 
-    pub fn delete_profile(&self, id: &str) -> Result<(), String> {
+    pub fn delete_profile(&self, id: &str) -> Result<(), PersistError> {
         let db = self.db.lock().unwrap();
         let n = db::connections::count_using_profile(&db, id).unwrap_or(0);
         if n > 0 {
-            return Err(format!("profile_in_use:{n}"));
+            return Err(PersistError::ProfileInUse { count: n });
         }
-        db::profiles::delete(&db, id).map_err(|e| e.to_string())
+        db::profiles::delete(&db, id).map_err(|e| PersistError::other(e.to_string()))
     }
 
     pub fn set_default_profile(&self, id: &str) -> Result<(), String> {
@@ -293,20 +296,20 @@ impl Persist {
         db::auth_users::upsert(&db, user).map_err(|e| e.to_string())
     }
 
-    pub fn delete_auth_user(&self, id: &str) -> Result<(), String> {
+    pub fn delete_auth_user(&self, id: &str) -> Result<(), PersistError> {
         let db = self.db.lock().unwrap();
         let n = db::connections::count_using_auth_user(&db, id).unwrap_or(0);
         if n > 0 {
-            return Err(format!("auth_user_in_use:{n}"));
+            return Err(PersistError::AuthUserInUse { count: n });
         }
         match db::auth_users::delete(&db, id) {
             Ok(()) => Ok(()),
             Err(e) => {
                 let msg = e.to_string();
                 if msg.contains("FOREIGN KEY") || msg.contains("constraint") {
-                    Err(format!("auth_user_in_use:?"))
+                    Err(PersistError::AuthUserInUse { count: n.max(1) })
                 } else {
-                    Err(msg)
+                    Err(PersistError::other(msg))
                 }
             }
         }

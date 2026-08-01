@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use crate::i18n::{Language, UiTheme};
 use crate::persist::config_dir;
 use crate::persist::types::LegacyProfileJson;
-use crate::prefs::{AppearancePrefs, Prefs};
+use crate::prefs::{AppearancePrefs, ChromePrefs, GeneralPrefs, Prefs};
 
 fn prefs_path() -> Option<std::path::PathBuf> {
     config_dir().map(|p| p.join("prefs.json"))
@@ -37,7 +37,7 @@ pub struct LegacyAppSettings {
     pub pane_accent_colors: Vec<[u8; 3]>,
 }
 
-pub fn load_prefs() -> Prefs {
+pub(crate) fn load_prefs() -> Prefs {
     if let Some(path) = prefs_path() {
         if path.exists() {
             if let Ok(data) = std::fs::read_to_string(&path) {
@@ -50,13 +50,17 @@ pub fn load_prefs() -> Prefs {
 
     if let Some(legacy) = load_legacy_settings() {
         let prefs = Prefs {
-            language: legacy.language,
+            general: GeneralPrefs {
+                language: legacy.language,
+            },
             appearance: AppearancePrefs {
                 ui_theme: legacy.ui_theme,
                 pane_accent_colors: legacy.pane_accent_colors,
             },
-            function_pane_width: legacy.function_pane_width,
-            default_local_connection_id: legacy.default_local_connection_id,
+            chrome: ChromePrefs {
+                function_pane_width: legacy.function_pane_width,
+                default_local_connection_id: legacy.default_local_connection_id,
+            },
         };
         save_prefs(&prefs);
         return prefs;
@@ -65,7 +69,7 @@ pub fn load_prefs() -> Prefs {
     Prefs::default()
 }
 
-pub fn save_prefs(prefs: &Prefs) {
+pub(crate) fn save_prefs(prefs: &Prefs) {
     let path = match prefs_path() {
         Some(p) => {
             if let Some(parent) = p.parent() {

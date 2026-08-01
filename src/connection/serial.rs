@@ -6,14 +6,11 @@ use std::time::Duration;
 use crate::connection::{
     emit_conn_data, ConnIn, ConnOut, ConnectionHandle, ConnectionState, RepaintNotifier,
 };
-use crate::persist::types::SavedConnection;
+use crate::connection::SerialConnectParams;
 
-pub fn connect_serial(config: &SavedConnection) -> Result<ConnectionHandle, String> {
-    let port_name = config
-        .serial_port
-        .clone()
-        .ok_or_else(|| "Serial port not configured".to_string())?;
-    let baud = config.serial_baud.unwrap_or(115200);
+pub fn connect_serial(params: &SerialConnectParams) -> Result<ConnectionHandle, String> {
+    let port_name = params.port.clone();
+    let baud = params.baud;
 
     let (to_conn_tx, to_conn_rx) = mpsc::channel::<ConnOut>();
     let (from_conn_tx, from_conn_rx) = mpsc::channel::<ConnIn>();

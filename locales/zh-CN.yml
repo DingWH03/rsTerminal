@@ -206,9 +206,6 @@ auth_user_key_passphrase: "密钥口令:"
 # ---- 通用设置 ----
 settings_language: "界面语言"
 settings_language_desc: "更改后将立即生效"
-settings_ssh_env: "SSH 环境变量"
-settings_ssh_env_desc: "新建 SSH 连接时注入的默认环境"
-
 # ---- 外观设置 ----
 settings_font_size: "字体大小"
 settings_terminal_font: "终端字体"

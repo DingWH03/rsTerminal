@@ -2,6 +2,7 @@
 
 use super::RsTerminalApp;
 use crate::persist::types::AuthUser;
+use crate::persist::PersistError;
 
 impl RsTerminalApp {
     pub(crate) fn save_auth_user(&mut self, user: AuthUser) {
@@ -18,13 +19,12 @@ impl RsTerminalApp {
             Ok(()) => {
                 self.auth_users.retain(|u| u.id != *id);
             }
-            Err(e) if e.starts_with("auth_user_in_use:") => {
-                let n = e.strip_prefix("auth_user_in_use:").unwrap_or("?");
+            Err(PersistError::AuthUserInUse { count }) => {
                 self.connection_notice =
-                    Some(rust_i18n::t!("err_auth_user_in_use", count = n).into_owned());
+                    Some(rust_i18n::t!("err_auth_user_in_use", count = count).into_owned());
             }
             Err(e) => {
-                self.connection_notice = Some(e);
+                self.connection_notice = Some(e.to_string());
             }
         }
     }

@@ -13,5 +13,6 @@ pub mod function_pane;
 pub mod page;
 pub mod pane_colors;
 pub mod shell;
+pub mod theme_color;
 pub mod uiframe;
 pub mod workspace_pane;

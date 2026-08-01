@@ -2,6 +2,7 @@
 
 mod auth_users;
 mod commands;
+mod connect_params;
 mod connections;
 mod frame;
 mod lifecycle;
@@ -9,12 +10,11 @@ mod notices;
 mod sessions;
 
 use crate::persist::{
-    types::{AuthUser, FavoriteCommand, SavedConnection, TerminalProfile},
+    types::{resolve_profile, AuthUser, FavoriteCommand, SavedConnection, TerminalProfile},
     Persist,
 };
 use crate::prefs::{load_prefs, Prefs};
 use crate::session::WorkspaceSession;
-use crate::settings::resolve_profile;
 use crate::ui::shell::AppShell;
 use crate::ui::page::dialogs::{
     AuthUserDialog, FavoriteCommandDialog, LocalTerminalSettingsDialog,
@@ -45,11 +45,10 @@ pub struct RsTerminalApp {
     first_frame: bool,
 }
 
-impl Default for RsTerminalApp {
-    fn default() -> Self {
-        let persist = Persist::open();
+impl RsTerminalApp {
+    pub fn new(persist: Persist) -> Self {
         let prefs = load_prefs();
-        prefs.language.apply();
+        prefs.general.language.apply();
         let profiles = persist.list_profiles();
         let default_profile = resolve_profile(&profiles, None);
         let live_font_size = default_profile.font_size;
@@ -80,15 +79,23 @@ impl Default for RsTerminalApp {
             show_quit_dialog: false,
         }
     }
-}
 
-impl RsTerminalApp {
+    pub fn default_terminal_font(&self) -> &str {
+        resolve_profile(&self.profiles, None).terminal_font.as_str()
+    }
+
     pub(crate) fn resolve_profile(&self, id: Option<&str>) -> &TerminalProfile {
         resolve_profile(&self.profiles, id)
     }
 
     pub(crate) fn reload_profiles(&mut self) {
         self.profiles = self.persist.list_profiles();
+    }
+}
+
+impl Default for RsTerminalApp {
+    fn default() -> Self {
+        Self::new(Persist::open())
     }
 }
 

@@ -3,6 +3,7 @@
 use egui::{Context, Painter, Pos2, Rect, Response, TouchPhase, Ui};
 
 use crate::config::TerminalTheme;
+use crate::ui::theme_color::to_egui;
 use crate::terminal::screen::{cell_display_width, Screen};
 
 pub use crate::session::{
@@ -493,7 +494,7 @@ pub fn paint_selection(
                 Pos2::new(x, y),
                 egui::vec2(cell_w * span as f32, cell_h),
             );
-            painter.rect_filled(cell_rect, egui::CornerRadius::ZERO, theme.selection);
+            painter.rect_filled(cell_rect, egui::CornerRadius::ZERO, to_egui(theme.selection));
             col += span;
         }
     }

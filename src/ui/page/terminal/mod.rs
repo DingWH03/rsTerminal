@@ -18,6 +18,7 @@ pub mod selection;
 use std::time::{Duration, Instant};
 
 use crate::config::{CursorStyle, TerminalTheme};
+use crate::ui::theme_color::to_egui;
 use crate::connection::ConnectionState;
 use crate::fonts;
 use crate::session::{drain_connection, ActiveSession, ConnectionViewAction};
@@ -236,30 +237,6 @@ pub fn connection_view(
                     if keyboard.visible {
                         keyboard.terminal_ime_enabled = false;
                         hide_android_terminal_ime(ui.ctx());
-                    }
-                }
-
-                #[cfg(not(target_os = "android"))]
-                {
-                    if icon_toolbar_button(
-                        ui,
-                        ui.id().with(("hdr_font_dec", pane_id)),
-                        Icon::FontSmaller,
-                    )
-                    .on_hover_text("A-")
-                    .clicked()
-                    {
-                        font_size = (font_size - 1.0).max(8.0);
-                    }
-                    if icon_toolbar_button(
-                        ui,
-                        ui.id().with(("hdr_font_inc", pane_id)),
-                        Icon::FontLarger,
-                    )
-                    .on_hover_text("A+")
-                    .clicked()
-                    {
-                        font_size = (font_size + 1.0).min(32.0);
                     }
                 }
             }
@@ -635,7 +612,7 @@ pub fn connection_view(
 
     if ui.is_rect_visible(panel_rect) {
         let painter = ui.painter_at(panel_rect);
-        painter.rect_filled(panel_rect, egui::CornerRadius::ZERO, theme.bg);
+        painter.rect_filled(panel_rect, egui::CornerRadius::ZERO, to_egui(theme.bg));
 
         let show_size_label = session
             .as_mut()
@@ -857,9 +834,9 @@ pub fn connection_view(
                 };
                 let dim_label = format!("{label_cols}×{label_rows}");
                 let dim_color = egui::Color32::from_rgba_premultiplied(
-                    theme.fg.r(),
-                    theme.fg.g(),
-                    theme.fg.b(),
+                    theme.fg.r,
+                    theme.fg.g,
+                    theme.fg.b,
                     140,
                 );
                 painter.text(

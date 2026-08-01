@@ -747,7 +747,7 @@ impl NewConnectionDialog {
 pub struct LocalTerminalSettingsDialog {
     pub open: bool,
     session_id: Option<String>,
-    profile_id: Option<String>,
+    connection_id: Option<String>,
     pub shell: String,
     pub working_dir: String,
 }
@@ -764,7 +764,7 @@ impl Default for LocalTerminalSettingsDialog {
         Self {
             open: false,
             session_id: None,
-            profile_id: None,
+            connection_id: None,
             shell: String::new(),
             working_dir: String::new(),
         }
@@ -798,7 +798,7 @@ impl LocalTerminalSettingsDialog {
         } else if let Some(c) = connections.iter().find(|c| c.conn_type == ConnectionType::Local) {
             self.fill_fields(Some(&c.id), None, None, connections);
         } else {
-            self.profile_id = None;
+            self.connection_id = None;
             self.shell = crate::platform::get().default_shell();
             self.working_dir.clear();
         }
@@ -811,7 +811,7 @@ impl LocalTerminalSettingsDialog {
         working_dir: Option<&str>,
         connections: &[SavedConnection],
     ) {
-        self.profile_id = saved_conn_id.map(|s| s.to_string());
+        self.connection_id = saved_conn_id.map(|s| s.to_string());
         if let Some(id) = saved_conn_id {
             if let Some(c) = connections.iter().find(|c| c.id == id) {
                 self.shell = c.shell.clone().unwrap_or_default();
@@ -825,14 +825,14 @@ impl LocalTerminalSettingsDialog {
         self.working_dir = working_dir.unwrap_or_default().to_string();
     }
 
-    fn load_profile(&mut self, id: &str, connections: &[SavedConnection]) {
+    fn load_connection(&mut self, id: &str, connections: &[SavedConnection]) {
         let Some(c) = connections
             .iter()
             .find(|c| c.id == id && c.conn_type == ConnectionType::Local)
         else {
             return;
         };
-        self.profile_id = Some(id.to_string());
+        self.connection_id = Some(id.to_string());
         self.shell = c.shell.clone().unwrap_or_default();
         self.working_dir = c.working_dir.clone().unwrap_or_default();
     }
@@ -860,7 +860,7 @@ impl LocalTerminalSettingsDialog {
                 ui.label(rust_i18n::t!("dialog_saved_profile"));
                 let custom_label = rust_i18n::t!("dialog_custom_profile");
                 let selected_label = self
-                    .profile_id
+                    .connection_id
                     .as_ref()
                     .and_then(|id| local_profiles.iter().find(|c| c.id == *id))
                     .map(|c| c.name.as_str())
@@ -868,18 +868,18 @@ impl LocalTerminalSettingsDialog {
                 egui::ComboBox::from_id_salt("local_term_profile")
                     .selected_text(selected_label)
                     .show_ui(ui, |ui| {
-                        if ui.selectable_label(self.profile_id.is_none(), "(custom)").clicked() {
-                            self.profile_id = None;
+                        if ui.selectable_label(self.connection_id.is_none(), "(custom)").clicked() {
+                            self.connection_id = None;
                         }
                         for c in &local_profiles {
                             if ui
                                 .selectable_label(
-                                    self.profile_id.as_deref() == Some(c.id.as_str()),
+                                    self.connection_id.as_deref() == Some(c.id.as_str()),
                                     &c.name,
                                 )
                                 .clicked()
                             {
-                                self.load_profile(&c.id, connections);
+                                self.load_connection(&c.id, connections);
                             }
                         }
                     });
@@ -923,7 +923,7 @@ impl LocalTerminalSettingsDialog {
                             Some(self.working_dir.trim().to_string())
                         };
 
-                        let mut config = if let Some(id) = &self.profile_id {
+                        let mut config = if let Some(id) = &self.connection_id {
                             connections
                                 .iter()
                                 .find(|c| c.id == *id)

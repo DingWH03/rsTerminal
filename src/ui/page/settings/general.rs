@@ -20,15 +20,15 @@ pub fn page(ui: &mut egui::Ui, ctx: &mut SettingsPageCtx<'_>) {
             ui.horizontal(|ui| {
                 ui.label(rust_i18n::t!("language"));
                 egui::ComboBox::from_id_salt("prefs_language")
-                    .selected_text(ctx.prefs.language.label())
+                    .selected_text(ctx.prefs.general.language.label())
                     .width(200.0)
                     .show_ui(ui, |ui| {
                         for lang in Language::ALL {
                             if ui
-                                .selectable_label(ctx.prefs.language == lang, lang.label())
+                                .selectable_label(ctx.prefs.general.language == lang, lang.label())
                                 .clicked()
                             {
-                                ctx.prefs.language = lang;
+                                ctx.prefs.general.language = lang;
                                 lang.apply();
                             }
                         }

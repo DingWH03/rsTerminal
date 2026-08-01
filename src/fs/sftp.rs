@@ -123,7 +123,11 @@ impl SftpClient {
             .clone()
             .ok_or_else(|| "SSH host not configured".to_string())?;
         let port = conn.ssh_port.unwrap_or(22);
-        let auth = ResolvedSshAuth::from_connection(conn, auth_user);
+        let auth = ResolvedSshAuth::resolve(
+            auth_user,
+            conn.ssh_user.as_deref(),
+            conn.ssh_password.as_deref(),
+        );
         if auth.username.is_empty() {
             return Err("SSH user not configured".to_string());
         }

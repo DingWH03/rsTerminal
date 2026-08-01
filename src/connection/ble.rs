@@ -14,7 +14,7 @@ use crate::connection::{
     emit_conn_port_data, emit_conn_ports_changed, ConnIn, ConnOut, ConnectionHandle,
     ConnectionPort, ConnectionPortKind, ConnectionState, RepaintNotifier,
 };
-use crate::persist::types::SavedConnection;
+use crate::connection::BleConnectParams;
 
 // ---------------------------------------------------------------------------
 // Built-in BLE terminal profiles
@@ -520,11 +520,8 @@ async fn write_mux_port(
 // Public entry — connect BLE terminal transport
 // ---------------------------------------------------------------------------
 
-pub fn connect_ble(config: &SavedConnection) -> Result<ConnectionHandle, String> {
-    let device_name = config
-        .ble_device
-        .clone()
-        .ok_or_else(|| "BLE device not configured".to_string())?;
+pub fn connect_ble(params: &BleConnectParams) -> Result<ConnectionHandle, String> {
+    let device_name = params.device.clone();
 
     let (to_conn_tx, to_conn_rx) = mpsc::channel::<ConnOut>();
     let (from_conn_tx, from_conn_rx) = mpsc::channel::<ConnIn>();

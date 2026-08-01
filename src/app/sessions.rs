@@ -58,7 +58,7 @@ impl RsTerminalApp {
         term.handle.close();
         let rows = term.last_pty_rows.max(1);
         let cols = term.last_pty_cols.max(1);
-        match local::connect_local(config, rows, cols) {
+        match local::connect_local(&super::connect_params::local_params(config), rows, cols) {
             Ok(handle) => {
                 term.handle = handle;
                 term.saved_conn_id = Some(config.id.clone());
@@ -270,11 +270,18 @@ impl RsTerminalApp {
         else {
             return;
         };
-        let auth = config
+        let auth_user = config
             .auth_user_id
             .as_ref()
-            .and_then(|id| self.auth_users.iter().find(|u| u.id == *id))
-            .cloned();
+            .and_then(|id| self.auth_users.iter().find(|u| u.id == *id));
+        let auth = super::connect_params::ssh_auth(&config, auth_user);
+        let params = match super::connect_params::ssh_params(&config) {
+            Ok(p) => p,
+            Err(e) => {
+                self.connection_notice = Some(e);
+                return;
+            }
+        };
         let Some(sid) = self
             .shell
             .layout
@@ -294,13 +301,7 @@ impl RsTerminalApp {
         if !matches!(session.conn_type, ConnectionType::Ssh) {
             return;
         }
-        match ssh::connect_ssh_session(
-            &config,
-            &config.env_vars,
-            24,
-            80,
-            auth.as_ref(),
-        ) {
+        match ssh::connect_ssh_session(&params, auth, 24, 80) {
             Ok(out) => {
                 session.handle = out.handle;
                 session.metrics = out.metrics;

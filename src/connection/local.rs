@@ -8,7 +8,7 @@ use crate::connection::{
     ConnIn, ConnOut, ConnectionHandle, ConnectionState, RepaintNotifier, emit_conn_data, pty_burst,
     winchg,
 };
-use crate::persist::types::SavedConnection;
+use crate::connection::LocalConnectParams;
 
 fn pty_size(rows: u16, cols: u16) -> PtySize {
     PtySize {
@@ -60,7 +60,7 @@ fn apply_pty_resize(master: &dyn MasterPty, rows: u16, cols: u16, shell_pid: Opt
 }
 
 pub fn connect_local(
-    config: &SavedConnection,
+    params: &LocalConnectParams,
     rows: u16,
     cols: u16,
 ) -> Result<ConnectionHandle, String> {
@@ -68,7 +68,7 @@ pub fn connect_local(
     let (from_conn_tx, from_conn_rx) = mpsc::channel::<ConnIn>();
     let (blocking_resize_tx, blocking_resize_rx) = mpsc::sync_channel::<(u16, u16)>(0);
 
-    let shell = config
+    let shell = params
         .shell
         .clone()
         .unwrap_or_else(|| crate::platform::get().default_shell());
@@ -92,11 +92,11 @@ pub fn connect_local(
         cmd.env(&key, &value);
     }
     // Override with per-connection environment.
-    for (key, value) in &config.env_vars {
+    for (key, value) in &params.env_vars {
         cmd.env(key, value);
     }
 
-    if let Some(dir) = config.working_dir.as_deref() {
+    if let Some(dir) = params.working_dir.as_deref() {
         let path = std::path::Path::new(dir);
         if path.is_dir() {
             cmd.cwd(path);

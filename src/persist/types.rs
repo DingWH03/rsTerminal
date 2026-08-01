@@ -4,8 +4,9 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::config::{BellStyle, CursorStyle, TerminalTheme, TerminalType};
-use crate::ui::uiframe::keyboard::KeyboardMode;
+use crate::config::{
+    BellStyle, CursorStyle, KeyboardMode, TerminalTheme, TerminalType, SSH_OSC7_PROMPT_COMMAND,
+};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum ConnectionType {
@@ -79,7 +80,7 @@ pub fn default_ssh_env_vars() -> HashMap<String, String> {
         ("LANG".to_string(), "en_US.UTF-8".to_string()),
         (
             "PROMPT_COMMAND".to_string(),
-            crate::connection::ssh::SSH_OSC7_PROMPT_COMMAND.to_string(),
+            SSH_OSC7_PROMPT_COMMAND.to_string(),
         ),
     ])
 }
@@ -282,6 +283,23 @@ impl TerminalProfile {
         copy.is_default = false;
         copy
     }
+}
+
+/// Resolve a profile by id, or the default / first profile.
+pub fn resolve_profile<'a>(
+    profiles: &'a [TerminalProfile],
+    id: Option<&str>,
+) -> &'a TerminalProfile {
+    if let Some(id) = id {
+        if let Some(p) = profiles.iter().find(|p| p.id == id) {
+            return p;
+        }
+    }
+    profiles
+        .iter()
+        .find(|p| p.is_default)
+        .or_else(|| profiles.first())
+        .expect("at least one terminal profile")
 }
 
 /// Shape of a profile entry inside legacy `settings.json`.

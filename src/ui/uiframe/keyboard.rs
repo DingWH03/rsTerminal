@@ -5,17 +5,7 @@
 //!
 //! 主要用于移动设备（Android）和桌面触屏用户。
 
-use serde::{Deserialize, Serialize};
-
-/// 虚拟键盘模式。
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
-pub enum KeyboardMode {
-    /// 特殊键模式：仅显示功能键和方向键
-    Special,
-    /// 全键盘模式：完整的字母数字键盘
-    #[default]
-    Full,
-}
+pub use crate::config::KeyboardMode;
 
 /// 键盘层。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -13,21 +13,14 @@ use tokio::time::timeout;
 
 use crate::connection::{
     emit_conn_data, ssh_auth::ResolvedSshAuth, ssh_keys, ConnIn, ConnOut, ConnectionHandle,
-    ConnectionState, RepaintNotifier,
+    ConnectionState, RepaintNotifier, SshConnectParams,
 };
 use crate::fs::sftp::{self, SftpClient, SftpRequest};
 use crate::remote::protocol::{push_bytes, AgentToClient};
 use crate::remote::status::{MetricsEvent, SessionMetrics};
 use crate::remote::AGENT_SCRIPT;
-use crate::persist::types::SavedConnection;
 
-/// Bash `PROMPT_COMMAND` that emits OSC 7 with `$HOSTNAME` + `$PWD`.
-///
-/// Sent via SSH `set_env` (no PTY echo). Requires the server to accept the variable
-/// (`AcceptEnv PROMPT_COMMAND` / `SetEnv`, etc.); otherwise it is ignored and the
-/// sidebar falls back to SFTP home / agent+OSC merger.
-pub const SSH_OSC7_PROMPT_COMMAND: &str =
-    r#"printf "\033]7;file://%s%s\033\\" "$HOSTNAME" "$PWD""#;
+pub use crate::config::SSH_OSC7_PROMPT_COMMAND;
 
 /// Result of opening a multiplexed SSH session (PTY + shared SFTP + status agent).
 pub struct SshConnectOutcome {
@@ -51,32 +44,31 @@ impl client::Handler for SshClient {
 }
 
 pub fn connect_ssh(
-    config: &SavedConnection,
-    env_vars: &HashMap<String, String>,
+    params: &SshConnectParams,
+    auth: ResolvedSshAuth,
     rows: u16,
     cols: u16,
 ) -> Result<ConnectionHandle, String> {
-    Ok(connect_ssh_session(config, env_vars, rows, cols, None)?.handle)
+    Ok(connect_ssh_session(params, auth, rows, cols)?.handle)
 }
 
 /// Preferred entry: returns PTY handle, metrics bus, and shared-session SFTP.
 pub fn connect_ssh_session(
-    config: &SavedConnection,
-    env_vars: &HashMap<String, String>,
+    params: &SshConnectParams,
+    auth: ResolvedSshAuth,
     rows: u16,
     cols: u16,
-    auth_user: Option<&crate::persist::types::AuthUser>,
 ) -> Result<SshConnectOutcome, String> {
-    let host = config
-        .ssh_host
-        .clone()
-        .ok_or_else(|| "SSH host not configured".to_string())?;
-    let port = config.ssh_port.unwrap_or(22);
-    let auth = ResolvedSshAuth::from_connection(config, auth_user);
+    if params.host.is_empty() {
+        return Err("SSH host not configured".to_string());
+    }
     if auth.username.is_empty() {
         return Err("SSH user not configured".to_string());
     }
-    let session_tag = config.id.clone();
+    let host = params.host.clone();
+    let port = params.port;
+    let session_tag = params.session_tag.clone();
+    let env_vars = params.env_vars.clone();
 
     let (to_conn_tx, to_conn_rx) = mpsc::channel::<ConnOut>();
     let (from_conn_tx, from_conn_rx) = mpsc::channel::<ConnIn>();
@@ -95,7 +87,6 @@ pub fn connect_ssh_session(
 
     let host_clone = host.clone();
     let from_tx = from_conn_tx.clone();
-    let env_vars = env_vars.clone();
     let ssh_repaint = repaint.clone();
     let sftp_status_thread = sftp_status.clone();
 

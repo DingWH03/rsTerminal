@@ -15,6 +15,7 @@ use egui::{Align, FontId, Galley, Painter, Stroke, Ui};
 use crate::config::TerminalTheme;
 use crate::fonts::terminal_font_id_for_char;
 use crate::terminal::screen::{cell_display_width, Cell, Color};
+use crate::ui::theme_color::to_egui;
 
 pub use crate::session::RowGalleyCache;
 
@@ -137,7 +138,7 @@ pub fn paint_row(
 
         if !tui_surface && (cell.ch == ' ' || cell.ch == '\0') && attrs.is_suggestion_style() {
             // zsh clears suggestion with dim/gray spaces — erase stale glyphs underneath.
-            painter.rect_filled(cell_rect, egui::CornerRadius::ZERO, theme.bg);
+            painter.rect_filled(cell_rect, egui::CornerRadius::ZERO, to_egui(theme.bg));
         }
 
         if cell.ch != ' ' && cell.ch != '\0' {
@@ -207,16 +208,16 @@ fn blend_dim(fg: egui::Color32, bg: egui::Color32) -> egui::Color32 {
 
 fn resolve_colors(theme: &TerminalTheme, attrs: RunAttrs) -> (egui::Color32, egui::Color32) {
     let mut fg = match attrs.fg {
-        Color::Default => theme.fg,
+        Color::Default => to_egui(theme.fg),
         Color::Indexed(i) => {
             let idx = if attrs.bold && i < 8 { i + 8 } else { i };
-            theme.indexed_color(idx)
+            to_egui(theme.indexed_color(idx))
         }
         Color::Rgb(r, g, b) => egui::Color32::from_rgb(r, g, b),
     };
     let mut bg = match attrs.bg {
-        Color::Default => theme.bg,
-        Color::Indexed(i) => theme.indexed_color(i),
+        Color::Default => to_egui(theme.bg),
+        Color::Indexed(i) => to_egui(theme.indexed_color(i)),
         Color::Rgb(r, g, b) => egui::Color32::from_rgb(r, g, b),
     };
     if attrs.reverse {

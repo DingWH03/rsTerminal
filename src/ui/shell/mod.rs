@@ -50,7 +50,7 @@ impl Default for AppShell {
 impl AppShell {
     pub fn from_prefs(prefs: &Prefs) -> Self {
         Self {
-            layout: ShellLayout::from_settings(prefs.function_pane_width),
+            layout: ShellLayout::from_settings(prefs.chrome.function_pane_width),
             function_pane: FunctionPane::new(),
             last_focused_pane: None,
             active_drag: None,

@@ -1,5 +1,6 @@
 //! Connect / save-connection CRUD / local terminal settings apply.
 
+use super::connect_params;
 use super::RsTerminalApp;
 use crate::connection::{ble, serial, ssh};
 #[cfg(not(target_os = "android"))]
@@ -23,7 +24,7 @@ impl RsTerminalApp {
             return;
         };
         let profile = self.resolve_profile(config.profile_id.as_deref()).clone();
-        match local::connect_local(&config, 24, 80) {
+        match local::connect_local(&connect_params::local_params(&config), 24, 80) {
             Ok(handle) => self.open_session(handle, &config, profile.scrollback_lines),
             Err(e) => self.connection_notice = Some(e),
         }
@@ -46,7 +47,7 @@ impl RsTerminalApp {
                 self.saved_connections[pos] = apply.config.clone();
             }
             let _ = self.persist.upsert_connection(&apply.config);
-            self.prefs.default_local_connection_id = Some(apply.config.id.clone());
+            self.prefs.chrome.default_local_connection_id = Some(apply.config.id.clone());
             save_prefs(&self.prefs);
         }
         #[cfg(not(target_os = "android"))]
@@ -71,30 +72,32 @@ impl RsTerminalApp {
         let profile = self.resolve_profile(config.profile_id.as_deref()).clone();
         match config.conn_type {
             #[cfg(not(target_os = "android"))]
-            ConnectionType::Local => match local::connect_local(&config, 24, 80) {
-                Ok(handle) => {
-                    self.open_session_in_pane(handle, &config, profile.scrollback_lines, pane, None)
+            ConnectionType::Local => {
+                match local::connect_local(&connect_params::local_params(&config), 24, 80) {
+                    Ok(handle) => self.open_session_in_pane(
+                        handle,
+                        &config,
+                        profile.scrollback_lines,
+                        pane,
+                        None,
+                    ),
+                    Err(e) => self.connection_notice = Some(e),
                 }
-                Err(e) => self.connection_notice = Some(e),
-            },
+            }
             #[cfg(target_os = "android")]
             ConnectionType::Local => {
                 self.connection_notice =
                     Some("Local terminal is not supported on Android".into());
             }
             ConnectionType::Ssh => {
-                let auth = config
+                let auth_user = config
                     .auth_user_id
                     .as_ref()
-                    .and_then(|id| self.auth_users.iter().find(|u| u.id == *id))
-                    .cloned();
-                match ssh::connect_ssh_session(
-                    &config,
-                    &config.env_vars,
-                    24,
-                    80,
-                    auth.as_ref(),
-                ) {
+                    .and_then(|id| self.auth_users.iter().find(|u| u.id == *id));
+                let auth = connect_params::ssh_auth(&config, auth_user);
+                match connect_params::ssh_params(&config)
+                    .and_then(|p| ssh::connect_ssh_session(&p, auth, 24, 80))
+                {
                     Ok(out) => self.open_session_in_pane(
                         out.handle,
                         &config,
@@ -105,13 +108,17 @@ impl RsTerminalApp {
                     Err(e) => self.connection_notice = Some(e),
                 }
             }
-            ConnectionType::Serial => match serial::connect_serial(&config) {
+            ConnectionType::Serial => match connect_params::serial_params(&config)
+                .and_then(|p| serial::connect_serial(&p))
+            {
                 Ok(handle) => {
                     self.open_session_in_pane(handle, &config, profile.scrollback_lines, pane, None)
                 }
                 Err(e) => self.connection_notice = Some(e),
             },
-            ConnectionType::Ble => match ble::connect_ble(&config) {
+            ConnectionType::Ble => match connect_params::ble_params(&config)
+                .and_then(|p| ble::connect_ble(&p))
+            {
                 Ok(handle) => {
                     self.open_session_in_pane(handle, &config, profile.scrollback_lines, pane, None)
                 }

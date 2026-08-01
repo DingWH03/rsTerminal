@@ -294,7 +294,7 @@ impl RsTerminalApp {
             self.reconnect_ssh_session(pane, conn_id);
         }
 
-        self.prefs.function_pane_width = Some(self.shell.layout.function_width);
+        self.prefs.chrome.function_pane_width = Some(self.shell.layout.function_width);
         ctx.request_repaint_after(std::time::Duration::from_millis(400));
     }
 }

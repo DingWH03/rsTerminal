@@ -21,7 +21,6 @@ pub mod fonts;
 pub mod i18n;
 pub mod platform;
 pub mod prefs;
-pub mod settings;
 pub mod persist;
 pub mod terminal;
 pub mod ui;
@@ -34,21 +33,16 @@ pub fn run_app(native_options: eframe::NativeOptions) {
         "rsTerminal",
         native_options,
         Box::new(|cc| {
-            let prefs = crate::prefs::load_prefs();
-            prefs.language.apply();
             let persist = crate::persist::Persist::open();
-            let profiles = persist.list_profiles();
-            let font = crate::settings::resolve_profile(&profiles, None)
-                .terminal_font
-                .as_str();
-            fonts::setup_fonts(&cc.egui_ctx, font);
+            let app = RsTerminalApp::new(persist);
+            fonts::setup_fonts(&cc.egui_ctx, app.default_terminal_font());
             fonts::preload_monospace_catalog();
             fonts::tune_android_display(&cc.egui_ctx);
             // Desktop: real OS child windows for DialogFrame.
             // Android keeps embedding (single Activity window).
             #[cfg(not(target_os = "android"))]
             cc.egui_ctx.set_embed_viewports(false);
-            Ok(Box::new(RsTerminalApp::default()))
+            Ok(Box::new(app))
         }),
     ) {
         info!("Failed to start: {e}");

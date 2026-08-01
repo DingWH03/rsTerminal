@@ -1,7 +1,11 @@
 use egui::Painter;
 
-use crate::config::{CursorStyle, TerminalTheme};
+use crate::config::{CursorStyle, Rgba, TerminalTheme};
 use crate::terminal::screen::{cell_display_width, Screen};
+
+fn egui_color(c: Rgba) -> egui::Color32 {
+    egui::Color32::from_rgba_premultiplied(c.r, c.g, c.b, c.a)
+}
 
 pub fn paint_cursor(
     painter: &Painter,
@@ -57,13 +61,13 @@ pub fn paint_cursor(
             const BAR_WIDTH: f32 = 2.0;
             let bar_w = BAR_WIDTH.min(cell_w);
             let bar_rect = egui::Rect::from_min_size(egui::pos2(cx, cy), egui::vec2(bar_w, cell_h));
-            painter.rect_filled(bar_rect, egui::CornerRadius::ZERO, theme.cursor);
+            painter.rect_filled(bar_rect, egui::CornerRadius::ZERO, egui_color(theme.cursor));
         }
         CursorStyle::Block | CursorStyle::BlockBlink => {
             painter.rect_stroke(
                 cell_rect,
                 egui::CornerRadius::ZERO,
-                egui::Stroke::new(1.0, theme.cursor),
+                egui::Stroke::new(1.0, egui_color(theme.cursor)),
                 egui::StrokeKind::Inside,
             );
         }
@@ -74,7 +78,7 @@ pub fn paint_cursor(
                 egui::pos2(cx, cy + cell_h - line_h),
                 egui::pos2(cx + cell_w, cy + cell_h),
             );
-            painter.rect_filled(line_rect, egui::CornerRadius::ZERO, theme.cursor);
+            painter.rect_filled(line_rect, egui::CornerRadius::ZERO, egui_color(theme.cursor));
         }
     }
 }

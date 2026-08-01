@@ -5,7 +5,7 @@ use crate::fonts;
 use crate::persist::types::TerminalProfile;
 use crate::prefs::save_prefs;
 use crate::session::WorkspaceSession;
-use crate::settings::resolve_profile;
+use crate::persist::types::resolve_profile;
 use crate::ui::function_pane::pages::FunctionPage;
 use crate::ui::page::dialogs::LocalTerminalSettingsDialog;
 
@@ -72,14 +72,13 @@ impl RsTerminalApp {
     pub(crate) fn delete_profile(&mut self, id: &str) {
         match self.persist.delete_profile(id) {
             Ok(()) => self.reload_profiles(),
-            Err(e) if e.starts_with("profile_in_use:") => {
-                let n = e.strip_prefix("profile_in_use:").unwrap_or("?");
+            Err(crate::persist::PersistError::ProfileInUse { count }) => {
                 self.connection_notice = Some(
-                    rust_i18n::t!("err_profile_in_use", count = n).into_owned(),
+                    rust_i18n::t!("err_profile_in_use", count = count).into_owned(),
                 );
             }
             Err(e) => {
-                self.connection_notice = Some(e);
+                self.connection_notice = Some(e.to_string());
             }
         }
     }
@@ -214,7 +213,7 @@ impl RsTerminalApp {
 
     pub(crate) fn request_app_exit(&mut self, ctx: &egui::Context) {
         self.save_profile_tweaks();
-        self.prefs.function_pane_width = Some(self.shell.layout.function_width);
+        self.prefs.chrome.function_pane_width = Some(self.shell.layout.function_width);
         save_prefs(&self.prefs);
 
         #[cfg(target_os = "android")]

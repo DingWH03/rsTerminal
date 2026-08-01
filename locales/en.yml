@@ -207,9 +207,6 @@ auth_user_key_passphrase: "Key passphrase:"
 # ---- General Settings ----
 settings_language: "Language"
 settings_language_desc: "Changes take effect immediately"
-settings_ssh_env: "SSH Environment Variables"
-settings_ssh_env_desc: "Default environment injected for new SSH connections"
-
 # ---- Appearance Settings ----
 settings_font_size: "Font Size"
 settings_terminal_font: "Terminal Font"

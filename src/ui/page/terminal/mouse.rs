@@ -10,6 +10,7 @@
 use egui::{CornerRadius, CursorIcon, PointerButton, Pos2, Rect, Response, Sense, TouchPhase, Ui};
 
 use crate::config::TerminalTheme;
+use crate::ui::theme_color::to_egui;
 use crate::terminal::screen::Screen;
 use crate::ui::page::terminal::selection::TerminalTouchState;
 
@@ -98,9 +99,9 @@ pub fn process_terminal_scrollbar(
     }
 
     let thumb_color = if active {
-        theme.scrollbar_thumb_hover
+        to_egui(theme.scrollbar_thumb_hover)
     } else {
-        theme.scrollbar_thumb
+        to_egui(theme.scrollbar_thumb)
     };
     ui.painter().rect_filled(thumb_rect, CornerRadius::same(1), thumb_color);
 
