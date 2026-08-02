@@ -11,7 +11,7 @@ mod users;
 use crate::data::persist::types::{AuthUser, TerminalProfile};
 use crate::data::prefs::Prefs;
 use crate::ui::page::dialogs::ManageAuthUsersAction;
-use crate::ui::uiframe::style;
+use crate::ui::uiframe::form;
 
 /// Settings tab identifiers (also openable as standalone dialogs).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -108,43 +108,17 @@ pub fn settings_page_dialog(
 }
 
 fn settings_body(ui: &mut egui::Ui, ctx: &mut SettingsPageCtx<'_>, forced: Option<SettingsTab>) {
+    // Stable id outside scroll-child noise.
+    let tab_id = egui::Id::new("settings_tab_v5");
     let mut active = forced.unwrap_or_else(|| {
-        ui.memory_mut(|m| {
-            *m.data
-                .get_temp_mut_or_default::<SettingsTab>(ui.id().with("settings_tab_v4"))
-        })
+        ui.ctx()
+            .memory_mut(|m| *m.data.get_temp_mut_or_default::<SettingsTab>(tab_id))
     });
 
     if forced.is_none() {
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 6.0;
-            for tab in SettingsTab::ALL {
-                let selected = active == tab;
-                let color = if selected {
-                    ui.visuals().selection.stroke.color
-                } else {
-                    ui.visuals().weak_text_color()
-                };
-                let btn = egui::Button::new(
-                    egui::RichText::new(tab.label())
-                        .size(13.0)
-                        .color(color)
-                        .strong(),
-                )
-                .fill(egui::Color32::TRANSPARENT)
-                .corner_radius(style::CORNER_RADIUS_SM)
-                .min_size(egui::vec2(0.0, 30.0));
-                if ui.add(btn).clicked() {
-                    active = tab;
-                }
-            }
-        });
-        ui.add_space(8.0);
-        ui.separator();
-        ui.add_space(8.0);
-        ui.memory_mut(|m| {
-            *m.data
-                .get_temp_mut_or_default::<SettingsTab>(ui.id().with("settings_tab_v4")) = active;
+        active = form::text_tab_bar(ui, &SettingsTab::ALL, active, SettingsTab::label);
+        ui.ctx().memory_mut(|m| {
+            *m.data.get_temp_mut_or_default::<SettingsTab>(tab_id) = active;
         });
     }
 

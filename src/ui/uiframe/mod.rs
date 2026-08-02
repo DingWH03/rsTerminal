@@ -7,6 +7,7 @@
 //! |--------|------|
 //! | [`menu_bar`] | Declarative menu bar chrome |
 //! | [`dialog`] | Centered dialog window frame |
+//! | [`form`] | Imperative labeled fields / sections / footers |
 //! | [`tab_bar`] / [`file_list`] / [`components`] | Shared widgets |
 //! | [`style`] / [`vector_icons`] | Visual tokens |
 
@@ -15,12 +16,15 @@ pub mod clipboard;
 pub mod components;
 pub mod dialog;
 pub mod file_list;
+pub mod form;
 pub mod keyboard;
 pub mod menu_bar;
 pub mod split_handle;
 pub mod style;
 pub mod tab_bar;
 pub mod vector_icons;
+
+pub use form::{FooterAction, COMBO_WIDTH, FIELD_GAP, FOOTER_GAP, LABEL_WIDTH, SECTION_GAP};
 
 pub use dialog::{
     host_blocked_this_frame, DialogFrame, DialogOutcome, ALERT_HEIGHT, ALERT_WIDTH, DEFAULT_HEIGHT,

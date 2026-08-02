@@ -89,6 +89,10 @@ pub fn card_frame() -> Frame {
 }
 
 /// A section card for settings / grouped content.
+///
+/// Prefer [`crate::ui::uiframe::form::section_frame_themed`] in UI code — it
+/// follows the active egui visuals. This helper keeps the dark-token fill for
+/// non-UI callers that do not have a `Ui` handy.
 pub fn section_frame() -> Frame {
     Frame::new()
         .fill(SURFACE_2)

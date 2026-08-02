@@ -2,37 +2,26 @@
 
 use crate::i18n::Language;
 use crate::ui::page::settings::SettingsPageCtx;
-use crate::ui::uiframe::style;
+use crate::ui::uiframe::form;
 
 pub fn page(ui: &mut egui::Ui, ctx: &mut SettingsPageCtx<'_>) {
-    egui::Frame::new()
-        .fill(ui.visuals().extreme_bg_color)
-        .stroke(ui.visuals().widgets.noninteractive.bg_stroke)
-        .corner_radius(style::CORNER_RADIUS_SM)
-        .inner_margin(egui::Margin::symmetric(16, 14))
-        .show(ui, |ui| {
-            ui.label(
-                egui::RichText::new(rust_i18n::t!("settings_tab_general"))
-                    .size(15.0)
-                    .strong(),
-            );
-            ui.add_space(10.0);
-            ui.horizontal(|ui| {
-                ui.label(rust_i18n::t!("language"));
-                egui::ComboBox::from_id_salt("prefs_language")
-                    .selected_text(ctx.prefs.general.language.label())
-                    .width(200.0)
-                    .show_ui(ui, |ui| {
-                        for lang in Language::ALL {
-                            if ui
-                                .selectable_label(ctx.prefs.general.language == lang, lang.label())
-                                .clicked()
-                            {
-                                ctx.prefs.general.language = lang;
-                                lang.apply();
-                            }
-                        }
-                    });
-            });
-        });
+    form::section_card(ui, |ui| {
+        form::labeled_combo(
+            ui,
+            "prefs_language",
+            rust_i18n::t!("language"),
+            ctx.prefs.general.language.label(),
+            |ui| {
+                for lang in Language::ALL {
+                    if ui
+                        .selectable_label(ctx.prefs.general.language == lang, lang.label())
+                        .clicked()
+                    {
+                        ctx.prefs.general.language = lang;
+                        lang.apply();
+                    }
+                }
+            },
+        );
+    });
 }

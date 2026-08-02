@@ -29,30 +29,8 @@ use crate::data::persist::types::{
     TerminalProfile,
 };
 use crate::ui::connection_display::connection_type_label;
+use crate::ui::uiframe::form::{self, FooterAction};
 use crate::ui::uiframe::style;
-
-/// On Android, show the soft keyboard for a focused dialog text field.
-///
-/// The terminal canvas uses a custom IME bridge with `IMEPurpose::Terminal`;
-/// dialogs must reset to `Normal` and explicitly request soft input.
-fn android_ime_for_text_edit(ui: &egui::Ui, resp: &egui::Response, force: bool) {
-    #[cfg(target_os = "android")]
-    {
-        if force || resp.gained_focus() || resp.clicked() {
-            crate::platform::android_ime::prepare_text_field_ime(ui.ctx(), resp.rect);
-        }
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = (ui, resp, force);
-    }
-}
-
-fn dialog_text_edit(ui: &mut egui::Ui, text: &mut String) -> egui::Response {
-    let resp = ui.text_edit_singleline(text);
-    android_ime_for_text_edit(ui, &resp, false);
-    resp
-}
 
 fn env_map_to_rows(map: &HashMap<String, String>) -> Vec<(String, String)> {
     let mut rows: Vec<(String, String)> = map.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
@@ -291,13 +269,12 @@ impl NewConnectionDialog {
             .map(|p| p.name.as_str())
             .unwrap_or("Default");
 
-        ui.horizontal(|ui| {
-            ui.label(rust_i18n::t!("dialog_type"));
+        form::labeled_row(ui, rust_i18n::t!("dialog_type"), |ui| {
             ui.add_enabled_ui(!editing, |ui| {
                 let prev = self.conn_type;
                 egui::ComboBox::from_id_salt("add_connection_type")
                     .selected_text(connection_type_label(self.conn_type))
-                    .width(ui.available_width().min(220.0))
+                    .width(form::COMBO_WIDTH)
                     .show_ui(ui, |ui| {
                         for ct in &available_types {
                             ui.selectable_value(
@@ -323,116 +300,99 @@ impl NewConnectionDialog {
             });
         });
 
-        ui.horizontal(|ui| {
-            ui.label(rust_i18n::t!("dialog_name"));
-            let name_edit = ui.text_edit_singleline(&mut self.name);
-            let force_ime = self.request_name_focus;
-            if self.request_name_focus {
-                name_edit.request_focus();
-                self.request_name_focus = false;
-            }
-            android_ime_for_text_edit(ui, &name_edit, force_ime);
-        });
+        let name_resp = form::labeled_text(ui, rust_i18n::t!("dialog_name"), &mut self.name);
+        if self.request_name_focus {
+            name_resp.request_focus();
+            form::android_ime_for_text_edit(ui, &name_resp, true);
+            self.request_name_focus = false;
+        }
 
-        ui.horizontal(|ui| {
-            ui.label(rust_i18n::t!("dialog_profile"));
-            let selected_label = self
-                .selected_profile_id
-                .as_ref()
-                .filter(|id| !id.is_empty())
-                .and_then(|id| profiles.iter().find(|p| p.id == *id).map(|p| p.name.clone()))
-                .unwrap_or_else(|| {
-                    format!(
-                        "{} ({})",
-                        rust_i18n::t!("dialog_profile_default"),
-                        default_profile_name
-                    )
-                });
-            egui::ComboBox::from_id_salt("conn_profile_combo")
-                .selected_text(selected_label)
-                .width(220.0)
-                .show_ui(ui, |ui| {
-                    if ui
-                        .selectable_label(false, rust_i18n::t!("dialog_profile_new"))
-                        .clicked()
-                    {
-                        self.request_new_profile = true;
-                    }
-                    ui.separator();
-                    let default_label = format!(
-                        "{} ({})",
-                        rust_i18n::t!("dialog_profile_default"),
-                        default_profile_name
+        let selected_profile_label = self
+            .selected_profile_id
+            .as_ref()
+            .filter(|id| !id.is_empty())
+            .and_then(|id| profiles.iter().find(|p| p.id == *id).map(|p| p.name.clone()))
+            .unwrap_or_else(|| {
+                format!(
+                    "{} ({})",
+                    rust_i18n::t!("dialog_profile_default"),
+                    default_profile_name
+                )
+            });
+        form::labeled_combo(
+            ui,
+            "conn_profile_combo",
+            rust_i18n::t!("dialog_profile"),
+            selected_profile_label,
+            |ui| {
+                if ui
+                    .selectable_label(false, rust_i18n::t!("dialog_profile_new"))
+                    .clicked()
+                {
+                    self.request_new_profile = true;
+                }
+                ui.separator();
+                let default_label = format!(
+                    "{} ({})",
+                    rust_i18n::t!("dialog_profile_default"),
+                    default_profile_name
+                );
+                ui.selectable_value(&mut self.selected_profile_id, None, default_label);
+                for p in profiles {
+                    ui.selectable_value(
+                        &mut self.selected_profile_id,
+                        Some(p.id.clone()),
+                        &p.name,
                     );
-                    ui.selectable_value(&mut self.selected_profile_id, None, default_label);
-                    for p in profiles {
-                        ui.selectable_value(
-                            &mut self.selected_profile_id,
-                            Some(p.id.clone()),
-                            &p.name,
-                        );
-                    }
-                });
-        });
+                }
+            },
+        );
 
-        ui.add_space(12.0);
+        ui.add_space(form::SECTION_GAP);
         ui.separator();
         ui.add_space(4.0);
 
         match self.conn_type {
             ConnectionType::Local => {
-                ui.horizontal(|ui| {
-                    ui.label(rust_i18n::t!("dialog_shell"));
-                    dialog_text_edit(ui, &mut self.shell);
-                });
-                ui.horizontal(|ui| {
-                    ui.label(rust_i18n::t!("dialog_working_dir"));
-                    dialog_text_edit(ui, &mut self.working_dir);
-                });
+                form::labeled_text(ui, rust_i18n::t!("dialog_shell"), &mut self.shell);
+                form::labeled_text(
+                    ui,
+                    rust_i18n::t!("dialog_working_dir"),
+                    &mut self.working_dir,
+                );
             }
             ConnectionType::Ssh => {
-                ui.horizontal(|ui| {
-                    ui.label(rust_i18n::t!("dialog_host"));
-                    dialog_text_edit(ui, &mut self.ssh_host);
-                });
-                ui.horizontal(|ui| {
-                    ui.label(rust_i18n::t!("dialog_port"));
-                    dialog_text_edit(ui, &mut self.ssh_port);
-                });
-                ui.horizontal(|ui| {
-                    ui.label(rust_i18n::t!("dialog_auth_user"));
-                    let selected_label = self
-                        .selected_auth_user_id
-                        .as_ref()
-                        .and_then(|id| auth_users.iter().find(|u| u.id == *id))
-                        .map(|u| format!("{} ({})", u.name, u.username))
-                        .unwrap_or_else(|| rust_i18n::t!("dialog_auth_user_none").into_owned());
-                    egui::ComboBox::from_id_salt("ssh_auth_user_combo")
-                        .selected_text(selected_label)
-                        .width(220.0)
-                        .show_ui(ui, |ui| {
-                            if ui
-                                .selectable_label(false, rust_i18n::t!("dialog_auth_user_new"))
-                                .clicked()
-                            {
-                                self.request_new_auth_user = true;
-                            }
-                            ui.separator();
-                            for u in auth_users {
-                                let label = format!("{} ({})", u.name, u.username);
-                                if ui
-                                    .selectable_value(
-                                        &mut self.selected_auth_user_id,
-                                        Some(u.id.clone()),
-                                        label,
-                                    )
-                                    .clicked()
-                                {
-                                    // selection applied via selectable_value
-                                }
-                            }
-                        });
-                });
+                form::labeled_text(ui, rust_i18n::t!("dialog_host"), &mut self.ssh_host);
+                form::labeled_text(ui, rust_i18n::t!("dialog_port"), &mut self.ssh_port);
+                let selected_auth_label = self
+                    .selected_auth_user_id
+                    .as_ref()
+                    .and_then(|id| auth_users.iter().find(|u| u.id == *id))
+                    .map(|u| format!("{} ({})", u.name, u.username))
+                    .unwrap_or_else(|| rust_i18n::t!("dialog_auth_user_none").into_owned());
+                form::labeled_combo(
+                    ui,
+                    "ssh_auth_user_combo",
+                    rust_i18n::t!("dialog_auth_user"),
+                    selected_auth_label,
+                    |ui| {
+                        if ui
+                            .selectable_label(false, rust_i18n::t!("dialog_auth_user_new"))
+                            .clicked()
+                        {
+                            self.request_new_auth_user = true;
+                        }
+                        ui.separator();
+                        for u in auth_users {
+                            let label = format!("{} ({})", u.name, u.username);
+                            ui.selectable_value(
+                                &mut self.selected_auth_user_id,
+                                Some(u.id.clone()),
+                                label,
+                            );
+                        }
+                    },
+                );
                 if auth_users.is_empty() {
                     ui.label(
                         egui::RichText::new(rust_i18n::t!("dialog_auth_user_hint"))
@@ -442,16 +402,12 @@ impl NewConnectionDialog {
                 }
             }
             ConnectionType::Serial => {
-                ui.horizontal(|ui| {
-                    if ui.button(rust_i18n::t!("dialog_refresh_devices")).clicked() {
-                        self.refresh_serial_devices();
-                    }
-                });
+                if ui.button(rust_i18n::t!("dialog_refresh_devices")).clicked() {
+                    self.refresh_serial_devices();
+                }
+                ui.add_space(form::FIELD_GAP);
                 if self.serial_devices.is_empty() {
-                    ui.horizontal(|ui| {
-                        ui.label(rust_i18n::t!("dialog_device"));
-                        dialog_text_edit(ui, &mut self.serial_port);
-                    });
+                    form::labeled_text(ui, rust_i18n::t!("dialog_device"), &mut self.serial_port);
                 } else {
                     let selected_text = self
                         .serial_devices
@@ -460,9 +416,12 @@ impl NewConnectionDialog {
                         .map(|(_, label)| label.as_str())
                         .unwrap_or(self.serial_port.as_str())
                         .to_string();
-                    egui::ComboBox::from_label(rust_i18n::t!("dialog_device"))
-                        .selected_text(selected_text)
-                        .show_ui(ui, |ui| {
+                    form::labeled_combo(
+                        ui,
+                        "serial_device_combo",
+                        rust_i18n::t!("dialog_device"),
+                        selected_text,
+                        |ui| {
                             for (path, label) in &self.serial_devices {
                                 ui.selectable_value(
                                     &mut self.serial_port,
@@ -470,51 +429,48 @@ impl NewConnectionDialog {
                                     label,
                                 );
                             }
-                        });
+                        },
+                    );
                 }
-                ui.horizontal(|ui| {
-                    ui.label(rust_i18n::t!("dialog_baud_rate"));
-                    dialog_text_edit(ui, &mut self.serial_baud);
-                });
+                form::labeled_text(ui, rust_i18n::t!("dialog_baud_rate"), &mut self.serial_baud);
             }
             ConnectionType::Ble => {
-                ui.horizontal(|ui| {
-                    let scan_label = if self.ble_scanning {
-                        rust_i18n::t!("scanning")
-                    } else {
-                        rust_i18n::t!("dialog_scan_devices")
-                    };
-                    if ui
-                        .add_enabled(!self.ble_scanning, egui::Button::new(scan_label))
-                        .clicked()
-                    {
-                        self.start_ble_scan(ctx);
-                    }
-                });
+                let scan_label = if self.ble_scanning {
+                    rust_i18n::t!("scanning")
+                } else {
+                    rust_i18n::t!("dialog_scan_devices")
+                };
+                if ui
+                    .add_enabled(!self.ble_scanning, egui::Button::new(scan_label))
+                    .clicked()
+                {
+                    self.start_ble_scan(ctx);
+                }
+                ui.add_space(form::FIELD_GAP);
                 if let Some(err) = &self.ble_scan_error {
-                    ui.label(
-                        egui::RichText::new(err)
-                            .small()
-                            .color(style::RED),
-                    );
+                    ui.label(egui::RichText::new(err).small().color(style::RED));
                 }
                 if self.ble_devices.is_empty() && !self.ble_scanning {
                     ui.label(
                         egui::RichText::new(rust_i18n::t!("dialog_ble_scan_hint")).weak(),
                     );
-                    ui.horizontal(|ui| {
-                        ui.label(rust_i18n::t!("dialog_device_name"));
-                        dialog_text_edit(ui, &mut self.ble_device);
-                    });
+                    form::labeled_text(
+                        ui,
+                        rust_i18n::t!("dialog_device_name"),
+                        &mut self.ble_device,
+                    );
                 } else if !self.ble_devices.is_empty() {
                     let selected = if self.ble_device.is_empty() {
                         self.ble_devices[0].clone()
                     } else {
                         self.ble_device.clone()
                     };
-                    egui::ComboBox::from_label(rust_i18n::t!("dialog_device"))
-                        .selected_text(selected)
-                        .show_ui(ui, |ui| {
+                    form::labeled_combo(
+                        ui,
+                        "ble_device_combo",
+                        rust_i18n::t!("dialog_device"),
+                        selected,
+                        |ui| {
                             for name in &self.ble_devices {
                                 ui.selectable_value(
                                     &mut self.ble_device,
@@ -522,25 +478,27 @@ impl NewConnectionDialog {
                                     name,
                                 );
                             }
-                        });
+                        },
+                    );
                 }
             }
         }
 
         if matches!(self.conn_type, ConnectionType::Local | ConnectionType::Ssh) {
-            ui.add_space(12.0);
+            ui.add_space(form::SECTION_GAP);
             ui.separator();
-            ui.add_space(4.0);
-            ui.label(egui::RichText::new(rust_i18n::t!("dialog_env_vars")).strong());
+            form::section_header(ui, rust_i18n::t!("dialog_env_vars"));
             let mut remove_idx = None;
             for (i, (key, value)) in self.env_rows.iter_mut().enumerate() {
                 ui.horizontal(|ui| {
                     let key_w = ui.available_width() * 0.35;
-                    ui.add(egui::TextEdit::singleline(key).desired_width(key_w));
-                    ui.add(
+                    let key_resp = ui.add(egui::TextEdit::singleline(key).desired_width(key_w));
+                    form::android_ime_for_text_edit(ui, &key_resp, false);
+                    let val_resp = ui.add(
                         egui::TextEdit::singleline(value)
                             .desired_width(ui.available_width() - 36.0),
                     );
+                    form::android_ime_for_text_edit(ui, &val_resp, false);
                     if ui
                         .add(egui::Button::new("×").min_size(egui::vec2(28.0, 24.0)))
                         .clicked()
@@ -557,45 +515,23 @@ impl NewConnectionDialog {
             }
         }
 
-        ui.add_space(20.0);
-
-        ui.horizontal(|ui| {
-            let cancel_btn = egui::Button::new(
-                egui::RichText::new(rust_i18n::t!("cancel"))
-                    .size(14.0)
-                    .color(ui.visuals().weak_text_color()),
-            )
-            .fill(ui.visuals().panel_fill)
-            .corner_radius(style::CORNER_RADIUS_SM)
-            .min_size(egui::vec2(80.0, 34.0));
-            if ui.add(cancel_btn).clicked() {
-                outcome = ConnectionFormOutcome::Cancelled;
-            }
-
-            let can_create = !self.name.trim().is_empty()
-                && match self.conn_type {
-                    ConnectionType::Ssh => {
-                        !self.ssh_host.trim().is_empty() && self.selected_auth_user_id.is_some()
-                    }
-                    ConnectionType::Serial => !self.serial_port.trim().is_empty(),
-                    ConnectionType::Ble => !self.ble_device.trim().is_empty(),
-                    ConnectionType::Local => true,
-                };
-
-            let save_label = if self.edit_id.is_some() {
-                rust_i18n::t!("save")
-            } else {
-                rust_i18n::t!("create")
+        let can_create = !self.name.trim().is_empty()
+            && match self.conn_type {
+                ConnectionType::Ssh => {
+                    !self.ssh_host.trim().is_empty() && self.selected_auth_user_id.is_some()
+                }
+                ConnectionType::Serial => !self.serial_port.trim().is_empty(),
+                ConnectionType::Ble => !self.ble_device.trim().is_empty(),
+                ConnectionType::Local => true,
             };
-            let create_btn = egui::Button::new(
-                egui::RichText::new(save_label)
-                    .size(14.0)
-                    .color(egui::Color32::WHITE),
-            )
-            .fill(style::ACCENT)
-            .corner_radius(style::CORNER_RADIUS_SM)
-            .min_size(egui::vec2(100.0, 34.0));
-            if ui.add_enabled(can_create, create_btn).clicked() {
+        let save_label = if self.edit_id.is_some() {
+            rust_i18n::t!("save")
+        } else {
+            rust_i18n::t!("create")
+        };
+        match form::dialog_footer(ui, rust_i18n::t!("cancel"), save_label, can_create) {
+            FooterAction::Cancel => outcome = ConnectionFormOutcome::Cancelled,
+            FooterAction::Save => {
                 let mut conn = match self.conn_type {
                     ConnectionType::Local => {
                         let shell = if self.shell.is_empty() {
@@ -642,7 +578,8 @@ impl NewConnectionDialog {
                 conn.env_vars = env_rows_to_map(&self.env_rows);
                 outcome = ConnectionFormOutcome::Saved(conn);
             }
-        });
+            FooterAction::None => {}
+        }
 
         outcome
     }
@@ -857,97 +794,99 @@ impl LocalTerminalSettingsDialog {
         use crate::ui::uiframe::{DialogFrame, DialogOutcome};
         let frame = DialogFrame::new(rust_i18n::t!("dialog_local_terminal_settings").to_string());
         let closed = frame.show(ctx, "local_terminal_settings", |ui| {
-                let local_profiles: Vec<&SavedConnection> = connections
-                    .iter()
-                    .filter(|c| c.conn_type == ConnectionType::Local)
-                    .collect();
+            let local_profiles: Vec<&SavedConnection> = connections
+                .iter()
+                .filter(|c| c.conn_type == ConnectionType::Local)
+                .collect();
 
-                ui.label(rust_i18n::t!("dialog_saved_profile"));
-                let custom_label = rust_i18n::t!("dialog_custom_profile");
-                let selected_label = self
-                    .connection_id
-                    .as_ref()
-                    .and_then(|id| local_profiles.iter().find(|c| c.id == *id))
-                    .map(|c| c.name.as_str())
-                    .unwrap_or(&custom_label);
-                egui::ComboBox::from_id_salt("local_term_profile")
-                    .selected_text(selected_label)
-                    .show_ui(ui, |ui| {
-                        if ui.selectable_label(self.connection_id.is_none(), "(custom)").clicked() {
-                            self.connection_id = None;
-                        }
-                        for c in &local_profiles {
-                            if ui
-                                .selectable_label(
-                                    self.connection_id.as_deref() == Some(c.id.as_str()),
-                                    &c.name,
-                                )
-                                .clicked()
-                            {
-                                self.load_connection(&c.id, connections);
-                            }
-                        }
-                    });
-
-                ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    ui.label(rust_i18n::t!("dialog_shell"));
-                    dialog_text_edit(ui, &mut self.shell);
-                });
-                ui.horizontal(|ui| {
-                    ui.label(rust_i18n::t!("dialog_working_dir"));
-                    dialog_text_edit(ui, &mut self.working_dir);
-                });
-                let hint = if self.session_id.is_some() {
-                    rust_i18n::t!("dialog_reconnect_hint")
-                } else {
-                    rust_i18n::t!("dialog_next_time_hint")
-                };
-                ui.label(egui::RichText::new(hint).small().weak());
-
-                ui.add_space(12.0);
-                ui.horizontal(|ui| {
-                    if ui.button(rust_i18n::t!("cancel")).clicked() {
-                        close = true;
+            let custom_label = rust_i18n::t!("dialog_custom_profile");
+            let selected_label = self
+                .connection_id
+                .as_ref()
+                .and_then(|id| local_profiles.iter().find(|c| c.id == *id))
+                .map(|c| c.name.as_str())
+                .unwrap_or(&custom_label)
+                .to_string();
+            form::labeled_combo(
+                ui,
+                "local_term_profile",
+                rust_i18n::t!("dialog_saved_profile"),
+                selected_label,
+                |ui| {
+                    if ui
+                        .selectable_label(self.connection_id.is_none(), "(custom)")
+                        .clicked()
+                    {
+                        self.connection_id = None;
                     }
-                    let apply_label = if self.session_id.is_some() {
-                        rust_i18n::t!("dialog_apply_reconnect")
+                    for c in &local_profiles {
+                        if ui
+                            .selectable_label(
+                                self.connection_id.as_deref() == Some(c.id.as_str()),
+                                &c.name,
+                            )
+                            .clicked()
+                        {
+                            self.load_connection(&c.id, connections);
+                        }
+                    }
+                },
+            );
+
+            form::labeled_text(ui, rust_i18n::t!("dialog_shell"), &mut self.shell);
+            form::labeled_text(
+                ui,
+                rust_i18n::t!("dialog_working_dir"),
+                &mut self.working_dir,
+            );
+            let hint = if self.session_id.is_some() {
+                rust_i18n::t!("dialog_reconnect_hint")
+            } else {
+                rust_i18n::t!("dialog_next_time_hint")
+            };
+            ui.label(egui::RichText::new(hint).small().weak());
+
+            let apply_label = if self.session_id.is_some() {
+                rust_i18n::t!("dialog_apply_reconnect")
+            } else {
+                rust_i18n::t!("dialog_apply")
+            };
+            match form::dialog_footer(ui, rust_i18n::t!("cancel"), apply_label, true) {
+                FooterAction::Cancel => close = true,
+                FooterAction::Save => {
+                    let session_id = self.session_id.clone();
+                    let shell = if self.shell.trim().is_empty() {
+                        None
                     } else {
-                        rust_i18n::t!("dialog_apply")
+                        Some(self.shell.trim().to_string())
                     };
-                    if ui.button(apply_label).clicked() {
-                        let session_id = self.session_id.clone();
-                        let shell = if self.shell.trim().is_empty() {
-                            None
-                        } else {
-                            Some(self.shell.trim().to_string())
-                        };
-                        let working_dir = if self.working_dir.trim().is_empty() {
-                            None
-                        } else {
-                            Some(self.working_dir.trim().to_string())
-                        };
+                    let working_dir = if self.working_dir.trim().is_empty() {
+                        None
+                    } else {
+                        Some(self.working_dir.trim().to_string())
+                    };
 
-                        let mut config = if let Some(id) = &self.connection_id {
-                            connections
-                                .iter()
-                                .find(|c| c.id == *id)
-                                .cloned()
-                                .unwrap_or_else(|| {
-                                    SavedConnection::new_local("Local Terminal", shell.as_deref())
-                                })
-                        } else {
-                            SavedConnection::new_local("Local Terminal", shell.as_deref())
-                        };
-                        config.shell = shell;
-                        config.working_dir = working_dir;
-                        result = Some(LocalTerminalSettingsApply {
-                            session_id,
-                            config,
-                        });
-                        close = true;
-                    }
-                });
+                    let mut config = if let Some(id) = &self.connection_id {
+                        connections
+                            .iter()
+                            .find(|c| c.id == *id)
+                            .cloned()
+                            .unwrap_or_else(|| {
+                                SavedConnection::new_local("Local Terminal", shell.as_deref())
+                            })
+                    } else {
+                        SavedConnection::new_local("Local Terminal", shell.as_deref())
+                    };
+                    config.shell = shell;
+                    config.working_dir = working_dir;
+                    result = Some(LocalTerminalSettingsApply {
+                        session_id,
+                        config,
+                    });
+                    close = true;
+                }
+                FooterAction::None => {}
+            }
         }) == DialogOutcome::Closed;
 
         if closed || close {

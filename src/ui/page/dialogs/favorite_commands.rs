@@ -1,26 +1,8 @@
 //! Favorite command create/edit dialog and manage list dialog.
 
 use crate::data::persist::types::FavoriteCommand;
+use crate::ui::uiframe::form::{self, FooterAction};
 use crate::ui::uiframe::style;
-
-fn android_ime_for_text_edit(ui: &egui::Ui, resp: &egui::Response, force: bool) {
-    #[cfg(target_os = "android")]
-    {
-        if force || resp.gained_focus() || resp.clicked() {
-            crate::platform::android_ime::prepare_text_field_ime(ui.ctx(), resp.rect);
-        }
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = (ui, resp, force);
-    }
-}
-
-fn dialog_text_edit(ui: &mut egui::Ui, text: &mut String) -> egui::Response {
-    let resp = ui.text_edit_singleline(text);
-    android_ime_for_text_edit(ui, &resp, false);
-    resp
-}
 
 /// Outcome of the favorite-command editor for one frame.
 pub enum FavoriteCommandOutcome {
@@ -85,72 +67,62 @@ impl FavoriteCommandDialog {
         use crate::ui::uiframe::{DialogFrame, DialogOutcome};
         let frame = DialogFrame::new(title.to_string()).foreground();
         let closed = frame.show(ctx, "favorite_command_dialog", |ui| {
-                ui.add_space(4.0);
+            ui.add_space(4.0);
 
-                ui.label(rust_i18n::t!("cmd_dialog_name"));
-                let name_resp = dialog_text_edit(ui, &mut self.name);
-                if self.request_name_focus {
-                    name_resp.request_focus();
-                    self.request_name_focus = false;
+            let name_resp =
+                form::labeled_text(ui, rust_i18n::t!("cmd_dialog_name"), &mut self.name);
+            if self.request_name_focus {
+                name_resp.request_focus();
+                self.request_name_focus = false;
+            }
+
+            form::labeled_multiline(
+                ui,
+                rust_i18n::t!("cmd_dialog_command"),
+                &mut self.command,
+                3,
+            );
+
+            form::checkbox_row(
+                ui,
+                &mut self.auto_execute,
+                rust_i18n::t!("cmd_dialog_auto_execute"),
+            );
+            ui.label(
+                egui::RichText::new(rust_i18n::t!("cmd_dialog_auto_execute_hint"))
+                    .size(11.0)
+                    .color(ui.visuals().weak_text_color()),
+            );
+
+            let can_save = !self.name.trim().is_empty() && !self.command.trim().is_empty();
+            match form::dialog_footer(
+                ui,
+                rust_i18n::t!("cancel"),
+                rust_i18n::t!("save"),
+                can_save,
+            ) {
+                FooterAction::Cancel => close_requested = true,
+                FooterAction::Save => {
+                    let cmd = if let Some(id) = &self.edit_id {
+                        FavoriteCommand {
+                            id: id.clone(),
+                            name: self.name.trim().to_string(),
+                            command: self.command.clone(),
+                            auto_execute: self.auto_execute,
+                            sort_order: self.sort_order,
+                        }
+                    } else {
+                        FavoriteCommand::new(
+                            self.name.trim(),
+                            &self.command,
+                            self.auto_execute,
+                        )
+                    };
+                    saved = Some(cmd);
+                    close_requested = true;
                 }
-
-                ui.add_space(8.0);
-                ui.label(rust_i18n::t!("cmd_dialog_command"));
-                let cmd_edit = egui::TextEdit::multiline(&mut self.command)
-                    .desired_rows(3)
-                    .desired_width(f32::INFINITY);
-                let cmd_resp = ui.add(cmd_edit);
-                android_ime_for_text_edit(ui, &cmd_resp, false);
-
-                ui.add_space(8.0);
-                ui.checkbox(
-                    &mut self.auto_execute,
-                    rust_i18n::t!("cmd_dialog_auto_execute"),
-                );
-                ui.label(
-                    egui::RichText::new(rust_i18n::t!("cmd_dialog_auto_execute_hint"))
-                        .size(11.0)
-                        .color(ui.visuals().weak_text_color()),
-                );
-
-                ui.add_space(16.0);
-                ui.horizontal(|ui| {
-                    let cancel = egui::Button::new(rust_i18n::t!("cancel"))
-                        .fill(ui.visuals().panel_fill)
-                        .corner_radius(style::CORNER_RADIUS_SM)
-                        .min_size(egui::vec2(90.0, 34.0));
-                    if ui.add(cancel).clicked() {
-                        close_requested = true;
-                    }
-
-                    let can_save = !self.name.trim().is_empty() && !self.command.trim().is_empty();
-                    let save_btn = egui::Button::new(
-                        egui::RichText::new(rust_i18n::t!("save"))
-                            .color(egui::Color32::WHITE),
-                    )
-                    .fill(style::ACCENT)
-                    .corner_radius(style::CORNER_RADIUS_SM)
-                    .min_size(egui::vec2(90.0, 34.0));
-                    if ui.add_enabled(can_save, save_btn).clicked() {
-                        let cmd = if let Some(id) = &self.edit_id {
-                            FavoriteCommand {
-                                id: id.clone(),
-                                name: self.name.trim().to_string(),
-                                command: self.command.clone(),
-                                auto_execute: self.auto_execute,
-                                sort_order: self.sort_order,
-                            }
-                        } else {
-                            FavoriteCommand::new(
-                                self.name.trim(),
-                                &self.command,
-                                self.auto_execute,
-                            )
-                        };
-                        saved = Some(cmd);
-                        close_requested = true;
-                    }
-                });
+                FooterAction::None => {}
+            }
         }) == DialogOutcome::Closed;
 
         if closed || close_requested {
@@ -196,33 +168,22 @@ impl ManageFavoriteCommandsDialog {
         use crate::ui::uiframe::{DialogFrame, DialogOutcome};
         let frame = DialogFrame::new(rust_i18n::t!("cmd_manage_title").to_string());
         if frame.show(ctx, "manage_favorite_commands", |ui| {
-                ui.horizontal(|ui| {
-                    let new_btn = egui::Button::new(
-                        egui::RichText::new(rust_i18n::t!("cmd_manage_new"))
-                            .color(egui::Color32::WHITE),
-                    )
-                    .fill(style::ACCENT)
-                    .corner_radius(style::CORNER_RADIUS_SM);
-                    if ui.add(new_btn).clicked() {
-                        action.new = true;
-                    }
-                });
-                ui.add_space(8.0);
-                ui.separator();
+            if form::manage_list_toolbar(ui, rust_i18n::t!("cmd_manage_new")) {
+                action.new = true;
+            }
 
-                if commands.is_empty() {
-                    ui.add_space(12.0);
-                    ui.label(
-                        egui::RichText::new(rust_i18n::t!("cmd_empty"))
-                            .color(ui.visuals().weak_text_color()),
-                    );
-                } else {
-                    for cmd in commands {
+            if commands.is_empty() {
+                ui.add_space(form::SECTION_GAP);
+                ui.label(
+                    egui::RichText::new(rust_i18n::t!("cmd_empty"))
+                        .color(ui.visuals().weak_text_color()),
+                );
+            } else {
+                for cmd in commands {
+                    form::manage_list_item_frame(ui, false, |ui| {
                         ui.horizontal(|ui| {
                             ui.vertical(|ui| {
-                                ui.label(
-                                    egui::RichText::new(&cmd.name).strong().size(13.0),
-                                );
+                                ui.label(egui::RichText::new(&cmd.name).strong().size(13.0));
                                 let preview = if cmd.command.len() > 60 {
                                     format!("{}…", &cmd.command[..60])
                                 } else {
@@ -253,9 +214,10 @@ impl ManageFavoriteCommandsDialog {
                                 },
                             );
                         });
-                        ui.separator();
-                    }
+                    });
+                    ui.add_space(4.0);
                 }
+            }
         }) == DialogOutcome::Closed
         {
             self.open = false;
