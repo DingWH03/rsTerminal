@@ -68,18 +68,7 @@ impl PaneState {
     }
 }
 
-#[derive(Clone, Default)]
-pub struct TransferSnapshot {
-    pub active: bool,
-    pub progress: f32,
-    pub label: String,
-    pub finished: bool,
-    pub status_message: Option<String>,
-    pub clear_clipboard: bool,
-    pub refresh_remote: bool,
-    pub refresh_local_right: bool,
-    pub refresh_local_left: bool,
-}
+pub use crate::fs::TransferSnapshot;
 
 pub struct FileTransferState {
     pub cancel: Arc<AtomicBool>,
@@ -198,16 +187,17 @@ impl FileManagerSession {
     }
 
     pub fn open_ssh(
-        config: &crate::data::persist::types::SavedConnection,
-        auth_user: Option<&crate::data::persist::types::AuthUser>,
+        host: &str,
+        port: u16,
+        auth: crate::connection::ssh_auth::ResolvedSshAuth,
+        saved_conn_id: String,
     ) -> Result<Self, String> {
-        let client = SftpClient::connect_with_auth(config, auth_user, None)?;
-        let host = config.ssh_host.as_deref().unwrap_or("host");
+        let client = SftpClient::connect(host, port, auth, None)?;
         let title = format!("Remote: {host}");
         Ok(Self {
             id: uuid::Uuid::new_v4().to_string(),
             title,
-            saved_conn_id: Some(config.id.clone()),
+            saved_conn_id: Some(saved_conn_id),
             mode: FileManagerMode::SshSftp,
             remote: Some(RemotePane {
                 client: Arc::new(client),

@@ -35,24 +35,6 @@ impl ConnectionType {
             _ => None,
         }
     }
-
-    pub fn label(&self) -> &str {
-        match self {
-            ConnectionType::Local => "Local Terminal",
-            ConnectionType::Ssh => "SSH",
-            ConnectionType::Serial => "Serial Port",
-            ConnectionType::Ble => "BLE Serial",
-        }
-    }
-
-    pub fn icon(&self) -> &str {
-        match self {
-            ConnectionType::Local => "💻",
-            ConnectionType::Ssh => "🌐",
-            ConnectionType::Serial => "🔌",
-            ConnectionType::Ble => "📶",
-        }
-    }
 }
 
 /// Default env for a new local connection.

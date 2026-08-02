@@ -64,8 +64,8 @@ impl RsTerminalApp {
         let id = profile.id.clone();
         let _ = self.persist.upsert_profile(&profile);
         self.reload_profiles();
-        if self.new_conn_dialog.open {
-            self.new_conn_dialog.select_profile(id);
+        if self.dialogs.new_conn.open {
+            self.dialogs.new_conn.select_profile(id);
         }
     }
 
@@ -148,25 +148,25 @@ impl RsTerminalApp {
             self.show_quit_dialog = false;
             return true;
         }
-        if self.new_conn_dialog.open {
-            self.new_conn_dialog.close();
+        if self.dialogs.new_conn.open {
+            self.dialogs.new_conn.close();
             return true;
         }
-        if self.auth_user_dialog.open {
-            self.auth_user_dialog.close();
+        if self.dialogs.auth_user.open {
+            self.dialogs.auth_user.close();
             return true;
         }
-        if self.favorite_cmd_dialog.open {
-            self.favorite_cmd_dialog.close();
+        if self.dialogs.favorite_cmd.open {
+            self.dialogs.favorite_cmd.close();
             return true;
         }
-        if self.manage_commands_dialog.open {
-            self.manage_commands_dialog.open = false;
+        if self.dialogs.manage_commands.open {
+            self.dialogs.manage_commands.open = false;
             self.shell.layout.commands_manage_dialog_open = false;
             return true;
         }
-        if self.profile_dialog.open {
-            self.profile_dialog.close();
+        if self.dialogs.profile.open {
+            self.dialogs.profile.close();
             return true;
         }
         if self.shell.layout.settings_standalone_tab.take().is_some() {
@@ -174,8 +174,8 @@ impl RsTerminalApp {
             self.reload_terminal_fonts(ctx);
             return true;
         }
-        if self.local_term_dialog.open {
-            self.local_term_dialog = LocalTerminalSettingsDialog::default();
+        if self.dialogs.local_term.open {
+            self.dialogs.local_term = LocalTerminalSettingsDialog::default();
             return true;
         }
         if self.shell.layout.function_page == FunctionPage::Connections

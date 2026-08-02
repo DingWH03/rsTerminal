@@ -1,7 +1,19 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use crate::session::TransferSnapshot;
+/// UI-facing transfer progress snapshot (shared with worker threads).
+#[derive(Clone, Default)]
+pub struct TransferSnapshot {
+    pub active: bool,
+    pub progress: f32,
+    pub label: String,
+    pub finished: bool,
+    pub status_message: Option<String>,
+    pub clear_clipboard: bool,
+    pub refresh_remote: bool,
+    pub refresh_local_right: bool,
+    pub refresh_local_left: bool,
+}
 
 /// Byte-accurate transfer progress shared between UI and worker threads.
 pub struct ByteProgress {

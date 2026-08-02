@@ -98,13 +98,18 @@ impl RsTerminalApp {
                 match connect_params::ssh_params(&config)
                     .and_then(|p| ssh::connect_ssh_session(&p, auth, 24, 80))
                 {
-                    Ok(out) => self.open_session_in_pane(
-                        out.handle,
-                        &config,
-                        profile.scrollback_lines,
-                        pane,
-                        Some((out.metrics, out.sftp)),
-                    ),
+                    Ok(out) => {
+                        let sftp = std::sync::Arc::new(crate::fs::sftp::SftpClient::from_endpoint(
+                            out.sftp_endpoint,
+                        ));
+                        self.open_session_in_pane(
+                            out.handle,
+                            &config,
+                            profile.scrollback_lines,
+                            pane,
+                            Some((out.metrics, sftp)),
+                        )
+                    }
                     Err(e) => self.connection_notice = Some(e),
                 }
             }

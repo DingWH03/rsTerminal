@@ -8,9 +8,14 @@ pub mod ssh_keys;
 pub mod winchg;
 pub mod serial;
 pub mod ssh;
+pub mod sftp_endpoint;
+pub mod sftp_mux;
 pub mod enumeration;
 
 pub use params::{BleConnectParams, LocalConnectParams, SerialConnectParams, SshConnectParams};
+pub use sftp_endpoint::{
+    SftpDirEntry, SftpEndpoint, SftpProgress, SftpRequest, SftpStatInfo, SftpStatus,
+};
 
 use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -104,25 +109,35 @@ pub enum ConnOut {
     Close,
 }
 
-/// Wakes the egui event loop when connection I/O threads receive terminal output.
+/// Wakes the UI event loop when connection I/O threads receive terminal output.
+///
+/// Inject a wake callback from the app/ui boundary (e.g. `ctx.request_repaint`).
 #[derive(Clone, Default)]
 pub struct RepaintNotifier(Arc<RepaintNotifierInner>);
 
-#[derive(Default)]
 struct RepaintNotifierInner {
-    ctx: Mutex<Option<egui::Context>>,
+    wake: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
     /// Coalesce bursty PTY output (e.g. long shell history redraw) into one repaint per frame.
     repaint_pending: AtomicBool,
 }
 
+impl Default for RepaintNotifierInner {
+    fn default() -> Self {
+        Self {
+            wake: Mutex::new(None),
+            repaint_pending: AtomicBool::new(false),
+        }
+    }
+}
+
 impl RepaintNotifier {
-    pub fn set_context(&self, ctx: egui::Context) {
-        if let Ok(mut guard) = self.0.ctx.lock() {
-            *guard = Some(ctx);
+    pub fn set_wake(&self, wake: impl Fn() + Send + Sync + 'static) {
+        if let Ok(mut guard) = self.0.wake.lock() {
+            *guard = Some(Arc::new(wake));
         }
     }
 
-    pub fn notify(&self) {
+    pub fn request_repaint(&self) {
         if self
             .0
             .repaint_pending
@@ -131,9 +146,9 @@ impl RepaintNotifier {
         {
             return;
         }
-        if let Ok(guard) = self.0.ctx.lock() {
-            if let Some(ctx) = guard.as_ref() {
-                ctx.request_repaint();
+        if let Ok(guard) = self.0.wake.lock() {
+            if let Some(wake) = guard.as_ref() {
+                wake();
             } else {
                 self.0.repaint_pending.store(false, Ordering::Release);
             }
@@ -152,7 +167,7 @@ pub fn emit_conn_data(
     data: Vec<u8>,
 ) {
     if from.send(ConnIn::Data(data)).is_ok() {
-        repaint.notify();
+        repaint.request_repaint();
     }
 }
 
@@ -163,7 +178,7 @@ pub fn emit_conn_port_data(
     data: Vec<u8>,
 ) {
     if from.send(ConnIn::PortData { port, data }).is_ok() {
-        repaint.notify();
+        repaint.request_repaint();
     }
 }
 
@@ -173,7 +188,7 @@ pub fn emit_conn_ports_changed(
     ports: Vec<ConnectionPort>,
 ) {
     if from.send(ConnIn::PortsChanged(ports)).is_ok() {
-        repaint.notify();
+        repaint.request_repaint();
     }
 }
 

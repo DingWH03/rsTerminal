@@ -2,8 +2,9 @@
 
 mod auth_users;
 mod commands;
-mod connect_params;
+pub mod connect_params;
 mod connections;
+mod dialogs;
 mod frame;
 mod lifecycle;
 mod notices;
@@ -16,11 +17,9 @@ use crate::data::persist::{
 use crate::data::prefs::{load_prefs, Prefs};
 use crate::session::WorkspaceSession;
 use crate::ui::shell::AppShell;
-use crate::ui::page::dialogs::{
-    AuthUserDialog, FavoriteCommandDialog, LocalTerminalSettingsDialog,
-    ManageFavoriteCommandsDialog, NewConnectionDialog, ProfileDialog,
-};
 use crate::ui::uiframe::keyboard::VirtualKeyboard;
+
+use dialogs::AppDialogs;
 
 pub struct RsTerminalApp {
     persist: Persist,
@@ -32,12 +31,7 @@ pub struct RsTerminalApp {
     sessions: Vec<WorkspaceSession>,
     shell: AppShell,
     virtual_keyboard: VirtualKeyboard,
-    new_conn_dialog: NewConnectionDialog,
-    local_term_dialog: LocalTerminalSettingsDialog,
-    favorite_cmd_dialog: FavoriteCommandDialog,
-    manage_commands_dialog: ManageFavoriteCommandsDialog,
-    auth_user_dialog: AuthUserDialog,
-    profile_dialog: ProfileDialog,
+    dialogs: AppDialogs,
     live_font_size: f32,
     connection_notice: Option<String>,
     quit_after_close: bool,
@@ -66,12 +60,7 @@ impl RsTerminalApp {
             auth_users,
             sessions: Vec::new(),
             virtual_keyboard: VirtualKeyboard::new(kbd_mode),
-            new_conn_dialog: NewConnectionDialog::default(),
-            local_term_dialog: LocalTerminalSettingsDialog::default(),
-            favorite_cmd_dialog: FavoriteCommandDialog::default(),
-            manage_commands_dialog: ManageFavoriteCommandsDialog::default(),
-            auth_user_dialog: AuthUserDialog::default(),
-            profile_dialog: ProfileDialog::default(),
+            dialogs: AppDialogs::default(),
             live_font_size,
             connection_notice: None,
             quit_after_close: false,

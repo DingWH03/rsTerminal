@@ -83,7 +83,11 @@ pub fn connection_view(
         .unwrap_or(14.0);
 
     if let Some(session) = session.as_ref() {
-        session.handle.repaint.set_context(ctx.clone());
+        let wake_ctx = ctx.clone();
+        session
+            .handle
+            .repaint
+            .set_wake(move || wake_ctx.request_repaint());
     }
 
     let mut copy_requested = false;

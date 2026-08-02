@@ -12,7 +12,8 @@ use crate::fs::entry_info;
 use crate::fs::local;
 use crate::fs::sftp::{join_remote, SftpClient};
 use crate::fs::transfer_progress::ByteProgress;
-use crate::session::{FileClipboard, FileClipboardMode, FileTransferState, TransferSnapshot};
+use crate::fs::TransferSnapshot;
+use crate::session::{FileClipboard, FileClipboardMode, FileTransferState};
 
 /// 粘贴目标面板。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

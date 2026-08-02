@@ -11,11 +11,14 @@ use russh::{Channel, ChannelMsg, Disconnect};
 use tokio::sync::mpsc::unbounded_channel;
 use tokio::time::timeout;
 
+use crate::connection::sftp_endpoint::{
+    mark_connected, mark_error, reply_sftp_gone, SftpEndpoint, SftpRequest, SftpStatus,
+};
+use crate::connection::sftp_mux;
 use crate::connection::{
     emit_conn_data, ssh_auth::ResolvedSshAuth, ssh_keys, ConnIn, ConnOut, ConnectionHandle,
     ConnectionState, RepaintNotifier, SshConnectParams,
 };
-use crate::fs::sftp::{self, SftpClient, SftpRequest};
 use crate::remote::protocol::{push_bytes, AgentToClient};
 use crate::remote::status::{MetricsEvent, SessionMetrics};
 use crate::remote::AGENT_SCRIPT;
@@ -26,8 +29,8 @@ pub use crate::config::SSH_OSC7_PROMPT_COMMAND;
 pub struct SshConnectOutcome {
     pub handle: ConnectionHandle,
     pub metrics: SessionMetrics,
-    /// SFTP client bridged onto the same SSH connection (sidebar / agent deploy).
-    pub sftp: Arc<SftpClient>,
+    /// Shared-session SFTP endpoint; wrap with `fs::SftpClient::from_endpoint` at app boundary.
+    pub sftp_endpoint: SftpEndpoint,
 }
 
 struct SshClient;
@@ -76,19 +79,13 @@ pub fn connect_ssh_session(
     let metrics = SessionMetrics::new();
     let metrics_thread = metrics.clone();
 
-    let (sftp_tx, sftp_rx) = mpsc::channel::<SftpRequest>();
-    let sftp_status = SftpClient::new_status_handle();
     let repaint = RepaintNotifier::default();
-    let sftp = Arc::new(SftpClient::bridge(
-        sftp_tx,
-        sftp_status.clone(),
-        Some(repaint.clone()),
-    ));
+    let (sftp_endpoint, sftp_rx) = SftpEndpoint::new(repaint.clone());
+    let sftp_status_thread = sftp_endpoint.status.clone();
 
     let host_clone = host.clone();
     let from_tx = from_conn_tx.clone();
     let ssh_repaint = repaint.clone();
-    let sftp_status_thread = sftp_status.clone();
 
     let thread = std::thread::spawn(move || {
         let rt = tokio::runtime::Builder::new_current_thread()
@@ -124,7 +121,7 @@ pub fn connect_ssh_session(
             repaint,
         ),
         metrics,
-        sftp,
+        sftp_endpoint,
     })
 }
 
@@ -141,7 +138,7 @@ async fn run_ssh_session(
     repaint: RepaintNotifier,
     metrics: SessionMetrics,
     sftp_rx: mpsc::Receiver<SftpRequest>,
-    sftp_status: Arc<Mutex<sftp::SftpStatus>>,
+    sftp_status: Arc<Mutex<SftpStatus>>,
 ) -> Result<(), String> {
     // Bridge sync SFTP requests into the async runtime.
     let (sftp_async_tx, mut sftp_async_rx) = unbounded_channel::<SftpRequest>();
@@ -194,16 +191,16 @@ async fn run_ssh_session(
     .map_err(|e| e.to_string())?;
 
     // Shared SFTP subsystem (sidebar listing + agent script upload).
-    let sftp_session = match sftp::open_sftp_on_handle(&handle).await {
+    let sftp_session = match sftp_mux::open_sftp_on_handle(&handle).await {
         Ok(s) => {
-            SftpClient::mark_connected(&sftp_status);
-            repaint.notify();
+            mark_connected(&sftp_status);
+            repaint.request_repaint();
             Some(s)
         }
         Err(e) => {
             log::warn!("shared SFTP open failed: {e}");
-            SftpClient::mark_error(&sftp_status, e);
-            repaint.notify();
+            mark_error(&sftp_status, e);
+            repaint.request_repaint();
             None
         }
     };
@@ -257,13 +254,13 @@ async fn run_ssh_session(
                         .clone()
                         .unwrap_or_else(|| "stdin:-".into()),
                 });
-                repaint.notify();
+                repaint.request_repaint();
                 (Some(ch), buf, path)
             }
             Err(e) => {
                 log::warn!("status agent start failed: {e}");
                 metrics.push_event(MetricsEvent::AgentStartFailed { error: e.clone() });
-                repaint.notify();
+                repaint.request_repaint();
                 (None, String::new(), None)
             }
         };
@@ -310,7 +307,7 @@ async fn run_ssh_session(
                         metrics.push_event(MetricsEvent::AgentClosed {
                             reason: "exec CHANNEL_FAILURE".into(),
                         });
-                        repaint.notify();
+                        repaint.request_repaint();
                         agent_ch = None;
                     }
                     Some(ChannelMsg::Success) => {
@@ -323,7 +320,7 @@ async fn run_ssh_session(
                         };
                         log::warn!("status agent closed: {reason}");
                         metrics.push_event(MetricsEvent::AgentClosed { reason });
-                        repaint.notify();
+                        repaint.request_repaint();
                         agent_ch = None;
                     }
                     other => {
@@ -359,7 +356,7 @@ async fn run_ssh_session(
                     }
                     Some(req) => {
                         if let Some(ref sftp) = sftp_session {
-                            sftp::apply_sftp_request(sftp, req).await;
+                            sftp_mux::apply_sftp_request(sftp, req).await;
                         } else {
                             reply_sftp_gone(req);
                         }
@@ -399,7 +396,7 @@ fn ingest_agent_bytes(
     if let Err(e) = push_bytes(line_buf, data, &mut frames) {
         log::warn!("agent frame error: {e}");
         metrics.push_event(MetricsEvent::ParseError { error: e });
-        repaint.notify();
+        repaint.request_repaint();
         return;
     }
     for frame in frames {
@@ -413,51 +410,24 @@ fn ingest_agent_bytes(
                 disk_present
             );
             metrics.apply_agent_status_ex(st, disk_present);
-            repaint.notify();
+            repaint.request_repaint();
             continue;
         }
         match frame {
             AgentToClient::Hello { agent, ver, .. } => {
                 log::info!("remote agent hello: {agent} {ver}");
                 metrics.push_event(MetricsEvent::Hello { agent, ver });
-                repaint.notify();
+                repaint.request_repaint();
             }
             AgentToClient::Error { code, msg, .. } => {
                 log::warn!("remote agent error {code}: {msg}");
                 metrics.push_event(MetricsEvent::ParseError {
                     error: format!("{code}: {msg}"),
                 });
-                repaint.notify();
+                repaint.request_repaint();
             }
             AgentToClient::Pong { .. } | AgentToClient::Status { .. } => {}
         }
-    }
-}
-
-fn reply_sftp_gone(req: SftpRequest) {
-    let err = "shared SFTP unavailable";
-    match req {
-        SftpRequest::List { reply, .. } => {
-            let _ = reply.send(Err(err.into()));
-        }
-        SftpRequest::Upload { reply, .. }
-        | SftpRequest::Download { reply, .. }
-        | SftpRequest::Remove { reply, .. }
-        | SftpRequest::Mkdir { reply, .. }
-        | SftpRequest::Rename { reply, .. }
-        | SftpRequest::WriteBytes { reply, .. } => {
-            let _ = reply.send(Err(err.into()));
-        }
-        SftpRequest::Stat { reply, .. } => {
-            let _ = reply.send(Err(err.into()));
-        }
-        SftpRequest::PathBytes { reply, .. } => {
-            let _ = reply.send(Err(err.into()));
-        }
-        SftpRequest::Home { reply } => {
-            let _ = reply.send(Err(err.into()));
-        }
-        SftpRequest::Shutdown => {}
     }
 }
 
@@ -536,7 +506,7 @@ async fn authenticate(
     auth: &ResolvedSshAuth,
     password: Option<&str>,
 ) -> Result<(), String> {
-    // Prefer in-memory private key from AuthUser when present.
+    // Prefer in-memory private key from ResolvedSshAuth when present.
     if let Some(pem) = auth
         .private_key_pem
         .as_deref()

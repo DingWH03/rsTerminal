@@ -77,7 +77,8 @@ impl RsTerminalApp {
 
         if let Some(idx) = self.focused_session_index() {
             if let WorkspaceSession::Terminal(term) = &mut self.sessions[idx] {
-                term.handle.repaint.set_context(ctx.clone());
+                let ctx = ctx.clone();
+                term.handle.repaint.set_wake(move || ctx.request_repaint());
             }
         }
 
@@ -119,12 +120,12 @@ impl RsTerminalApp {
 
         // Settings → Users / Profiles nested page actions.
         if render.auth_users_action.new {
-            self.auth_user_dialog.open_new();
+            self.dialogs.auth_user.open_new();
             self.release_terminal_keyboard_focus(&ctx);
         }
         if let Some(id) = render.auth_users_action.edit_id.clone() {
             if let Some(user) = self.auth_users.iter().find(|u| u.id == id).cloned() {
-                self.auth_user_dialog.open_edit(&user);
+                self.dialogs.auth_user.open_edit(&user);
                 self.release_terminal_keyboard_focus(&ctx);
             }
         }
@@ -132,12 +133,12 @@ impl RsTerminalApp {
             self.delete_auth_user(&id);
         }
         if render.request_new_profile {
-            self.profile_dialog.open_new();
+            self.dialogs.profile.open_new();
             self.release_terminal_keyboard_focus(&ctx);
         }
         if let Some(id) = render.request_edit_profile.clone() {
             if let Some(profile) = self.profiles.iter().find(|p| p.id == id).cloned() {
-                self.profile_dialog.open_edit(&profile);
+                self.dialogs.profile.open_edit(&profile);
                 self.release_terminal_keyboard_focus(&ctx);
             }
         }
@@ -152,11 +153,11 @@ impl RsTerminalApp {
         let wa = &render.workspace_action;
 
         if fa.new_connection {
-            self.new_conn_dialog.open_new();
+            self.dialogs.new_conn.open_new();
             self.release_terminal_keyboard_focus(&ctx);
         }
         if fa.new_favorite_command {
-            self.favorite_cmd_dialog.open_new();
+            self.dialogs.favorite_cmd.open_new();
             self.release_terminal_keyboard_focus(&ctx);
         }
         if let Some(ref id) = fa.connect_connection {
@@ -168,7 +169,7 @@ impl RsTerminalApp {
         }
         if let Some(ref id) = fa.edit_connection {
             if let Some(conn) = self.saved_connections.iter().find(|c| c.id == *id) {
-                self.new_conn_dialog.open_edit(conn);
+                self.dialogs.new_conn.open_edit(conn);
                 self.release_terminal_keyboard_focus(&ctx);
             }
         }
@@ -189,7 +190,7 @@ impl RsTerminalApp {
         }
         if let Some(ref id) = fa.edit_favorite_command {
             if let Some(cmd) = self.favorite_commands.iter().find(|c| c.id == *id).cloned() {
-                self.favorite_cmd_dialog.open_edit(&cmd);
+                self.dialogs.favorite_cmd.open_edit(&cmd);
                 self.release_terminal_keyboard_focus(&ctx);
             }
         }
@@ -205,7 +206,7 @@ impl RsTerminalApp {
             self.shell.layout.connections_dialog_open = true;
         }
 
-        if let Some(apply) = self.local_term_dialog.show(&ctx, &self.saved_connections) {
+        if let Some(apply) = self.dialogs.local_term.show(&ctx, &self.saved_connections) {
             self.apply_local_terminal_settings(apply);
         }
 
@@ -215,61 +216,62 @@ impl RsTerminalApp {
             self.reload_terminal_fonts(&ctx);
         }
 
-        if self.new_conn_dialog.request_new_auth_user {
-            self.new_conn_dialog.request_new_auth_user = false;
-            self.auth_user_dialog.open_new();
+        if self.dialogs.new_conn.request_new_auth_user {
+            self.dialogs.new_conn.request_new_auth_user = false;
+            self.dialogs.auth_user.open_new();
             self.release_terminal_keyboard_focus(&ctx);
         }
-        if self.new_conn_dialog.request_new_profile {
-            self.new_conn_dialog.request_new_profile = false;
-            self.profile_dialog.open_new();
+        if self.dialogs.new_conn.request_new_profile {
+            self.dialogs.new_conn.request_new_profile = false;
+            self.dialogs.profile.open_new();
             self.release_terminal_keyboard_focus(&ctx);
         }
 
         if let Some(new_conn) =
-            self.new_conn_dialog
+            self.dialogs.new_conn
                 .show(&ctx, &self.auth_users, &self.profiles)
         {
             self.save_connection(new_conn);
         }
 
-        if let Some(user) = self.auth_user_dialog.show(&ctx) {
+        if let Some(user) = self.dialogs.auth_user.show(&ctx) {
             let id = user.id.clone();
             self.save_auth_user(user);
-            if self.new_conn_dialog.open {
-                self.new_conn_dialog.select_auth_user(id);
+            if self.dialogs.new_conn.open {
+                self.dialogs.new_conn.select_auth_user(id);
             }
         }
 
-        match self.profile_dialog.show(&ctx) {
+        match self.dialogs.profile.show(&ctx) {
             ProfileDialogOutcome::Saved(profile) => {
                 self.apply_saved_profile(profile);
             }
             ProfileDialogOutcome::None => {}
         }
 
-        match self.favorite_cmd_dialog.show(&ctx) {
+        match self.dialogs.favorite_cmd.show(&ctx) {
             FavoriteCommandOutcome::Saved(cmd) => self.save_favorite_command(cmd),
             FavoriteCommandOutcome::None => {}
         }
 
         // Sync after shell.render so menu "Manage" opens same frame (not cleared).
         if self.shell.layout.commands_manage_dialog_open {
-            self.manage_commands_dialog.open = true;
+            self.dialogs.manage_commands.open = true;
         }
         let manage = self
-            .manage_commands_dialog
+            .dialogs
+            .manage_commands
             .show(&ctx, &self.favorite_commands);
-        if !self.manage_commands_dialog.open {
+        if !self.dialogs.manage_commands.open {
             self.shell.layout.commands_manage_dialog_open = false;
         }
         if manage.new {
-            self.favorite_cmd_dialog.open_new();
+            self.dialogs.favorite_cmd.open_new();
             self.release_terminal_keyboard_focus(&ctx);
         }
         if let Some(id) = manage.edit_id {
             if let Some(cmd) = self.favorite_commands.iter().find(|c| c.id == id).cloned() {
-                self.favorite_cmd_dialog.open_edit(&cmd);
+                self.dialogs.favorite_cmd.open_edit(&cmd);
                 self.release_terminal_keyboard_focus(&ctx);
             }
         }

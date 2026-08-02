@@ -3,6 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::session::WorkspaceSession;
+use crate::ui::connection_display::workspace_session_icon;
 use crate::ui::uiframe::components::empty_state::{paint_empty_state, EmptyStateConfig};
 use crate::ui::uiframe::style;
 use crate::ui::uiframe::vector_icons::{self, Icon};
@@ -53,7 +54,7 @@ pub fn paint_session_rows(
     }
 
     if sessions.iter().any(|s| {
-        let t = format!("{} {}", s.icon(), s.tab_label());
+        let t = format!("{} {}", workspace_session_icon(s), s.tab_label());
         t.chars().count() > 28
     }) {
         ui.ctx().request_repaint();
@@ -75,7 +76,7 @@ fn paint_session_row(
     let in_background = !ctx.visible_sessions.contains(session.id());
     let active = active_id == Some(session.id());
     let show_dup = session.sidebar_has_new_window();
-    let full_text = format!("{} {}", session.icon(), session.tab_label());
+    let full_text = format!("{} {}", workspace_session_icon(session), session.tab_label());
     let display_text: String = full_text.chars().take(28).collect();
     let display_text = if full_text.chars().count() > 28 {
         format!("{}…", display_text)

@@ -1,6 +1,7 @@
 //! 最近连接视图 — 在侧边栏中显示最近使用的连接列表。
 
 use crate::data::persist::types::SavedConnection;
+use crate::ui::connection_display::connection_type_icon;
 use crate::ui::function_pane::FunctionPane;
 use crate::ui::uiframe::components::empty_state::{self, EmptyStateConfig};
 use crate::ui::uiframe::components::toolbar_button::{
@@ -140,7 +141,7 @@ pub fn recent_connections_view(
 
                 painter.rect_filled(row_rect, egui::CornerRadius::same(4), bg);
 
-                let icon = conn.conn_type.icon();
+                let icon = connection_type_icon(conn.conn_type);
                 let icon_g = ui.fonts_mut(|f| {
                     f.layout(
                         icon.to_string(),

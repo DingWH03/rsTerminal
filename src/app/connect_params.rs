@@ -4,7 +4,7 @@ use crate::connection::ssh_auth::ResolvedSshAuth;
 use crate::connection::{
     BleConnectParams, LocalConnectParams, SerialConnectParams, SshConnectParams,
 };
-use crate::data::persist::types::{AuthUser, SavedConnection};
+use crate::data::persist::types::{AuthMethod, AuthUser, SavedConnection};
 
 pub fn local_params(conn: &SavedConnection) -> LocalConnectParams {
     LocalConnectParams {
@@ -28,11 +28,26 @@ pub fn ssh_params(conn: &SavedConnection) -> Result<SshConnectParams, String> {
 }
 
 pub fn ssh_auth(conn: &SavedConnection, auth_user: Option<&AuthUser>) -> ResolvedSshAuth {
-    ResolvedSshAuth::resolve(
-        auth_user,
-        conn.ssh_user.as_deref(),
-        conn.ssh_password.as_deref(),
-    )
+    if let Some(user) = auth_user {
+        match user.auth_method {
+            AuthMethod::Password => ResolvedSshAuth {
+                username: user.username.clone(),
+                password: user.password.clone(),
+                private_key_pem: None,
+                key_passphrase: None,
+                allow_default_keys: false,
+            },
+            AuthMethod::PrivateKey => ResolvedSshAuth {
+                username: user.username.clone(),
+                password: None,
+                private_key_pem: user.private_key.clone(),
+                key_passphrase: user.key_passphrase.clone(),
+                allow_default_keys: false,
+            },
+        }
+    } else {
+        ResolvedSshAuth::from_legacy(conn.ssh_user.as_deref(), conn.ssh_password.as_deref())
+    }
 }
 
 pub fn serial_params(conn: &SavedConnection) -> Result<SerialConnectParams, String> {

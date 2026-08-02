@@ -28,12 +28,14 @@ impl RsTerminalApp {
             Some(c) => c.clone(),
             None => return,
         };
-        let auth = config
+        let auth_user = config
             .auth_user_id
             .as_ref()
-            .and_then(|id| self.auth_users.iter().find(|u| u.id == *id))
-            .cloned();
-        match FileManagerSession::open_ssh(&config, auth.as_ref()) {
+            .and_then(|id| self.auth_users.iter().find(|u| u.id == *id));
+        let auth = super::connect_params::ssh_auth(&config, auth_user);
+        let host = config.ssh_host.as_deref().unwrap_or("host");
+        let port = config.ssh_port.unwrap_or(22);
+        match FileManagerSession::open_ssh(host, port, auth, config.id.clone()) {
             Ok(fm) => self.push_session(WorkspaceSession::FileManager(fm)),
             Err(e) => info!("SFTP failed: {e}"),
         }
@@ -305,7 +307,9 @@ impl RsTerminalApp {
             Ok(out) => {
                 session.handle = out.handle;
                 session.metrics = out.metrics;
-                session.session_sftp = Some(out.sftp);
+                session.session_sftp = Some(std::sync::Arc::new(
+                    crate::fs::sftp::SftpClient::from_endpoint(out.sftp_endpoint),
+                ));
                 session.files.invalidate_pending();
                 session.disconnect_message = None;
                 session.want_terminal_focus = true;

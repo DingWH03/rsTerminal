@@ -334,12 +334,19 @@ fn ensure_session_sftp(
     let Some(conn) = connections.iter().find(|c| c.id == conn_id) else {
         return;
     };
-    let auth = conn
+    let auth_user = conn
         .auth_user_id
         .as_ref()
         .and_then(|id| auth_users.iter().find(|u| u.id == *id));
+    let auth = crate::app::connect_params::ssh_auth(conn, auth_user);
+    let Some(host) = conn.ssh_host.clone() else {
+        session.files.error = Some("SSH host not configured".into());
+        session.files.loading = false;
+        return;
+    };
+    let port = conn.ssh_port.unwrap_or(22);
     let repaint = session.handle.repaint.clone();
-    match SftpClient::connect_with_auth(conn, auth, Some(repaint)) {
+    match SftpClient::connect(host, port, auth, Some(repaint)) {
         Ok(client) => {
             session.session_sftp = Some(Arc::new(client));
             session.files.invalidate_pending();

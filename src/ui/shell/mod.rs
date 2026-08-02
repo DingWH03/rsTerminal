@@ -105,7 +105,13 @@ impl AppShell {
         sessions
             .iter()
             .find(|s| s.id() == id)
-            .map(|s| format!("{} {}", s.icon(), s.tab_label()))
+            .map(|s| {
+                format!(
+                    "{} {}",
+                    crate::ui::connection_display::workspace_session_icon(s),
+                    s.tab_label()
+                )
+            })
             .unwrap_or_else(|| id.to_string())
     }
 

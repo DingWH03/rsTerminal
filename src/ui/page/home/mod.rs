@@ -9,6 +9,7 @@ pub mod recent;
 pub mod sidebar;
 
 use crate::data::persist::types::{ConnectionType, SavedConnection};
+use crate::ui::connection_display::{connection_type_icon, connection_type_label};
 use crate::ui::uiframe::style;
 use crate::ui::uiframe::components::card;
 use crate::ui::uiframe::components::empty_state::{self, EmptyStateConfig};
@@ -179,7 +180,7 @@ fn paint_fab(ui: &mut egui::Ui, fab_clicked: &mut bool) {
 /// - BLE：设备地址
 /// - Local：shell · 工作目录
 pub fn conn_subtitle(conn: &SavedConnection) -> String {
-    let type_label = conn.conn_type.label();
+    let type_label = connection_type_label(conn.conn_type);
     let detail = match conn.conn_type {
         ConnectionType::Ssh => {
             let user = conn.ssh_user.as_deref().unwrap_or("root");
@@ -267,7 +268,7 @@ fn render_connection_card(
         // 连接类型图标
         let icon = ui.fonts_mut(|f| {
             f.layout(
-                conn.conn_type.icon().to_string(),
+                connection_type_icon(conn.conn_type).to_string(),
                 egui::FontId::proportional(CARD_ICON_FONT),
                 style::ACCENT,
                 f32::INFINITY,

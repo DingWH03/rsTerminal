@@ -1,6 +1,6 @@
 //! Workspace session enum — terminal or file-manager tab.
 
-use crate::session::file_manager::{FileManagerMode, FileManagerSession};
+use crate::session::file_manager::FileManagerSession;
 use crate::session::terminal::ActiveSession;
 use crate::data::persist::types::ConnectionType;
 
@@ -24,16 +24,6 @@ impl WorkspaceSession {
         match self {
             WorkspaceSession::Terminal(s) => s.tab_label(),
             WorkspaceSession::FileManager(s) => s.tab_label(),
-        }
-    }
-
-    pub fn icon(&self) -> &str {
-        match self {
-            WorkspaceSession::Terminal(s) => s.conn_type.icon(),
-            WorkspaceSession::FileManager(s) => match s.mode {
-                FileManagerMode::SshSftp => "📁",
-                FileManagerMode::LocalDual => "📂",
-            },
         }
     }
 

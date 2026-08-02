@@ -9,6 +9,7 @@
 //!
 //! 业务逻辑不要写进 `uiframe`；框架只提供可组合的 chrome 与控件。
 
+pub mod connection_display;
 pub mod function_pane;
 pub mod page;
 pub mod pane_colors;

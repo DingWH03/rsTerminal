@@ -3,6 +3,8 @@ pub mod local;
 pub mod sftp;
 pub mod transfer_progress;
 
+pub use transfer_progress::{ByteProgress, TransferSnapshot};
+
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 

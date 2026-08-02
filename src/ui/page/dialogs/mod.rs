@@ -28,6 +28,7 @@ use crate::data::persist::types::{
     default_local_env_vars, default_ssh_env_vars, AuthUser, ConnectionType, SavedConnection,
     TerminalProfile,
 };
+use crate::ui::connection_display::connection_type_label;
 use crate::ui::uiframe::style;
 
 /// On Android, show the soft keyboard for a focused dialog text field.
@@ -295,11 +296,15 @@ impl NewConnectionDialog {
             ui.add_enabled_ui(!editing, |ui| {
                 let prev = self.conn_type;
                 egui::ComboBox::from_id_salt("add_connection_type")
-                    .selected_text(self.conn_type.label())
+                    .selected_text(connection_type_label(self.conn_type))
                     .width(ui.available_width().min(220.0))
                     .show_ui(ui, |ui| {
                         for ct in &available_types {
-                            ui.selectable_value(&mut self.conn_type, *ct, ct.label());
+                            ui.selectable_value(
+                                &mut self.conn_type,
+                                *ct,
+                                connection_type_label(*ct),
+                            );
                         }
                     });
                 if self.conn_type != prev {
