@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::session::WorkspaceSession;
 use crate::ui::connection_display::workspace_session_icon;
-use crate::ui::uiframe::components::empty_state::{paint_empty_state, EmptyStateConfig};
+use crate::ui::uiframe::components::empty_state::{EmptyStateConfig, paint_empty_state};
 use crate::ui::uiframe::style;
 use crate::ui::uiframe::vector_icons::{self, Icon};
 
@@ -76,7 +76,11 @@ fn paint_session_row(
     let in_background = !ctx.visible_sessions.contains(session.id());
     let active = active_id == Some(session.id());
     let show_dup = session.sidebar_has_new_window();
-    let full_text = format!("{} {}", workspace_session_icon(session), session.tab_label());
+    let full_text = format!(
+        "{} {}",
+        workspace_session_icon(session),
+        session.tab_label()
+    );
     let display_text: String = full_text.chars().take(28).collect();
     let display_text = if full_text.chars().count() > 28 {
         format!("{}…", display_text)
@@ -111,8 +115,11 @@ fn paint_session_row(
 
     if ui.is_rect_visible(rect) {
         let label_rect = egui::Rect::from_min_size(rect.min, egui::vec2(label_w, row_h));
-        let label_resp =
-            ui.interact(label_rect, ui.id().with(("sess_label", session.id())), sense);
+        let label_resp = ui.interact(
+            label_rect,
+            ui.id().with(("sess_label", session.id())),
+            sense,
+        );
         if label_resp.clicked() && !dragged {
             action.select_session = Some(session.id().to_string());
         }
@@ -201,7 +208,8 @@ fn paint_label_in_rect(
     let bg = if active {
         sel_fill
     } else {
-        let hovered = rect.contains(ui.input(|i| i.pointer.interact_pos().unwrap_or(egui::Pos2::ZERO)));
+        let hovered =
+            rect.contains(ui.input(|i| i.pointer.interact_pos().unwrap_or(egui::Pos2::ZERO)));
         if hovered {
             hover_fill
         } else {
@@ -213,9 +221,8 @@ fn paint_label_in_rect(
     }
 
     let clip = rect.shrink2(egui::vec2(4.0, 0.0));
-    let full = ui.fonts_mut(|f| {
-        f.layout(text.to_owned(), font_id.clone(), text_color, f32::INFINITY)
-    });
+    let full =
+        ui.fonts_mut(|f| f.layout(text.to_owned(), font_id.clone(), text_color, f32::INFINITY));
 
     if full.size().x <= clip.width() {
         painter.galley(
@@ -249,9 +256,7 @@ fn paint_label_in_rect(
                 );
                 painter.galley(
                     egui::pos2(clip.left() + budget, clip.center().y - full.size().y * 0.5),
-                    ui.fonts_mut(|f| {
-                        f.layout(ellipsis.into(), font_id, text_color, f32::INFINITY)
-                    }),
+                    ui.fonts_mut(|f| f.layout(ellipsis.into(), font_id, text_color, f32::INFINITY)),
                     text_color,
                 );
                 break;

@@ -68,10 +68,7 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             "#,
         )?;
         if !column_exists(conn, "connections", "auth_user_id")? {
-            conn.execute(
-                "ALTER TABLE connections ADD COLUMN auth_user_id TEXT",
-                [],
-            )?;
+            conn.execute("ALTER TABLE connections ADD COLUMN auth_user_id TEXT", [])?;
         }
         conn.pragma_update(None, "user_version", 2)?;
     }
@@ -79,10 +76,7 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     let version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
     if version < 3 {
         if !column_exists(conn, "connections", "profile_name")? {
-            conn.execute(
-                "ALTER TABLE connections ADD COLUMN profile_name TEXT",
-                [],
-            )?;
+            conn.execute("ALTER TABLE connections ADD COLUMN profile_name TEXT", [])?;
         }
         conn.pragma_update(None, "user_version", 3)?;
     }

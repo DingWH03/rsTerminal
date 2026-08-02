@@ -118,9 +118,8 @@ pub async fn apply_sftp_request(sftp: &SftpSession, req: SftpRequest) {
             label,
             reply,
         } => {
-            let _ = reply.send(
-                upload_file(sftp, &local, &remote, progress.as_deref(), &label).await,
-            );
+            let _ =
+                reply.send(upload_file(sftp, &local, &remote, progress.as_deref(), &label).await);
         }
         SftpRequest::Download {
             remote,
@@ -129,9 +128,8 @@ pub async fn apply_sftp_request(sftp: &SftpSession, req: SftpRequest) {
             label,
             reply,
         } => {
-            let _ = reply.send(
-                download_file(sftp, &remote, &local, progress.as_deref(), &label).await,
-            );
+            let _ =
+                reply.send(download_file(sftp, &remote, &local, progress.as_deref(), &label).await);
         }
         SftpRequest::Stat { path, reply } => {
             let _ = reply.send(remote_entry_info(sftp, &path).await);
@@ -139,7 +137,11 @@ pub async fn apply_sftp_request(sftp: &SftpSession, req: SftpRequest) {
         SftpRequest::PathBytes { path, reply } => {
             let _ = reply.send(remote_path_bytes(sftp, &path).await);
         }
-        SftpRequest::Remove { path, is_dir, reply } => {
+        SftpRequest::Remove {
+            path,
+            is_dir,
+            reply,
+        } => {
             let r = if is_dir {
                 sftp.remove_dir(&path).await
             } else {
@@ -305,16 +307,11 @@ async fn download_file(
     let mut buf = [0u8; 64 * 1024];
     loop {
         check_cancel(progress)?;
-        let n = remote_f
-            .read(&mut buf)
-            .await
-            .map_err(|e| e.to_string())?;
+        let n = remote_f.read(&mut buf).await.map_err(|e| e.to_string())?;
         if n == 0 {
             break;
         }
-        local_f
-            .write_all(&buf[..n])
-            .map_err(|e| e.to_string())?;
+        local_f.write_all(&buf[..n]).map_err(|e| e.to_string())?;
         if let Some(p) = progress {
             p.add_bytes(n as u64, label);
         }

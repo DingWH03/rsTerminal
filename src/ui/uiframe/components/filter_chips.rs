@@ -108,9 +108,8 @@ pub fn paint_filter_chips<T: PartialEq + Clone + Send + Sync + 'static>(
             } else {
                 ui.visuals().weak_text_color()
             };
-            let galley = ui.fonts_mut(|f| {
-                f.layout_no_wrap(chip.label.to_owned(), font.clone(), color)
-            });
+            let galley =
+                ui.fonts_mut(|f| f.layout_no_wrap(chip.label.to_owned(), font.clone(), color));
             let text_pos = egui::pos2(
                 rect.center().x - galley.size().x * 0.5,
                 rect.center().y - galley.size().y * 0.5,

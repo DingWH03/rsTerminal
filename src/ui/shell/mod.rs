@@ -7,31 +7,36 @@ pub mod layout_state;
 pub mod menu;
 pub mod messages;
 
-use crate::session::WorkspaceSession;
-use crate::data::prefs::Prefs;
-use crate::data::persist::types::TerminalProfile;
 use crate::data::persist::types::SavedConnection;
-use crate::ui::function_pane::{self, drag_split_enabled, split_enabled, FunctionPane};
+use crate::data::persist::types::TerminalProfile;
+use crate::data::prefs::Prefs;
+use crate::session::WorkspaceSession;
+use crate::ui::actions::UiAction;
+use crate::ui::function_pane::{self, FunctionPane, drag_split_enabled, split_enabled};
+use crate::ui::layout::{DropZone, FUNCTION_MAX_WIDTH, FUNCTION_MIN_WIDTH, PaneId};
 use crate::ui::page::dialogs::ManageAuthUsersAction;
-use crate::ui::page::settings::{settings_dialog, settings_page_dialog, SettingsUiAction};
-use crate::ui::uiframe::{DialogFrame, DialogOutcome};
+use crate::ui::page::settings::{SettingsUiAction, settings_dialog, settings_page_dialog};
 use crate::ui::uiframe::keyboard::VirtualKeyboard;
-use crate::ui::workspace_pane::{self, drag_drop::ActiveDrag, WorkspacePaneContext};
+use crate::ui::uiframe::{DialogFrame, DialogOutcome};
+use crate::ui::workspace_pane::{
+    self, WorkspacePaneContext,
+    drag_drop::{ActiveDrag, commit_drop},
+};
 
 use animations::ShellAnimations;
 
 use coordinator::ShellCoordinator;
-use layout_state::{FUNCTION_MAX_WIDTH, FUNCTION_MIN_WIDTH, ShellLayout};
+use layout_state::ShellLayout;
 use messages::{FunctionAction, WorkspaceAction};
 
 /// Top-level UI shell owning layout state.
 pub struct AppShell {
     pub layout: ShellLayout,
     pub function_pane: FunctionPane,
-    last_focused_pane: Option<crate::ui::shell::layout_state::PaneId>,
+    last_focused_pane: Option<PaneId>,
     active_drag: Option<ActiveDrag>,
     animations: ShellAnimations,
-    last_drop_zone: Option<crate::ui::shell::layout_state::DropZone>,
+    last_drop_zone: Option<DropZone>,
 }
 
 impl Default for AppShell {
@@ -75,9 +80,9 @@ impl AppShell {
             let sid = session.id().to_string();
             if let WorkspaceSession::Terminal(t) = session {
                 let active = focused_sid.as_deref() == Some(sid.as_str());
-                t.want_terminal_focus = active;
+                t.view.want_terminal_focus = active;
                 if !active {
-                    t.terminal_had_focus = false;
+                    t.view.terminal_had_focus = false;
                 }
             }
         }
@@ -115,11 +120,7 @@ impl AppShell {
             .unwrap_or_else(|| id.to_string())
     }
 
-    fn pane_label(
-        sessions: &[WorkspaceSession],
-        layout: &ShellLayout,
-        pane_id: crate::ui::shell::layout_state::PaneId,
-    ) -> String {
+    fn pane_label(sessions: &[WorkspaceSession], layout: &ShellLayout, pane_id: PaneId) -> String {
         layout
             .workspace
             .panes
@@ -163,9 +164,7 @@ impl AppShell {
         egui::Panel::top("app_top_bar")
             .exact_size(menu::HEIGHT)
             .show_inside(ui, |ui| {
-                let app_fullscreen = ui
-                    .ctx()
-                    .input(|i| i.viewport().fullscreen.unwrap_or(false));
+                let app_fullscreen = ui.ctx().input(|i| i.viewport().fullscreen.unwrap_or(false));
                 menu::show_and_apply(
                     ui,
                     menu::AppMenuState {
@@ -252,66 +251,66 @@ impl AppShell {
             egui::CentralPanel::default()
                 .frame(ws_frame)
                 .show_inside(ui, |ui| {
-                let mut session_fade = std::collections::HashMap::new();
-                for (&pane, _) in &self.layout.workspace.panes {
-                    session_fade.insert(pane, self.animations.session_fade_value(pane));
-                }
+                    let mut session_fade = std::collections::HashMap::new();
+                    for (&pane, _) in &self.layout.workspace.panes {
+                        session_fade.insert(pane, self.animations.session_fade_value(pane));
+                    }
 
-                let mut last_drop_zone = self.last_drop_zone;
-                let ws_result = {
-                    let mut ws_ctx = WorkspacePaneContext {
-                        sessions,
-                        prefs,
-                        profiles,
-                        saved_connections,
-                        virtual_keyboard,
-                        live_font_size,
-                        function_pane: &mut self.function_pane,
-                        split_enabled: split_on,
-                        active_drag: self.active_drag.clone(),
-                        ratio_overrides: std::collections::HashMap::new(),
-                        session_fade,
-                        split_layout_active: false,
-                        last_drop_zone: &mut last_drop_zone,
-                        suppress_terminal_input,
+                    let mut last_drop_zone = self.last_drop_zone;
+                    let ws_result = {
+                        let mut ws_ctx = WorkspacePaneContext {
+                            sessions,
+                            prefs,
+                            profiles,
+                            saved_connections,
+                            virtual_keyboard,
+                            live_font_size,
+                            function_pane: &mut self.function_pane,
+                            split_enabled: split_on,
+                            active_drag: self.active_drag.clone(),
+                            ratio_overrides: std::collections::HashMap::new(),
+                            session_fade,
+                            split_layout_active: false,
+                            last_drop_zone: &mut last_drop_zone,
+                            suppress_terminal_input,
+                        };
+                        workspace_pane::render(ui, &mut self.layout.workspace, &mut ws_ctx)
                     };
-                    workspace_pane::render(ui, &mut self.layout.workspace, &mut ws_ctx)
-                };
-                result.workspace_action = ws_result.action;
+                    result.workspace_action = ws_result.action;
 
-                if let Some(pane) = result.workspace_action.start_pane_drag {
-                    if self.active_drag.is_none() && drag_split_on {
-                        self.active_drag = Some(ActiveDrag::Pane {
-                            pane_id: pane,
-                            label: Self::pane_label(sessions, &self.layout, pane),
-                        });
+                    if let Some(pane) = result.workspace_action.start_pane_drag {
+                        if self.active_drag.is_none() && drag_split_on {
+                            self.active_drag = Some(ActiveDrag::Pane {
+                                pane_id: pane,
+                                label: Self::pane_label(sessions, &self.layout, pane),
+                            });
+                        }
                     }
-                }
 
-                if ws_result.drag_ended {
-                    if result.workspace_action.drop_applied {
-                        self.animations
-                            .fade_in_pane(self.layout.workspace.focused_pane);
+                    if ws_result.drag_ended {
+                        if result.workspace_action.drop_applied {
+                            self.animations
+                                .fade_in_pane(self.layout.workspace.focused_pane);
+                        }
+                        self.active_drag = None;
+                        self.last_drop_zone = None;
+                    } else {
+                        self.last_drop_zone = last_drop_zone;
+                        if self.active_drag.is_some() {
+                            ui.ctx().request_repaint();
+                        }
                     }
-                    self.active_drag = None;
-                    self.last_drop_zone = None;
-                } else {
-                    self.last_drop_zone = last_drop_zone;
-                    if self.active_drag.is_some() {
-                        ui.ctx().request_repaint();
-                    }
-                }
-            });
+                });
         } else if ui.input(|i| i.pointer.any_released()) {
-            if let (Some(drag), Some(zone)) = (&self.active_drag, self.last_drop_zone) {
+            if let Some(drag) = &self.active_drag {
                 let palette_len = crate::ui::pane_colors::resolve_palette(prefs).len().max(1);
-                if let Some(focused) = crate::ui::workspace_pane::drag_drop::apply_drop(
+                if let Some(focused) = commit_drop(
                     &mut self.layout.workspace,
                     drag,
-                    zone,
+                    None,
+                    self.last_drop_zone,
                     palette_len,
                 ) {
-                    self.layout.workspace.focused_pane = focused;
                     result.workspace_action.drop_applied = true;
                     result.workspace_action.focus_pane = Some(focused);
                     self.animations.fade_in_pane(focused);
@@ -322,7 +321,7 @@ impl AppShell {
         }
 
         // Open Connection dialog (same list as sidebar Connections tab)
-        if self.layout.connections_dialog_open {
+        if self.layout.ui.connections_dialog_open {
             let frame = DialogFrame::new(rust_i18n::t!("dialog_open_connections").to_string());
             let mut conn_action = FunctionAction::empty();
             let outcome = frame.show(ui.ctx(), "open_connections_dialog", |ui| {
@@ -333,7 +332,7 @@ impl AppShell {
                 );
             });
             if outcome == DialogOutcome::Closed {
-                self.layout.connections_dialog_open = false;
+                self.layout.ui.connections_dialog_open = false;
             }
             // Merge list actions into shell result.
             if conn_action.new_connection {
@@ -341,11 +340,11 @@ impl AppShell {
             }
             if conn_action.connect_connection.is_some() {
                 result.function_action.connect_connection = conn_action.connect_connection;
-                self.layout.connections_dialog_open = false;
+                self.layout.ui.connections_dialog_open = false;
             }
             if conn_action.open_file_mgr.is_some() {
                 result.function_action.open_file_mgr = conn_action.open_file_mgr;
-                self.layout.connections_dialog_open = false;
+                self.layout.ui.connections_dialog_open = false;
             }
             if conn_action.edit_connection.is_some() {
                 result.function_action.edit_connection = conn_action.edit_connection;
@@ -356,28 +355,28 @@ impl AppShell {
         }
 
         // Settings dialog (all tabs, including Users)
-        if self.layout.settings_dialog_open {
+        if self.layout.ui.settings_dialog_open {
             let (closed, ui_action) = settings_dialog(ui.ctx(), prefs, profiles, auth_users);
             merge_settings_ui_action(&mut result, ui_action);
             if closed {
-                self.layout.settings_dialog_open = false;
+                self.layout.ui.settings_dialog_open = false;
                 result.settings_closed = true;
             }
         }
 
         // Preferences → Users (or other tab) as standalone nested page
-        if let Some(tab) = self.layout.settings_standalone_tab {
+        if let Some(tab) = self.layout.ui.settings_standalone_tab {
             let (closed, ui_action) =
                 settings_page_dialog(ui.ctx(), tab, prefs, profiles, auth_users);
             merge_settings_ui_action(&mut result, ui_action);
             if closed {
-                self.layout.settings_standalone_tab = None;
+                self.layout.ui.settings_standalone_tab = None;
                 result.settings_closed = true;
             }
         }
 
         // Help / About placeholder
-        if self.layout.help_dialog_open {
+        if self.layout.ui.help_dialog_open {
             let frame = DialogFrame::alert(rust_i18n::t!("menu_about").to_string());
             if frame.show(ui.ctx(), "about_dialog", |ui| {
                 ui.label(egui::RichText::new("rsTerminal").size(18.0).strong());
@@ -391,7 +390,7 @@ impl AppShell {
                 ui.label(rust_i18n::t!("about_placeholder"));
             }) == DialogOutcome::Closed
             {
-                self.layout.help_dialog_open = false;
+                self.layout.ui.help_dialog_open = false;
             }
         }
 
@@ -416,19 +415,21 @@ impl AppShell {
         }
 
         if result.toggle_app_fullscreen {
-            let currently = ui
-                .ctx()
-                .input(|i| i.viewport().fullscreen.unwrap_or(false));
+            let currently = ui.ctx().input(|i| i.viewport().fullscreen.unwrap_or(false));
             ui.ctx()
                 .send_viewport_cmd(egui::ViewportCommand::Fullscreen(!currently));
         }
 
+        result.normalize_actions(self.layout.workspace.focused_pane);
         result
     }
 }
 
 #[derive(Debug, Default)]
 pub struct ShellRenderResult {
+    /// Normalized application-facing actions for this frame.
+    pub actions: Vec<UiAction>,
+    /// Legacy pane accumulators retained for callers that still inspect them.
     pub function_action: FunctionAction,
     pub workspace_action: WorkspaceAction,
     pub settings_closed: bool,
@@ -439,6 +440,38 @@ pub struct ShellRenderResult {
     pub delete_profile_id: Option<String>,
     pub set_default_profile_id: Option<String>,
     pub toggle_app_fullscreen: bool,
+}
+
+impl ShellRenderResult {
+    fn normalize_actions(&mut self, focused_pane: PaneId) {
+        self.actions.clear();
+        if self.settings_closed {
+            self.actions.push(UiAction::SettingsClosed);
+        }
+        if self.auth_users_action.new {
+            self.actions.push(UiAction::NewAuthUser);
+        }
+        if let Some(id) = &self.auth_users_action.edit_id {
+            self.actions.push(UiAction::EditAuthUser(id.clone()));
+        }
+        if let Some(id) = &self.auth_users_action.delete_id {
+            self.actions.push(UiAction::DeleteAuthUser(id.clone()));
+        }
+        if self.request_new_profile {
+            self.actions.push(UiAction::NewProfile);
+        }
+        if let Some(id) = &self.request_edit_profile {
+            self.actions.push(UiAction::EditProfile(id.clone()));
+        }
+        if let Some(id) = &self.delete_profile_id {
+            self.actions.push(UiAction::DeleteProfile(id.clone()));
+        }
+        if let Some(id) = &self.set_default_profile_id {
+            self.actions.push(UiAction::SetDefaultProfile(id.clone()));
+        }
+        UiAction::extend_function(&mut self.actions, &self.function_action);
+        UiAction::extend_workspace(&mut self.actions, &self.workspace_action, focused_pane);
+    }
 }
 
 fn merge_settings_ui_action(result: &mut ShellRenderResult, ui_action: SettingsUiAction) {

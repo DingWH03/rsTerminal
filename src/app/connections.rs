@@ -1,10 +1,10 @@
 //! Connect / save-connection CRUD / local terminal settings apply.
 
-use super::connect_params;
 use super::RsTerminalApp;
-use crate::connection::{ble, serial, ssh};
+use super::connect_params;
 #[cfg(not(target_os = "android"))]
 use crate::connection::local;
+use crate::connection::{ble, serial, ssh};
 use crate::data::persist::types::ConnectionType;
 use crate::data::prefs::save_prefs;
 use crate::ui::function_pane::pages::FunctionPage;
@@ -18,9 +18,8 @@ impl RsTerminalApp {
             .find(|c| c.conn_type == ConnectionType::Local)
             .cloned()
         else {
-            self.connection_notice = Some(
-                "No saved Local Terminal connection. Add one via the + button.".into(),
-            );
+            self.connection_notice =
+                Some("No saved Local Terminal connection. Add one via the + button.".into());
             return;
         };
         let profile = self.resolve_profile(config.profile_id.as_deref()).clone();
@@ -60,11 +59,7 @@ impl RsTerminalApp {
         self.connect_to_pane(conn_id, self.shell.layout.workspace.focused_pane);
     }
 
-    pub(crate) fn connect_to_pane(
-        &mut self,
-        conn_id: &str,
-        pane: crate::ui::shell::layout_state::PaneId,
-    ) {
+    pub(crate) fn connect_to_pane(&mut self, conn_id: &str, pane: crate::ui::layout::PaneId) {
         let config = match self.saved_connections.iter().find(|c| c.id == conn_id) {
             Some(c) => c.clone(),
             None => return,
@@ -86,8 +81,7 @@ impl RsTerminalApp {
             }
             #[cfg(target_os = "android")]
             ConnectionType::Local => {
-                self.connection_notice =
-                    Some("Local terminal is not supported on Android".into());
+                self.connection_notice = Some("Local terminal is not supported on Android".into());
             }
             ConnectionType::Ssh => {
                 let auth_user = config
@@ -132,7 +126,10 @@ impl RsTerminalApp {
         }
     }
 
-    pub(crate) fn save_connection(&mut self, new_conn: crate::data::persist::types::SavedConnection) {
+    pub(crate) fn save_connection(
+        &mut self,
+        new_conn: crate::data::persist::types::SavedConnection,
+    ) {
         if let Some(pos) = self
             .saved_connections
             .iter()

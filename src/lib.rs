@@ -2,7 +2,6 @@
 
 // The crate name intentionally uses CamelCase to match the project name.
 #![allow(non_snake_case)]
-
 #![cfg_attr(
     all(target_os = "windows", not(debug_assertions)),
     windows_subsystem = "windows"
@@ -14,13 +13,13 @@ rust_i18n::i18n!("locales", fallback = "en");
 pub mod app;
 pub mod config;
 pub mod connection;
-pub mod fs;
-pub mod remote;
-pub mod session;
+pub mod data;
 pub mod fonts;
+pub mod fs;
 pub mod i18n;
 pub mod platform;
-pub mod data;
+pub mod remote;
+pub mod session;
 pub mod terminal;
 pub mod ui;
 

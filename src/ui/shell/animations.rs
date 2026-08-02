@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::ui::shell::layout_state::PaneId;
+use crate::ui::layout::PaneId;
 use crate::ui::uiframe::animation::Spring;
 
 pub struct ShellAnimations {
@@ -60,7 +60,8 @@ impl ShellAnimations {
 
     pub fn begin_preview(&mut self) {
         self.preview_active = true;
-        self.preview_ratio.set_target(crate::ui::workspace_pane::drag_drop::PREVIEW_INSERT_RATIO);
+        self.preview_ratio
+            .set_target(crate::ui::workspace_pane::drag_drop::PREVIEW_INSERT_RATIO);
     }
 
     pub fn end_preview(&mut self) {

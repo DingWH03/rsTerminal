@@ -1,12 +1,12 @@
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
-use crate::connection::{
-    emit_conn_data, ConnIn, ConnOut, ConnectionHandle, ConnectionState, RepaintNotifier,
-};
 use crate::connection::SerialConnectParams;
+use crate::connection::{
+    ConnIn, ConnOut, ConnectionHandle, ConnectionState, RepaintNotifier, emit_conn_data,
+};
 
 pub fn connect_serial(params: &SerialConnectParams) -> Result<ConnectionHandle, String> {
     let port_name = params.port.clone();

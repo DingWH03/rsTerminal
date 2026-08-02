@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::config::{
-    BellStyle, CursorStyle, KeyboardMode, TerminalTheme, TerminalType, SSH_OSC7_PROMPT_COMMAND,
+    BellStyle, CursorStyle, KeyboardMode, SSH_OSC7_PROMPT_COMMAND, TerminalTheme, TerminalType,
 };
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -409,7 +409,12 @@ impl AuthUser {
         }
     }
 
-    pub fn new_key(name: &str, username: &str, private_key: &str, passphrase: Option<&str>) -> Self {
+    pub fn new_key(
+        name: &str,
+        username: &str,
+        private_key: &str,
+        passphrase: Option<&str>,
+    ) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             name: name.to_string(),

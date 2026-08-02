@@ -2,12 +2,12 @@
 
 use std::collections::HashMap;
 
-use crate::ui::shell::layout_state::{PaneId, PaneState, SplitAxis, SplitNode, WorkspaceLayout};
+use crate::ui::layout::{DropZone, PaneId, PaneState, SplitAxis, SplitNode, WorkspaceLayout};
 use crate::ui::shell::messages::WorkspaceAction;
-use crate::ui::uiframe::split_handle::{drag_splitter, SPLITTER_SIZE};
+use crate::ui::uiframe::split_handle::{SPLITTER_SIZE, drag_splitter};
 
-use super::pane_host::render_pane;
 use super::WorkspacePaneContext;
+use super::pane_host::render_pane;
 
 pub fn render_split_tree(
     ui: &mut egui::Ui,
@@ -353,13 +353,9 @@ fn render_split(
 
                         if !dragging {
                             let split_id = ui.id().with(("vsplit", ratio.to_bits()));
-                            if let Some(new_ratio) = drag_splitter(
-                                ui,
-                                SplitAxis::Vertical,
-                                *ratio,
-                                available,
-                                split_id,
-                            ) {
+                            if let Some(new_ratio) =
+                                drag_splitter(ui, SplitAxis::Vertical, *ratio, available, split_id)
+                            {
                                 *ratio = new_ratio;
                             } else {
                                 ui.add_space(SPLITTER_SIZE);
@@ -408,17 +404,10 @@ fn split_key(node: &SplitNode) -> u64 {
     }
 }
 
-pub fn is_preview_insert_zone(
-    zone: crate::ui::shell::layout_state::DropZone,
-    drag: &super::drag_drop::ActiveDrag,
-) -> bool {
+pub fn is_preview_insert_zone(zone: DropZone, drag: &super::drag_drop::ActiveDrag) -> bool {
     use super::drag_drop::ActiveDrag;
-    use crate::ui::shell::layout_state::DropZone;
     match drag {
-        ActiveDrag::Session { .. } => matches!(
-            zone,
-            DropZone::Pane { .. } | DropZone::Root { .. }
-        ),
+        ActiveDrag::Session { .. } => matches!(zone, DropZone::Pane { .. } | DropZone::Root { .. }),
         ActiveDrag::Pane { pane_id: src, .. } => {
             matches!(zone, DropZone::Pane { pane_id: target, .. } if *src != target)
         }

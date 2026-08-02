@@ -18,8 +18,8 @@ use rusqlite::Connection;
 use crate::data::paths::config_dir;
 use crate::data::persist::db::schema;
 use crate::data::persist::types::{
-    default_local_env_vars, default_ssh_env_vars, AuthUser, FavoriteCommand, SavedConnection,
-    SecretRecord, TerminalProfile,
+    AuthUser, FavoriteCommand, SavedConnection, SecretRecord, TerminalProfile,
+    default_local_env_vars, default_ssh_env_vars,
 };
 use crate::data::prefs::io;
 
@@ -96,8 +96,7 @@ impl Persist {
                             .map_err(|e| e.to_string())?
                             .first()
                         {
-                            db::profiles::set_default(&db, &first.id)
-                                .map_err(|e| e.to_string())?;
+                            db::profiles::set_default(&db, &first.id).map_err(|e| e.to_string())?;
                         }
                     }
                 }
@@ -296,5 +295,57 @@ impl Persist {
 impl Default for Persist {
     fn default() -> Self {
         Self::open()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn in_memory_persist() -> Persist {
+        let conn = Connection::open_in_memory().expect("open in-memory database");
+        schema::migrate(&conn).expect("migrate in-memory database");
+        Persist {
+            db: Mutex::new(conn),
+        }
+    }
+
+    #[test]
+    fn connection_facade_supports_create_update_list_and_delete() {
+        let persist = in_memory_persist();
+        let mut connection = SavedConnection::new_local("Local shell", Some("/bin/sh"));
+        let id = connection.id.clone();
+
+        persist
+            .upsert_connection(&connection)
+            .expect("create connection");
+        let stored = persist
+            .list_connections()
+            .into_iter()
+            .find(|item| item.id == id)
+            .expect("created connection is listed");
+        assert_eq!(stored.name, "Local shell");
+        assert_eq!(stored.shell.as_deref(), Some("/bin/sh"));
+
+        connection.name = "Updated shell".to_string();
+        connection.favorite = true;
+        persist
+            .upsert_connection(&connection)
+            .expect("update connection");
+        let stored = persist
+            .list_connections()
+            .into_iter()
+            .find(|item| item.id == id)
+            .expect("updated connection is listed");
+        assert_eq!(stored.name, "Updated shell");
+        assert!(stored.favorite);
+
+        persist.delete_connection(&id).expect("delete connection");
+        assert!(
+            persist
+                .list_connections()
+                .into_iter()
+                .all(|item| item.id != id)
+        );
     }
 }

@@ -10,9 +10,9 @@
 use egui::{CornerRadius, CursorIcon, PointerButton, Pos2, Rect, Response, Sense, TouchPhase, Ui};
 
 use crate::config::TerminalTheme;
-use crate::ui::theme_color::to_egui;
 use crate::terminal::screen::Screen;
 use crate::ui::page::terminal::selection::TerminalTouchState;
+use crate::ui::theme_color::to_egui;
 
 /// 回滚滚动条的点击目标宽度（位于面板右侧边距中）。
 pub const SCROLLBAR_HIT_WIDTH: f32 = 4.0;
@@ -91,7 +91,8 @@ pub fn process_terminal_scrollbar(
     if (track_resp.clicked() || track_resp.dragged())
         && let Some(pos) = track_resp.interact_pointer_pos()
     {
-        let new_offset = scroll_offset_from_pointer_y(pos.y, grid_rect, grid_rows, max_scroll_offset);
+        let new_offset =
+            scroll_offset_from_pointer_y(pos.y, grid_rect, grid_rows, max_scroll_offset);
         if new_offset != *scroll_offset {
             *scroll_offset = new_offset;
             changed = true;
@@ -103,7 +104,8 @@ pub fn process_terminal_scrollbar(
     } else {
         to_egui(theme.scrollbar_thumb)
     };
-    ui.painter().rect_filled(thumb_rect, CornerRadius::same(1), thumb_color);
+    ui.painter()
+        .rect_filled(thumb_rect, CornerRadius::same(1), thumb_color);
 
     changed
 }
@@ -127,13 +129,7 @@ pub fn encode_legacy_mouse(button: u8, col: usize, row: usize, release: bool) ->
 }
 
 /// 根据终端设置自动选择 SGR 或传统鼠标编码。
-pub fn encode_mouse(
-    screen: &Screen,
-    button: u8,
-    col: usize,
-    row: usize,
-    release: bool,
-) -> Vec<u8> {
+pub fn encode_mouse(screen: &Screen, button: u8, col: usize, row: usize, release: bool) -> Vec<u8> {
     if screen.mouse_sgr_encoding() {
         encode_sgr_mouse(button, col, row, release)
     } else {
@@ -195,38 +191,33 @@ pub fn process_terminal_mouse(
     let alt = ui.input(|i| i.modifiers.alt);
     let ctrl = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
 
-    let emit = |pending_input: &mut Vec<Vec<u8>>,
-                button: u8,
-                col: usize,
-                row: usize,
-                release: bool| {
-        pending_input.push(encode_mouse(screen, button, col, row, release));
-    };
-
-    let mut emit_at = |pending_input: &mut Vec<Vec<u8>>,
-                     pos: Pos2,
-                     button: u8,
-                     release: bool,
-                     motion: bool| {
-        let Some((col, row)) = viewport_cell(pos, grid_rect, cell_w, cell_h, grid_rows, grid_cols)
-        else {
-            return;
+    let emit =
+        |pending_input: &mut Vec<Vec<u8>>, button: u8, col: usize, row: usize, release: bool| {
+            pending_input.push(encode_mouse(screen, button, col, row, release));
         };
-        let mut b = button_with_mods(button, shift, alt, ctrl);
-        if motion && screen.mouse_report_drag() {
-            b |= 32;
-        }
-        if motion && screen.mouse_report_motion() {
-            let key = (col, row);
-            if motion_last.as_ref() == Some(&key) {
+
+    let mut emit_at =
+        |pending_input: &mut Vec<Vec<u8>>, pos: Pos2, button: u8, release: bool, motion: bool| {
+            let Some((col, row)) =
+                viewport_cell(pos, grid_rect, cell_w, cell_h, grid_rows, grid_cols)
+            else {
                 return;
+            };
+            let mut b = button_with_mods(button, shift, alt, ctrl);
+            if motion && screen.mouse_report_drag() {
+                b |= 32;
             }
-            *motion_last = Some(key);
-        } else if !motion {
-            *motion_last = Some((col, row));
-        }
-        emit(pending_input, b, col, row, release);
-    };
+            if motion && screen.mouse_report_motion() {
+                let key = (col, row);
+                if motion_last.as_ref() == Some(&key) {
+                    return;
+                }
+                *motion_last = Some(key);
+            } else if !motion {
+                *motion_last = Some((col, row));
+            }
+            emit(pending_input, b, col, row, release);
+        };
 
     if ui.input(|i| i.has_touch_screen()) {
         for event in ui.input(|i| i.events.clone()) {
@@ -262,9 +253,8 @@ pub fn process_terminal_mouse(
     let secondary_pressed =
         ui.input(|i| i.pointer.secondary_pressed()) && term_resp.contains_pointer();
     let secondary_released = ui.input(|i| i.pointer.secondary_released());
-    let middle_pressed = ui.input(|i| {
-        i.pointer.button_pressed(PointerButton::Middle) && term_resp.contains_pointer()
-    });
+    let middle_pressed = ui
+        .input(|i| i.pointer.button_pressed(PointerButton::Middle) && term_resp.contains_pointer());
     let middle_released = ui.input(|i| i.pointer.button_released(PointerButton::Middle));
 
     if primary_pressed {
@@ -364,7 +354,8 @@ pub fn process_touch_scroll(
 
                 if max_scroll_offset > 0 {
                     let new_offset = (*scroll_offset_mut as isize + whole_rows)
-                        .clamp(0, max_scroll_offset as isize) as usize;
+                        .clamp(0, max_scroll_offset as isize)
+                        as usize;
                     if new_offset != *scroll_offset_mut {
                         *scroll_offset_mut = new_offset;
                         did_scroll = true;
@@ -457,8 +448,8 @@ pub fn process_terminal_wheel(
 
     if max_scroll_offset > 0 {
         let change = (delta * 3.0).round() as isize;
-        let new_offset = (*scroll_offset_mut as isize + change)
-            .clamp(0, max_scroll_offset as isize) as usize;
+        let new_offset =
+            (*scroll_offset_mut as isize + change).clamp(0, max_scroll_offset as isize) as usize;
         *scroll_offset_mut = new_offset;
     } else {
         *scroll_offset_mut = 0;

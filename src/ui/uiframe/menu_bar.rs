@@ -1,7 +1,7 @@
 //! Declarative menu bar chrome — no app-specific menu trees.
 //!
-//! Business modules (e.g. [`crate::ui::shell::menu`]) build a [`MenuBarSpec`]
-//! and call [`MenuBar::show`]; this module only paints and returns entry ids.
+//! Business modules build a [`MenuBarSpec`] and call [`MenuBar::show`]; this
+//! module only paints and returns entry ids.
 
 /// Identifier for a leaf menu entry (button / checkbox).
 pub type MenuEntryId = u16;
@@ -66,10 +66,8 @@ impl MenuBar {
                                 enabled,
                             } => {
                                 let mut checked = checked;
-                                let resp = ui.add_enabled(
-                                    enabled,
-                                    egui::Checkbox::new(&mut checked, label),
-                                );
+                                let resp = ui
+                                    .add_enabled(enabled, egui::Checkbox::new(&mut checked, label));
                                 if enabled && resp.changed() {
                                     activated = Some(id);
                                     ui.close();

@@ -2,10 +2,10 @@
 
 use std::collections::HashMap;
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::data::persist::types::{
-    default_local_env_vars, default_ssh_env_vars, ConnectionType, SavedConnection,
+    ConnectionType, SavedConnection, default_local_env_vars, default_ssh_env_vars,
 };
 
 pub fn list_all(conn: &Connection) -> rusqlite::Result<Vec<SavedConnection>> {
@@ -120,8 +120,7 @@ fn row_to_conn(row: &rusqlite::Row<'_>) -> rusqlite::Result<SavedConnection> {
     let ssh_port: Option<i64> = row.get(8)?;
     let serial_baud: Option<i64> = row.get(12)?;
     let env_json: String = row.get(16)?;
-    let mut env_vars: HashMap<String, String> =
-        serde_json::from_str(&env_json).unwrap_or_default();
+    let mut env_vars: HashMap<String, String> = serde_json::from_str(&env_json).unwrap_or_default();
     if env_vars.is_empty() {
         env_vars = match conn_type {
             ConnectionType::Local => default_local_env_vars(),

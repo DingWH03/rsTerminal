@@ -79,11 +79,17 @@ fn shapes_for_icon(icon: Icon, rect: Rect, color: Color32, stroke: f32) -> Vec<S
 }
 
 fn map_pt(rect: Rect, x: f32, y: f32) -> Pos2 {
-    Pos2::new(rect.left() + rect.width() * x, rect.top() + rect.height() * y)
+    Pos2::new(
+        rect.left() + rect.width() * x,
+        rect.top() + rect.height() * y,
+    )
 }
 
 fn line(rect: Rect, color: Color32, stroke: f32, a: (f32, f32), b: (f32, f32)) -> Shape {
-    Shape::line_segment([map_pt(rect, a.0, a.1), map_pt(rect, b.0, b.1)], Stroke::new(stroke, color))
+    Shape::line_segment(
+        [map_pt(rect, a.0, a.1), map_pt(rect, b.0, b.1)],
+        Stroke::new(stroke, color),
+    )
 }
 
 fn hamburger(rect: Rect, color: Color32, stroke: f32) -> Vec<Shape> {
@@ -103,7 +109,10 @@ fn settings(rect: Rect, color: Color32, stroke: f32) -> Vec<Shape> {
         let dir = Vec2::angled(a);
         let inner = c + dir * r * 1.1;
         let outer = c + dir * r * 1.9;
-        shapes.push(Shape::line_segment([inner, outer], Stroke::new(stroke * 0.9, color)));
+        shapes.push(Shape::line_segment(
+            [inner, outer],
+            Stroke::new(stroke * 0.9, color),
+        ));
     }
     shapes
 }
@@ -153,8 +162,18 @@ fn new_window(rect: Rect, color: Color32, stroke: f32) -> Vec<Shape> {
     let back = egui::Rect::from_min_max(map_pt(rect, 0.12, 0.38), map_pt(rect, 0.62, 0.88));
     let front = egui::Rect::from_min_max(map_pt(rect, 0.38, 0.12), map_pt(rect, 0.88, 0.62));
     vec![
-        Shape::rect_stroke(back, 1.0, Stroke::new(stroke, color), egui::StrokeKind::Inside),
-        Shape::rect_stroke(front, 1.0, Stroke::new(stroke, color), egui::StrokeKind::Inside),
+        Shape::rect_stroke(
+            back,
+            1.0,
+            Stroke::new(stroke, color),
+            egui::StrokeKind::Inside,
+        ),
+        Shape::rect_stroke(
+            front,
+            1.0,
+            Stroke::new(stroke, color),
+            egui::StrokeKind::Inside,
+        ),
     ]
 }
 
@@ -176,7 +195,12 @@ fn plus(rect: Rect, color: Color32, stroke: f32) -> Vec<Shape> {
 fn keyboard(rect: Rect, color: Color32, stroke: f32) -> Vec<Shape> {
     let body = egui::Rect::from_min_max(map_pt(rect, 0.14, 0.32), map_pt(rect, 0.86, 0.86));
     vec![
-        Shape::rect_stroke(body, 1.5, Stroke::new(stroke, color), egui::StrokeKind::Inside),
+        Shape::rect_stroke(
+            body,
+            1.5,
+            Stroke::new(stroke, color),
+            egui::StrokeKind::Inside,
+        ),
         line(rect, color, stroke * 0.85, (0.26, 0.52), (0.74, 0.52)),
         line(rect, color, stroke * 0.85, (0.26, 0.66), (0.74, 0.66)),
         line(rect, color, stroke * 0.85, (0.38, 0.76), (0.62, 0.76)),
@@ -229,8 +253,18 @@ fn folder(rect: Rect, color: Color32, stroke: f32) -> Vec<Shape> {
     let tab = egui::Rect::from_min_max(map_pt(rect, 0.16, 0.28), map_pt(rect, 0.48, 0.42));
     let body = egui::Rect::from_min_max(map_pt(rect, 0.16, 0.40), map_pt(rect, 0.84, 0.78));
     vec![
-        Shape::rect_stroke(tab, 1.0, Stroke::new(stroke, color), egui::StrokeKind::Inside),
-        Shape::rect_stroke(body, 1.0, Stroke::new(stroke, color), egui::StrokeKind::Inside),
+        Shape::rect_stroke(
+            tab,
+            1.0,
+            Stroke::new(stroke, color),
+            egui::StrokeKind::Inside,
+        ),
+        Shape::rect_stroke(
+            body,
+            1.0,
+            Stroke::new(stroke, color),
+            egui::StrokeKind::Inside,
+        ),
     ]
 }
 

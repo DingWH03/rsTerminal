@@ -14,7 +14,7 @@ use egui::{Align, FontId, Galley, Painter, Stroke, Ui};
 
 use crate::config::TerminalTheme;
 use crate::fonts::terminal_font_id_for_char;
-use crate::terminal::screen::{cell_display_width, Cell, Color};
+use crate::terminal::screen::{Cell, Color, cell_display_width};
 use crate::ui::theme_color::to_egui;
 
 pub use crate::session::RowGalleyCache;
@@ -131,10 +131,8 @@ pub fn paint_row(
         let cell = &cells[col];
         let attrs = RunAttrs::from_cell(cell);
         let x = x_start + col as f32 * cell_w;
-        let cell_rect = egui::Rect::from_min_size(
-            egui::pos2(x, y),
-            egui::vec2(cell_w * span as f32, cell_h),
-        );
+        let cell_rect =
+            egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(cell_w * span as f32, cell_h));
 
         if !tui_surface && (cell.ch == ' ' || cell.ch == '\0') && attrs.is_suggestion_style() {
             // zsh clears suggestion with dim/gray spaces — erase stale glyphs underneath.
@@ -157,7 +155,10 @@ pub fn paint_row(
             let (fg, _) = resolve_colors(theme, attrs);
             let y_line = cell_rect.bottom() - 1.0;
             painter.line_segment(
-                [egui::pos2(cell_rect.left(), y_line), egui::pos2(cell_rect.right(), y_line)],
+                [
+                    egui::pos2(cell_rect.left(), y_line),
+                    egui::pos2(cell_rect.right(), y_line),
+                ],
                 Stroke::new(1.0, fg),
             );
         }
@@ -229,7 +230,12 @@ fn resolve_colors(theme: &TerminalTheme, attrs: RunAttrs) -> (egui::Color32, egu
     (fg, bg)
 }
 
-fn text_format(font_id: FontId, fg: egui::Color32, bg: egui::Color32, attrs: RunAttrs) -> TextFormat {
+fn text_format(
+    font_id: FontId,
+    fg: egui::Color32,
+    bg: egui::Color32,
+    attrs: RunAttrs,
+) -> TextFormat {
     let stroke = Stroke::new(1.0, fg);
     TextFormat {
         font_id,
@@ -241,7 +247,11 @@ fn text_format(font_id: FontId, fg: egui::Color32, bg: egui::Color32, attrs: Run
         },
         italics: attrs.italic,
         underline: Stroke::NONE,
-        strikethrough: if attrs.strikethrough { stroke } else { Stroke::NONE },
+        strikethrough: if attrs.strikethrough {
+            stroke
+        } else {
+            Stroke::NONE
+        },
         valign: Align::Min,
         ..Default::default()
     }
@@ -254,9 +264,7 @@ fn paint_glyph_at(
     fg: egui::Color32,
 ) {
     let pos = egui::pos2(cell_rect.left(), cell_rect.top());
-    painter
-        .with_clip_rect(cell_rect)
-        .galley(pos, galley, fg);
+    painter.with_clip_rect(cell_rect).galley(pos, galley, fg);
 }
 
 fn layout_glyph(

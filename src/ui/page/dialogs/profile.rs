@@ -64,8 +64,11 @@ impl ProfileDialog {
         let frame = DialogFrame::new(title.to_string()).foreground();
         let closed = frame.show(ctx, "profile_dialog", |ui| {
             ui.add_space(4.0);
-            let name_resp =
-                form::labeled_text(ui, rust_i18n::t!("settings_profile_name"), &mut self.draft.name);
+            let name_resp = form::labeled_text(
+                ui,
+                rust_i18n::t!("settings_profile_name"),
+                &mut self.draft.name,
+            );
             if self.request_name_focus {
                 name_resp.request_focus();
                 self.request_name_focus = false;
@@ -136,9 +139,7 @@ impl ProfileDialog {
                 ui,
                 rust_i18n::t!("settings_cursor_style"),
                 &mut self.draft.cursor_style,
-                CursorStyle::ALL
-                    .iter()
-                    .map(|s| (*s, s.label().to_string())),
+                CursorStyle::ALL.iter().map(|s| (*s, s.label().to_string())),
             );
             form::segmented_row(
                 ui,
@@ -232,12 +233,8 @@ impl ProfileDialog {
             );
 
             let can_save = !self.draft.name.trim().is_empty();
-            match form::dialog_footer(
-                ui,
-                rust_i18n::t!("cancel"),
-                rust_i18n::t!("save"),
-                can_save,
-            ) {
+            match form::dialog_footer(ui, rust_i18n::t!("cancel"), rust_i18n::t!("save"), can_save)
+            {
                 FooterAction::Cancel => close_requested = true,
                 FooterAction::Save => {
                     self.draft.name = self.draft.name.trim().to_string();

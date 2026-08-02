@@ -24,11 +24,11 @@ pub mod style;
 pub mod tab_bar;
 pub mod vector_icons;
 
-pub use form::{FooterAction, COMBO_WIDTH, FIELD_GAP, FOOTER_GAP, LABEL_WIDTH, SECTION_GAP};
+pub use form::{COMBO_WIDTH, FIELD_GAP, FOOTER_GAP, FooterAction, LABEL_WIDTH, SECTION_GAP};
 
 pub use dialog::{
-    host_blocked_this_frame, DialogFrame, DialogOutcome, ALERT_HEIGHT, ALERT_WIDTH, DEFAULT_HEIGHT,
-    DEFAULT_WIDTH,
+    ALERT_HEIGHT, ALERT_WIDTH, DEFAULT_HEIGHT, DEFAULT_WIDTH, DialogFrame, DialogOutcome,
+    host_blocked_this_frame,
 };
 pub use file_list::{FileListAction, FileListView};
 pub use menu_bar::{MenuBar, MenuBarSpec, MenuEntry, MenuEntryId, MenuGroup};

@@ -46,7 +46,11 @@ pub fn section_frame_themed(ui: &egui::Ui) -> egui::Frame {
 }
 
 /// Card section with optional title. Prefer no title when the parent tab already names the page.
-pub fn section(ui: &mut egui::Ui, title: impl Into<String>, add_contents: impl FnOnce(&mut egui::Ui)) {
+pub fn section(
+    ui: &mut egui::Ui,
+    title: impl Into<String>,
+    add_contents: impl FnOnce(&mut egui::Ui),
+) {
     let title = title.into();
     section_frame_themed(ui).show(ui, |ui| {
         if !title.is_empty() {
@@ -174,8 +178,7 @@ pub fn dialog_footer(
             action = FooterAction::Cancel;
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let save_btn =
-                style::primary_button(&save).min_size(egui::vec2(BTN_W_PRIMARY, BTN_H));
+            let save_btn = style::primary_button(&save).min_size(egui::vec2(BTN_W_PRIMARY, BTN_H));
             if ui.add_enabled(can_save, save_btn).clicked() {
                 action = FooterAction::Save;
             }

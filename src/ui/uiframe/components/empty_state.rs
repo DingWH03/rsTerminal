@@ -80,13 +80,7 @@ pub fn paint_empty_state(ui: &mut egui::Ui, config: EmptyStateConfig) {
                 ui.painter()
                     .circle_filled(badge.center(), badge.width() * 0.5, badge_fill);
                 let stroke = (config.vector_icon_size / 22.0).clamp(1.4, 2.2);
-                vector_icons::paint(
-                    ui,
-                    icon_rect,
-                    icon,
-                    ui.visuals().weak_text_color(),
-                    stroke,
-                );
+                vector_icons::paint(ui, icon_rect, icon, ui.visuals().weak_text_color(), stroke);
             } else {
                 ui.label(egui::RichText::new(config.icon).size(config.icon_size));
             }

@@ -3,12 +3,12 @@
 use std::collections::HashMap;
 
 use crate::session::{ConnectionViewAction, WorkspaceSession};
+use crate::ui::layout::{PaneId, PaneState};
 use crate::ui::page::file_manager::file_manager_view;
-use crate::ui::page::home::recent::{recent_connections_view, SplitPaneChrome};
+use crate::ui::page::home::recent::{SplitPaneChrome, recent_connections_view};
 use crate::ui::page::terminal::connection_view;
 use crate::ui::pane_colors::pane_color;
 use crate::ui::shell::layout_preview::PREVIEW_GHOST_PANE;
-use crate::ui::shell::layout_state::{PaneId, PaneState};
 use crate::ui::shell::messages::{EmptyPaneConnect, WorkspaceAction};
 use crate::ui::uiframe::style;
 
@@ -72,7 +72,7 @@ pub fn render_pane(
                     if let Some(idx) = ctx.sessions.iter().position(|s| s.id() == sid) {
                         match &mut ctx.sessions[idx] {
                             WorkspaceSession::Terminal(term) => {
-                                let profile_id = term.profile_id.clone();
+                                let profile_id = term.view.profile_id.clone();
                                 let (theme, cursor_style, cell_width_scale) = {
                                     let profile = crate::data::persist::types::resolve_profile(
                                         ctx.profiles,
@@ -114,12 +114,8 @@ pub fn render_pane(
                                 }
                             }
                             WorkspaceSession::FileManager(fm) => {
-                                let fm_action = file_manager_view(
-                                    ui,
-                                    fm,
-                                    ctx.function_pane,
-                                    in_split,
-                                );
+                                let fm_action =
+                                    file_manager_view(ui, fm, ctx.function_pane, in_split);
                                 if fm_action.close {
                                     action.file_manager = fm_action;
                                     action.terminal_pane = Some(pane_id);

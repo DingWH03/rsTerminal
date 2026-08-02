@@ -18,7 +18,12 @@ fn poll_readable(fd: RawFd) -> bool {
 
 /// After a blocking `read`, pull every byte already waiting on the PTY fd (timeout 0 poll).
 #[cfg(unix)]
-pub fn append_available(fd: RawFd, reader: &mut dyn Read, buf: &mut [u8], out: &mut Vec<u8>) -> Result<()> {
+pub fn append_available(
+    fd: RawFd,
+    reader: &mut dyn Read,
+    buf: &mut [u8],
+    out: &mut Vec<u8>,
+) -> Result<()> {
     loop {
         if !poll_readable(fd) {
             break;

@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::ui::shell::layout_state::{DropEdge, DropZone, PaneId, SplitAxis, SplitNode};
+use crate::ui::layout::{DropEdge, DropZone, PaneId, SplitAxis, SplitNode};
 use crate::ui::uiframe::split_handle::SPLITTER_SIZE;
 
 /// Placeholder pane id used only during drag preview rendering.
@@ -60,36 +60,34 @@ fn collect_pane_rects(node: &SplitNode, bounds: egui::Rect, out: &mut HashMap<Pa
             ratio,
             first,
             second,
-        } => {
-            match axis {
-                SplitAxis::Horizontal => {
-                    let total_w = bounds.width();
-                    let first_w = ((total_w - SPLITTER_SIZE) * *ratio).max(1.0);
-                    let second_w = (total_w - SPLITTER_SIZE - first_w).max(1.0);
-                    let first_rect =
-                        egui::Rect::from_min_size(bounds.min, egui::vec2(first_w, bounds.height()));
-                    let second_rect = egui::Rect::from_min_size(
-                        egui::pos2(bounds.left() + first_w + SPLITTER_SIZE, bounds.top()),
-                        egui::vec2(second_w, bounds.height()),
-                    );
-                    collect_pane_rects(first, first_rect, out);
-                    collect_pane_rects(second, second_rect, out);
-                }
-                SplitAxis::Vertical => {
-                    let total_h = bounds.height();
-                    let first_h = ((total_h - SPLITTER_SIZE) * *ratio).max(1.0);
-                    let second_h = (total_h - SPLITTER_SIZE - first_h).max(1.0);
-                    let first_rect =
-                        egui::Rect::from_min_size(bounds.min, egui::vec2(bounds.width(), first_h));
-                    let second_rect = egui::Rect::from_min_size(
-                        egui::pos2(bounds.left(), bounds.top() + first_h + SPLITTER_SIZE),
-                        egui::vec2(bounds.width(), second_h),
-                    );
-                    collect_pane_rects(first, first_rect, out);
-                    collect_pane_rects(second, second_rect, out);
-                }
+        } => match axis {
+            SplitAxis::Horizontal => {
+                let total_w = bounds.width();
+                let first_w = ((total_w - SPLITTER_SIZE) * *ratio).max(1.0);
+                let second_w = (total_w - SPLITTER_SIZE - first_w).max(1.0);
+                let first_rect =
+                    egui::Rect::from_min_size(bounds.min, egui::vec2(first_w, bounds.height()));
+                let second_rect = egui::Rect::from_min_size(
+                    egui::pos2(bounds.left() + first_w + SPLITTER_SIZE, bounds.top()),
+                    egui::vec2(second_w, bounds.height()),
+                );
+                collect_pane_rects(first, first_rect, out);
+                collect_pane_rects(second, second_rect, out);
             }
-        }
+            SplitAxis::Vertical => {
+                let total_h = bounds.height();
+                let first_h = ((total_h - SPLITTER_SIZE) * *ratio).max(1.0);
+                let second_h = (total_h - SPLITTER_SIZE - first_h).max(1.0);
+                let first_rect =
+                    egui::Rect::from_min_size(bounds.min, egui::vec2(bounds.width(), first_h));
+                let second_rect = egui::Rect::from_min_size(
+                    egui::pos2(bounds.left(), bounds.top() + first_h + SPLITTER_SIZE),
+                    egui::vec2(bounds.width(), second_h),
+                );
+                collect_pane_rects(first, first_rect, out);
+                collect_pane_rects(second, second_rect, out);
+            }
+        },
     }
 }
 
@@ -120,7 +118,9 @@ fn replace_leaf_with_split_directed(
         SplitNode::Leaf { .. } => false,
         SplitNode::Split { first, second, .. } => {
             replace_leaf_with_split_directed(first, target, axis, ratio, new_pane, new_first)
-                || replace_leaf_with_split_directed(second, target, axis, ratio, new_pane, new_first)
+                || replace_leaf_with_split_directed(
+                    second, target, axis, ratio, new_pane, new_first,
+                )
         }
     }
 }
@@ -128,7 +128,7 @@ fn replace_leaf_with_split_directed(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ui::shell::layout_state::WorkspaceLayout;
+    use crate::ui::layout::WorkspaceLayout;
 
     #[test]
     fn preview_tree_adds_ghost_pane() {
@@ -144,7 +144,10 @@ mod tests {
             0.35,
         )
         .unwrap();
-        let rects = pane_rects_from_tree(&tree, egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0)));
+        let rects = pane_rects_from_tree(
+            &tree,
+            egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0)),
+        );
         assert!(rects.contains_key(&PREVIEW_GHOST_PANE));
         assert_eq!(rects.len(), 2);
     }

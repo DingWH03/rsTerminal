@@ -121,9 +121,7 @@ impl VirtualKeyboard {
 
     fn row_count(&self) -> u32 {
         match self.effective_mode() {
-            KeyboardMode::Special => {
-                2
-            }
+            KeyboardMode::Special => 2,
             KeyboardMode::Full => {
                 let main_rows = match self.layer {
                     Layer::Alpha => 3,
@@ -249,11 +247,7 @@ impl VirtualKeyboard {
 
         // Number row
         let mut row1 = vec![
-            key(
-                if self.show_fn { "Fn✓" } else { "Fn" },
-                KeyAction::Fn,
-                1.15,
-            ),
+            key(if self.show_fn { "Fn✓" } else { "Fn" }, KeyAction::Fn, 1.15),
             key("Esc", KeyAction::Bytes(b"\x1b"), 1.0),
         ];
         for n in 1..=10u8 {
@@ -390,7 +384,13 @@ impl VirtualKeyboard {
         });
     }
 
-    fn paint_row(&mut self, ui: &mut egui::Ui, m: &KeyMetrics, keys: &[KeyDef], output: &mut Vec<Vec<u8>>) {
+    fn paint_row(
+        &mut self,
+        ui: &mut egui::Ui,
+        m: &KeyMetrics,
+        keys: &[KeyDef],
+        output: &mut Vec<Vec<u8>>,
+    ) {
         let row_w = self.row_width(m, keys);
         let pad = row_padding(ui, row_w);
         ui.horizontal(|ui| {
@@ -459,7 +459,6 @@ impl VirtualKeyboard {
         let gaps = m.gap * (widths.len().saturating_sub(1) as f32);
         keys_w + gaps
     }
-
 }
 
 fn row_padding(ui: &egui::Ui, row_w: f32) -> f32 {

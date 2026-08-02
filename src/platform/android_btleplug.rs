@@ -21,12 +21,12 @@
 
 use std::any::Any;
 use std::ffi::c_void;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use jni_0_19::objects::{GlobalRef, JValue};
-use jni_0_19::sys::{jint, JNI_VERSION_1_6};
+use jni_0_19::sys::{JNI_VERSION_1_6, jint};
 use jni_0_19::{JNIEnv, JavaVM};
 
 static JVM_PTR: OnceLock<usize> = OnceLock::new();
@@ -45,9 +45,7 @@ static APP_CLASS_LOADER: OnceLock<GlobalRef> = OnceLock::new();
 /// app-specific classes.  We obtain the ClassLoader from the Activity object
 /// instead, which always works.
 #[cfg(target_os = "android")]
-pub fn cache_class_loader_from_activity(
-    app: &winit::platform::android::activity::AndroidApp,
-) {
+pub fn cache_class_loader_from_activity(app: &winit::platform::android::activity::AndroidApp) {
     use jni_0_19::objects::JObject;
 
     if APP_CLASS_LOADER.get().is_some() {
@@ -74,18 +72,14 @@ pub fn cache_class_loader_from_activity(
     let activity = JObject::from(app.activity_as_ptr() as jni_0_19::sys::jobject);
 
     // activity.getClassLoader()
-    let class_loader = match env.call_method(
-        activity,
-        "getClassLoader",
-        "()Ljava/lang/ClassLoader;",
-        &[],
-    ) {
-        Ok(v) => v,
-        Err(e) => {
-            log::warn!("btleplug cache_class_loader: getClassLoader call failed: {e}");
-            return;
-        }
-    };
+    let class_loader =
+        match env.call_method(activity, "getClassLoader", "()Ljava/lang/ClassLoader;", &[]) {
+            Ok(v) => v,
+            Err(e) => {
+                log::warn!("btleplug cache_class_loader: getClassLoader call failed: {e}");
+                return;
+            }
+        };
 
     let class_loader_obj = match class_loader.l() {
         Ok(obj) => obj,
@@ -189,9 +183,7 @@ pub fn ensure_initialized() -> Result<(), String> {
         ));
     }
 
-    log::info!(
-        "btleplug ensure_initialized: proceeding with init (main_thread={is_main_thread})"
-    );
+    log::info!("btleplug ensure_initialized: proceeding with init (main_thread={is_main_thread})");
     init_with_env(&env)
 }
 
@@ -254,8 +246,8 @@ fn init_with_env(env: &JNIEnv<'_>) -> Result<(), String> {
 /// implementation runs in Adapter's class-loader context, making FindClass
 /// work for all btleplug classes.
 fn call_btleplug_init_via_native(env: &JNIEnv<'_>, app_loader: &GlobalRef) -> Result<(), String> {
-    use jni_0_19::objects::JClass;
     use jni_0_19::NativeMethod;
+    use jni_0_19::objects::JClass;
 
     // 1. Load the Adapter class via ClassLoader (no FindClass needed).
     let dot_name = "com.nonpolynomial.btleplug.android.impl.Adapter";
@@ -437,6 +429,3 @@ pub unsafe extern "system" fn JNI_OnLoad(
     capture_java_vm(vm.cast());
     JNI_VERSION_1_6
 }
-
-
-

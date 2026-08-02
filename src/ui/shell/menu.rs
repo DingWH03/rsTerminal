@@ -4,8 +4,8 @@
 //! Connection / Commands / View / Preferences / Help tree and how actions affect the shell.
 
 use crate::ui::function_pane::FunctionPane;
-use crate::ui::shell::layout_state::ShellLayout;
 use crate::ui::shell::ShellRenderResult;
+use crate::ui::shell::layout_state::ShellLayout;
 use crate::ui::uiframe::menu_bar::{MenuBar, MenuBarSpec, MenuEntry, MenuEntryId, MenuGroup};
 
 /// Snapshot of shell state needed to build the View menu.
@@ -162,13 +162,13 @@ pub fn apply(
             result.function_action.new_connection = true;
         }
         AppMenuAction::OpenConnections => {
-            layout.connections_dialog_open = true;
+            layout.ui.connections_dialog_open = true;
         }
         AppMenuAction::NewFavoriteCommand => {
             result.function_action.new_favorite_command = true;
         }
         AppMenuAction::ManageFavoriteCommands => {
-            layout.commands_manage_dialog_open = true;
+            layout.ui.commands_manage_dialog_open = true;
         }
         AppMenuAction::ToggleSidebar => {
             function_pane.toggle_docked_sidebar();
@@ -177,15 +177,14 @@ pub fn apply(
             result.toggle_app_fullscreen = true;
         }
         AppMenuAction::OpenSettings => {
-            layout.settings_dialog_open = true;
+            layout.ui.settings_dialog_open = true;
             result.settings_opened = true;
         }
         AppMenuAction::ManageAuthUsers => {
-            layout.settings_standalone_tab =
-                Some(crate::ui::page::settings::SettingsTab::Users);
+            layout.ui.settings_standalone_tab = Some(crate::ui::page::settings::SettingsTab::Users);
         }
         AppMenuAction::OpenHelp => {
-            layout.help_dialog_open = true;
+            layout.ui.help_dialog_open = true;
         }
         AppMenuAction::None => {}
     }

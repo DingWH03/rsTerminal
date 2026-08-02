@@ -2,8 +2,8 @@
 
 use std::collections::HashMap;
 
+use crate::ui::layout::{DropEdge, DropZone, PaneId, WorkspaceLayout};
 use crate::ui::shell::layout_preview::PREVIEW_GHOST_PANE;
-use crate::ui::shell::layout_state::{DropEdge, DropZone, PaneId, WorkspaceLayout};
 use crate::ui::uiframe::style;
 
 /// Ratio allocated to the incoming pane during live insert preview (visual only).
@@ -214,11 +214,13 @@ pub fn apply_drop(
             layout.swap_panes(*pane_id, target);
             Some(target)
         }
-        (ActiveDrag::Pane { pane_id, .. }, DropZone::Pane { pane_id: target, edge })
-            if *pane_id != target =>
-        {
-            layout.move_pane_to_edge(*pane_id, target, edge, new_color)
-        }
+        (
+            ActiveDrag::Pane { pane_id, .. },
+            DropZone::Pane {
+                pane_id: target,
+                edge,
+            },
+        ) if *pane_id != target => layout.move_pane_to_edge(*pane_id, target, edge, new_color),
         (ActiveDrag::Pane { pane_id, .. }, DropZone::Root { edge }) => {
             let target = layout.focused_pane;
             if *pane_id != target {
@@ -231,6 +233,22 @@ pub fn apply_drop(
     }
 }
 
+/// Commit a drop using the current zone or the most recently observed zone.
+///
+/// Returns the newly focused pane when the layout changed.
+pub fn commit_drop(
+    layout: &mut WorkspaceLayout,
+    drag: &ActiveDrag,
+    zone: Option<DropZone>,
+    last_drop_zone: Option<DropZone>,
+    palette_len: usize,
+) -> Option<PaneId> {
+    let zone = zone.or(last_drop_zone)?;
+    let focused = apply_drop(layout, drag, zone, palette_len)?;
+    layout.focused_pane = focused;
+    Some(focused)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -238,26 +256,23 @@ mod tests {
     #[test]
     fn nearest_edge_left() {
         let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(100.0, 80.0));
-        assert_eq!(
-            nearest_edge(egui::pos2(5.0, 40.0), rect),
-            DropEdge::Left
-        );
+        assert_eq!(nearest_edge(egui::pos2(5.0, 40.0), rect), DropEdge::Left);
     }
 
     #[test]
     fn nearest_edge_right() {
         let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(100.0, 80.0));
-        assert_eq!(
-            nearest_edge(egui::pos2(95.0, 40.0), rect),
-            DropEdge::Right
-        );
+        assert_eq!(nearest_edge(egui::pos2(95.0, 40.0), rect), DropEdge::Right);
     }
 
     #[test]
     fn session_drag_always_edge() {
         let mut panes = HashMap::new();
         let pid = PaneId(1);
-        panes.insert(pid, egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(200.0, 100.0)));
+        panes.insert(
+            pid,
+            egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(200.0, 100.0)),
+        );
         let ws = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(200.0, 100.0));
         let drag = ActiveDrag::Session {
             session_id: "a".into(),
@@ -265,7 +280,13 @@ mod tests {
         };
         // Center of pane — still maps to an edge, not PaneCenter.
         let zone = hit_test_drop_zone(egui::pos2(100.0, 50.0), ws, &panes, &drag).unwrap();
-        assert!(matches!(zone, DropZone::Pane { edge: DropEdge::Right | DropEdge::Left | DropEdge::Top | DropEdge::Bottom, .. }));
+        assert!(matches!(
+            zone,
+            DropZone::Pane {
+                edge: DropEdge::Right | DropEdge::Left | DropEdge::Top | DropEdge::Bottom,
+                ..
+            }
+        ));
         assert!(!matches!(zone, DropZone::PaneCenter { .. }));
     }
 }

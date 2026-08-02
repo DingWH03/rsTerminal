@@ -24,12 +24,7 @@ pub enum SettingsTab {
 }
 
 impl SettingsTab {
-    pub const ALL: [Self; 4] = [
-        Self::General,
-        Self::Appearance,
-        Self::Terminal,
-        Self::Users,
-    ];
+    pub const ALL: [Self; 4] = [Self::General, Self::Appearance, Self::Terminal, Self::Users];
 
     pub fn label(self) -> String {
         match self {

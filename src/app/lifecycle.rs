@@ -1,27 +1,25 @@
 //! Back navigation, quit/exit, close request, focus release, fonts/profile.
 
 use super::RsTerminalApp;
-use crate::fonts;
 use crate::data::persist::types::TerminalProfile;
-use crate::data::prefs::save_prefs;
-use crate::session::WorkspaceSession;
 use crate::data::persist::types::resolve_profile;
+use crate::data::prefs::save_prefs;
+use crate::fonts;
+use crate::session::WorkspaceSession;
 use crate::ui::function_pane::pages::FunctionPage;
 use crate::ui::page::dialogs::LocalTerminalSettingsDialog;
 
 impl RsTerminalApp {
     pub(crate) fn reload_terminal_fonts(&mut self, ctx: &egui::Context) {
-        let font = self.focused_terminal_profile_font().unwrap_or_else(|| {
-            resolve_profile(&self.profiles, None)
-                .terminal_font
-                .clone()
-        });
+        let font = self
+            .focused_terminal_profile_font()
+            .unwrap_or_else(|| resolve_profile(&self.profiles, None).terminal_font.clone());
         fonts::apply_terminal_fonts(ctx, &font);
         let font_gen = fonts::font_generation();
         for session in &mut self.sessions {
             if let WorkspaceSession::Terminal(term) = session {
                 term.clear_all_galley_caches();
-                term.font_generation = font_gen;
+                term.view.font_generation = font_gen;
             }
         }
     }
@@ -36,8 +34,8 @@ impl RsTerminalApp {
             .session_id
             .as_deref()?;
         self.sessions.iter().find_map(|s| match s {
-            WorkspaceSession::Terminal(t) if t.id == sid => Some(
-                self.resolve_profile(Some(t.profile_id.as_str()))
+            WorkspaceSession::Terminal(t) if t.core.id == sid => Some(
+                self.resolve_profile(Some(t.view.profile_id.as_str()))
                     .terminal_font
                     .clone(),
             ),
@@ -54,7 +52,7 @@ impl RsTerminalApp {
         for session in &mut self.sessions {
             if let WorkspaceSession::Terminal(term) = session {
                 term.clear_all_galley_caches();
-                term.font_generation = font_gen;
+                term.view.font_generation = font_gen;
             }
         }
     }
@@ -73,9 +71,8 @@ impl RsTerminalApp {
         match self.persist.delete_profile(id) {
             Ok(()) => self.reload_profiles(),
             Err(crate::data::persist::PersistError::ProfileInUse { count }) => {
-                self.connection_notice = Some(
-                    rust_i18n::t!("err_profile_in_use", count = count).into_owned(),
-                );
+                self.connection_notice =
+                    Some(rust_i18n::t!("err_profile_in_use", count = count).into_owned());
             }
             Err(e) => {
                 self.connection_notice = Some(e.to_string());
@@ -102,8 +99,8 @@ impl RsTerminalApp {
         let (profile_id, font_size) = focused_id
             .and_then(|id| {
                 self.sessions.iter().find_map(|s| match s {
-                    WorkspaceSession::Terminal(t) if t.id == id => {
-                        Some((t.profile_id.clone(), t.live_font_size))
+                    WorkspaceSession::Terminal(t) if t.core.id == id => {
+                        Some((t.view.profile_id.clone(), t.view.live_font_size))
                     }
                     _ => None,
                 })
@@ -125,8 +122,8 @@ impl RsTerminalApp {
     pub(crate) fn release_terminal_keyboard_focus(&mut self, ctx: &egui::Context) {
         for session in &mut self.sessions {
             if let Some(term) = session.terminal_mut() {
-                term.want_terminal_focus = false;
-                term.terminal_had_focus = false;
+                term.view.want_terminal_focus = false;
+                term.view.terminal_had_focus = false;
             }
         }
         #[cfg(target_os = "android")]
@@ -162,14 +159,21 @@ impl RsTerminalApp {
         }
         if self.dialogs.manage_commands.open {
             self.dialogs.manage_commands.open = false;
-            self.shell.layout.commands_manage_dialog_open = false;
+            self.shell.layout.ui.commands_manage_dialog_open = false;
             return true;
         }
         if self.dialogs.profile.open {
             self.dialogs.profile.close();
             return true;
         }
-        if self.shell.layout.settings_standalone_tab.take().is_some() {
+        if self
+            .shell
+            .layout
+            .ui
+            .settings_standalone_tab
+            .take()
+            .is_some()
+        {
             save_prefs(&self.prefs);
             self.reload_terminal_fonts(ctx);
             return true;
@@ -188,19 +192,19 @@ impl RsTerminalApp {
             self.shell.function_pane.close_overlay();
             return true;
         }
-        if self.shell.layout.settings_dialog_open {
-            self.shell.layout.settings_dialog_open = false;
+        if self.shell.layout.ui.settings_dialog_open {
+            self.shell.layout.ui.settings_dialog_open = false;
             save_prefs(&self.prefs);
             self.live_font_size = resolve_profile(&self.profiles, None).font_size;
             self.reload_terminal_fonts(ctx);
             return true;
         }
-        if self.shell.layout.help_dialog_open {
-            self.shell.layout.help_dialog_open = false;
+        if self.shell.layout.ui.help_dialog_open {
+            self.shell.layout.ui.help_dialog_open = false;
             return true;
         }
-        if self.shell.layout.connections_dialog_open {
-            self.shell.layout.connections_dialog_open = false;
+        if self.shell.layout.ui.connections_dialog_open {
+            self.shell.layout.ui.connections_dialog_open = false;
             return true;
         }
         if self.has_open_sessions() {

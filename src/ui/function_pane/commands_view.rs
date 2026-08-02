@@ -2,7 +2,7 @@
 
 use crate::data::persist::types::FavoriteCommand;
 use crate::ui::shell::messages::FunctionAction;
-use crate::ui::uiframe::components::empty_state::{paint_empty_state, EmptyStateConfig};
+use crate::ui::uiframe::components::empty_state::{EmptyStateConfig, paint_empty_state};
 use crate::ui::uiframe::style;
 use crate::ui::uiframe::vector_icons::Icon;
 
@@ -61,10 +61,8 @@ fn paint_command_row(
     action: &mut FunctionAction,
 ) {
     let row_h = 34.0;
-    let row_rect = egui::Rect::from_min_size(
-        ui.cursor().min,
-        egui::vec2(ui.available_width(), row_h),
-    );
+    let row_rect =
+        egui::Rect::from_min_size(ui.cursor().min, egui::vec2(ui.available_width(), row_h));
     let row_resp = ui.allocate_rect(row_rect, egui::Sense::click());
 
     let dots_rect = egui::Rect::from_min_size(

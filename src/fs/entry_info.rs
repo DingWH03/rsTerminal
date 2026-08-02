@@ -19,15 +19,15 @@ pub fn local_entry_info(path: &Path) -> Result<EntryInfo, String> {
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| path.display().to_string());
     let is_dir = meta.is_dir();
-    let size = if is_dir {
-        dir_size(path)
-    } else {
-        meta.len()
-    };
+    let size = if is_dir { dir_size(path) } else { meta.len() };
     Ok(EntryInfo {
         path: path.display().to_string(),
         name,
-        kind: if is_dir { "Folder".into() } else { "File".into() },
+        kind: if is_dir {
+            "Folder".into()
+        } else {
+            "File".into()
+        },
         size,
         permissions: format_mode(&meta),
         modified: format_time(meta.modified().ok()),

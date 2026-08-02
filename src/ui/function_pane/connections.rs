@@ -2,7 +2,7 @@
 
 use crate::data::persist::types::{ConnectionType, SavedConnection};
 use crate::ui::shell::messages::FunctionAction;
-use crate::ui::uiframe::components::empty_state::{paint_empty_state, EmptyStateConfig};
+use crate::ui::uiframe::components::empty_state::{EmptyStateConfig, paint_empty_state};
 use crate::ui::uiframe::components::filter_chips::{self, CONNECTION_TYPE_FILTERS};
 use crate::ui::uiframe::style;
 use crate::ui::uiframe::vector_icons::Icon;
@@ -36,11 +36,8 @@ pub fn render_with_id(
         return action;
     }
 
-    let filter: Option<ConnectionType> = filter_chips::paint_filter_chips(
-        ui,
-        &format!("{id_salt}_filter"),
-        CONNECTION_TYPE_FILTERS,
-    );
+    let filter: Option<ConnectionType> =
+        filter_chips::paint_filter_chips(ui, &format!("{id_salt}_filter"), CONNECTION_TYPE_FILTERS);
 
     let mut sorted: Vec<&SavedConnection> = match filter {
         Some(ref ft) => connections.iter().filter(|c| c.conn_type == *ft).collect(),
@@ -82,8 +79,7 @@ pub fn render_with_id(
     let menu_id_key = egui::Id::new(format!("{id_salt}_menu_id"));
     let menu_state: Option<String> = ui.data(|d| d.get_temp(menu_id_key)).unwrap_or(None);
 
-    if menu_state.is_some()
-        && ui.input(|i| i.pointer.button_clicked(egui::PointerButton::Primary))
+    if menu_state.is_some() && ui.input(|i| i.pointer.button_clicked(egui::PointerButton::Primary))
     {
         ui.data_mut(|d| d.insert_temp(menu_id_key, None::<String>));
     }
@@ -108,10 +104,8 @@ fn paint_connection_row(
     action: &mut FunctionAction,
 ) {
     let row_h = 34.0;
-    let row_rect = egui::Rect::from_min_size(
-        ui.cursor().min,
-        egui::vec2(ui.available_width(), row_h),
-    );
+    let row_rect =
+        egui::Rect::from_min_size(ui.cursor().min, egui::vec2(ui.available_width(), row_h));
     let row_resp = ui.allocate_rect(row_rect, egui::Sense::click());
 
     let dots_rect = egui::Rect::from_min_size(

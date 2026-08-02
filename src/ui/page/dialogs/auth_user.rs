@@ -133,12 +133,8 @@ impl AuthUserDialog {
                     AuthMethod::Password => !self.password.is_empty(),
                     AuthMethod::PrivateKey => !self.private_key.trim().is_empty(),
                 };
-            match form::dialog_footer(
-                ui,
-                rust_i18n::t!("cancel"),
-                rust_i18n::t!("save"),
-                can_save,
-            ) {
+            match form::dialog_footer(ui, rust_i18n::t!("cancel"), rust_i18n::t!("save"), can_save)
+            {
                 FooterAction::Cancel => close_requested = true,
                 FooterAction::Save => {
                     let id = self
@@ -195,7 +191,11 @@ pub struct ManageAuthUsersAction {
 }
 
 /// Embeddable Users list (Settings tab or standalone page body).
-pub fn auth_users_page(ui: &mut egui::Ui, auth_users: &[AuthUser], action: &mut ManageAuthUsersAction) {
+pub fn auth_users_page(
+    ui: &mut egui::Ui,
+    auth_users: &[AuthUser],
+    action: &mut ManageAuthUsersAction,
+) {
     form::section_card(ui, |ui| {
         if form::manage_list_toolbar(ui, rust_i18n::t!("auth_users_manage_new")) {
             action.new = true;

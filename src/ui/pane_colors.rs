@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use crate::data::prefs::Prefs;
-use crate::ui::shell::layout_state::{PaneId, WorkspaceLayout};
+use crate::ui::layout::{PaneId, WorkspaceLayout};
 use crate::ui::uiframe::style;
 
 pub fn default_palette() -> Vec<[u8; 3]> {
@@ -72,11 +72,7 @@ pub fn session_accent_map(
     map
 }
 
-pub fn pane_id_color(
-    workspace: &WorkspaceLayout,
-    prefs: &Prefs,
-    pane_id: PaneId,
-) -> egui::Color32 {
+pub fn pane_id_color(workspace: &WorkspaceLayout, prefs: &Prefs, pane_id: PaneId) -> egui::Color32 {
     workspace
         .panes
         .get(&pane_id)

@@ -1,10 +1,10 @@
 //! Sidebar Monitor tab — one-minute (60 sample) performance charts for SSH sessions.
 
-use crate::remote::{MetricsSample, METRICS_HISTORY_LEN};
-use crate::session::WorkspaceSession;
 use crate::data::persist::types::ConnectionType;
+use crate::remote::{METRICS_HISTORY_LEN, MetricsSample};
+use crate::session::WorkspaceSession;
 use crate::ui::shell::messages::FunctionAction;
-use crate::ui::uiframe::components::empty_state::{paint_empty_state, EmptyStateConfig};
+use crate::ui::uiframe::components::empty_state::{EmptyStateConfig, paint_empty_state};
 use crate::ui::uiframe::style;
 
 const CHART_H: f32 = 72.0;
@@ -35,7 +35,7 @@ pub fn render(
         return FunctionAction::empty();
     };
 
-    if term.conn_type != ConnectionType::Ssh {
+    if term.core.conn_type != ConnectionType::Ssh {
         paint_empty(
             ui,
             "\u{1F4CA}",
@@ -45,8 +45,8 @@ pub fn render(
         return FunctionAction::empty();
     }
 
-    let history = term.metrics.history();
-    let snap = term.metrics.snapshot();
+    let history = term.core.metrics.history();
+    let snap = term.core.metrics.snapshot();
 
     if history.is_empty() {
         paint_empty(
@@ -218,8 +218,10 @@ fn paint_series_card(
                 });
             });
             ui.add_space(4.0);
-            let (rect, _) =
-                ui.allocate_exact_size(egui::vec2(ui.available_width(), CHART_H), egui::Sense::hover());
+            let (rect, _) = ui.allocate_exact_size(
+                egui::vec2(ui.available_width(), CHART_H),
+                egui::Sense::hover(),
+            );
             if ui.is_rect_visible(rect) {
                 paint_sparkline(ui, rect, samples, kind, color, text);
             }
@@ -302,12 +304,7 @@ fn paint_sparkline(
             let a = w[0];
             let b = w[1];
             painter.add(egui::Shape::convex_polygon(
-                vec![
-                    a,
-                    b,
-                    egui::pos2(b.x, bottom),
-                    egui::pos2(a.x, bottom),
-                ],
+                vec![a, b, egui::pos2(b.x, bottom), egui::pos2(a.x, bottom)],
                 fill_color,
                 egui::Stroke::NONE,
             ));
@@ -318,11 +315,7 @@ fn paint_sparkline(
         ));
         if let Some(&p) = points.last() {
             painter.circle_filled(p, 2.6, color);
-            painter.circle_stroke(
-                p,
-                2.6,
-                egui::Stroke::new(1.0, ui.visuals().panel_fill),
-            );
+            painter.circle_stroke(p, 2.6, egui::Stroke::new(1.0, ui.visuals().panel_fill));
         }
     } else if let Some(&p) = points.first() {
         painter.circle_filled(p, 2.6, color);

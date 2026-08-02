@@ -6,21 +6,21 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use russh::client::{self, Handle, KeyboardInteractiveAuthResponse};
-use russh::keys::{decode_secret_key, load_secret_key, PrivateKeyWithHashAlg};
+use russh::keys::{PrivateKeyWithHashAlg, decode_secret_key, load_secret_key};
 use russh_sftp::client::SftpSession;
 use tokio::time::timeout;
 
+use crate::connection::RepaintNotifier;
 use crate::connection::sftp_endpoint::{
-    mark_connected, mark_error, SftpDirEntry, SftpEndpoint, SftpProgress, SftpRequest, SftpStatInfo,
-    SftpStatus,
+    SftpDirEntry, SftpEndpoint, SftpProgress, SftpRequest, SftpStatInfo, SftpStatus,
+    mark_connected, mark_error,
 };
 use crate::connection::sftp_mux;
 use crate::connection::ssh_auth::ResolvedSshAuth;
 use crate::connection::ssh_keys;
-use crate::connection::RepaintNotifier;
+use crate::fs::FileEntry;
 use crate::fs::entry_info::EntryInfo;
 use crate::fs::transfer_progress::ByteProgress;
-use crate::fs::FileEntry;
 
 pub struct SftpClient {
     req_tx: mpsc::Sender<SftpRequest>,
@@ -99,14 +99,7 @@ impl SftpClient {
         let thread_status = status.clone();
         let thread_repaint = repaint.clone();
         let thread = thread::spawn(move || {
-            if let Err(e) = sftp_worker(
-                &host,
-                port,
-                auth,
-                req_rx,
-                thread_status,
-                thread_repaint,
-            ) {
+            if let Err(e) = sftp_worker(&host, port, auth, req_rx, thread_status, thread_repaint) {
                 log::error!("SFTP worker ended: {e}");
             }
         });
@@ -338,9 +331,9 @@ fn sftp_worker(
         }
     };
 
-    let sftp = match rt.block_on(async {
-        timeout(Duration::from_secs(25), connect_sftp(host, port, &auth)).await
-    }) {
+    let sftp = match rt
+        .block_on(async { timeout(Duration::from_secs(25), connect_sftp(host, port, &auth)).await })
+    {
         Ok(Ok(sftp)) => {
             mark_connected(&status);
             notify();
@@ -454,11 +447,8 @@ async fn authenticate(
 
     let mut password = auth.password.clone();
     if auth.allow_default_keys {
-        password = password.or_else(|| {
-            std::env::var("SSH_PASSWORD")
-                .ok()
-                .filter(|p| !p.is_empty())
-        });
+        password =
+            password.or_else(|| std::env::var("SSH_PASSWORD").ok().filter(|p| !p.is_empty()));
     }
 
     if let Some(pw) = password.as_deref().filter(|p| !p.is_empty()) {

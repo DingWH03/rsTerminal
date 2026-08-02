@@ -1,6 +1,6 @@
 //! Secrets table CRUD (reserved for import / system keyring).
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::data::persist::types::{SecretBackendKind, SecretRecord};
 

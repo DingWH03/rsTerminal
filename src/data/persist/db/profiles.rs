@@ -1,10 +1,10 @@
 //! Terminal profiles table CRUD.
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 
+use crate::config::KeyboardMode;
 use crate::config::{BellStyle, CursorStyle, TerminalTheme, TerminalType};
 use crate::data::persist::types::TerminalProfile;
-use crate::config::KeyboardMode;
 
 pub fn list_all(conn: &Connection) -> rusqlite::Result<Vec<TerminalProfile>> {
     let mut stmt = conn.prepare(

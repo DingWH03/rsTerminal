@@ -1163,7 +1163,10 @@ mod tests {
         term.write(prompt_prefix);
         term.write(exit_pad);
         let baseline_prompt_rows = count_prompt_only_rows(&term);
-        assert!(baseline_prompt_rows >= 1, "expected at least one prompt row");
+        assert!(
+            baseline_prompt_rows >= 1,
+            "expected at least one prompt row"
+        );
 
         for cycle in 0..8 {
             term.resize(24, 120);
@@ -1256,7 +1259,9 @@ mod tests {
         // Reduced capture: after accepting `cd 111/`, omz autosuggest paints gray
         // `新项目5` at CUF 44 and restores with 7×BS.
         let mut term = Terminal::new(3, 100);
-        term.write(b"\x1b[01;32mdwh@dwh-82sk\x1b[00m \x1b[01;34m/tmp/rsterm-comp-test\x1b[00m \xc2\xbb ");
+        term.write(
+            b"\x1b[01;32mdwh@dwh-82sk\x1b[00m \x1b[01;34m/tmp/rsterm-comp-test\x1b[00m \xc2\xbb ",
+        );
         term.write(b"cd 111/");
         // autosuggest path from captured omz enter tail
         term.write(b"\r\r\n\x1b[J\x1b[A\x1b[44C\x1b[90m\xe6\x96\xb0\xe9\xa1\xb9\xe7\x9b\xae5\x1b[39m\x08\x08\x08\x08\x08\x08\x08");

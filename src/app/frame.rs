@@ -1,9 +1,7 @@
 //! Per-frame orchestration: tick → shell.render → dispatch actions → dialogs.
 
 use super::RsTerminalApp;
-use crate::data::prefs::save_prefs;
-use crate::session::{ConnectionViewAction, WorkspaceSession};
-use crate::ui::function_pane::pages::FunctionPage;
+use crate::session::WorkspaceSession;
 use crate::ui::page::dialogs::{FavoriteCommandOutcome, ProfileDialogOutcome};
 
 impl RsTerminalApp {
@@ -78,14 +76,16 @@ impl RsTerminalApp {
         if let Some(idx) = self.focused_session_index() {
             if let WorkspaceSession::Terminal(term) = &mut self.sessions[idx] {
                 let ctx = ctx.clone();
-                term.handle.repaint.set_wake(move || ctx.request_repaint());
+                term.core
+                    .handle
+                    .repaint
+                    .set_wake(move || ctx.request_repaint());
             }
         }
 
         // Only modal dialogs block the host (quit / connection failure).
         // Ordinary windows stay interactive with the main UI underneath.
-        let suppress_terminal_input =
-            self.show_quit_dialog || self.connection_notice.is_some();
+        let suppress_terminal_input = self.show_quit_dialog || self.connection_notice.is_some();
 
         let render = self.shell.render(
             ui,
@@ -101,119 +101,14 @@ impl RsTerminalApp {
             suppress_terminal_input,
         );
 
-        crate::session::tick_all_session_files(
-            &mut self.sessions,
-            &self.saved_connections,
-            &self.auth_users,
-        );
-
         if self.shell.sync_focus_change(&mut self.sessions) {
             self.apply_focused_session_terminal_font(&ctx);
         }
 
-        if render.settings_closed {
-            self.shell.layout.settings_dialog_open = false;
-            save_prefs(&self.prefs);
-            self.live_font_size = self.resolve_profile(None).font_size;
-            self.reload_terminal_fonts(&ctx);
-        }
-
-        // Settings → Users / Profiles nested page actions.
-        if render.auth_users_action.new {
-            self.dialogs.auth_user.open_new();
-            self.release_terminal_keyboard_focus(&ctx);
-        }
-        if let Some(id) = render.auth_users_action.edit_id.clone() {
-            if let Some(user) = self.auth_users.iter().find(|u| u.id == id).cloned() {
-                self.dialogs.auth_user.open_edit(&user);
-                self.release_terminal_keyboard_focus(&ctx);
-            }
-        }
-        if let Some(id) = render.auth_users_action.delete_id.clone() {
-            self.delete_auth_user(&id);
-        }
-        if render.request_new_profile {
-            self.dialogs.profile.open_new();
-            self.release_terminal_keyboard_focus(&ctx);
-        }
-        if let Some(id) = render.request_edit_profile.clone() {
-            if let Some(profile) = self.profiles.iter().find(|p| p.id == id).cloned() {
-                self.dialogs.profile.open_edit(&profile);
-                self.release_terminal_keyboard_focus(&ctx);
-            }
-        }
-        if let Some(id) = render.delete_profile_id.clone() {
-            self.delete_profile(&id);
-        }
-        if let Some(id) = render.set_default_profile_id.clone() {
-            self.set_default_profile(&id);
-        }
-
-        let fa = &render.function_action;
-        let wa = &render.workspace_action;
-
-        if fa.new_connection {
-            self.dialogs.new_conn.open_new();
-            self.release_terminal_keyboard_focus(&ctx);
-        }
-        if fa.new_favorite_command {
-            self.dialogs.favorite_cmd.open_new();
-            self.release_terminal_keyboard_focus(&ctx);
-        }
-        if let Some(ref id) = fa.connect_connection {
-            self.connect_to(id);
-            self.shell.layout.function_page = FunctionPage::Active;
-        }
-        if let Some(ref id) = fa.open_file_mgr {
-            self.open_file_manager_for_connection(id);
-        }
-        if let Some(ref id) = fa.edit_connection {
-            if let Some(conn) = self.saved_connections.iter().find(|c| c.id == *id) {
-                self.dialogs.new_conn.open_edit(conn);
-                self.release_terminal_keyboard_focus(&ctx);
-            }
-        }
-        if let Some(ref id) = fa.delete_connection {
-            self.delete_connection(id);
-        }
-        if let Some(ref id) = fa.close_session {
-            self.close_session(id);
-        }
-        if let Some(ref id) = fa.duplicate_session {
-            self.duplicate_session(id);
-            if self.shell.function_pane.overlay_visible() {
-                self.shell.function_pane.close_overlay();
-            }
-        }
-        if let Some(ref id) = fa.run_favorite_command {
-            self.run_favorite_command(id, &ctx);
-        }
-        if let Some(ref id) = fa.edit_favorite_command {
-            if let Some(cmd) = self.favorite_commands.iter().find(|c| c.id == *id).cloned() {
-                self.dialogs.favorite_cmd.open_edit(&cmd);
-                self.release_terminal_keyboard_focus(&ctx);
-            }
-        }
-        if let Some(ref id) = fa.delete_favorite_command {
-            self.delete_favorite_command(id);
-        }
-
-        if let Some(req) = wa.connect_from_empty.clone() {
-            self.connect_to_pane(&req.connection_id, req.pane);
-        }
-        if let Some(pane) = wa.open_connections_from_empty {
-            self.shell.layout.workspace.focused_pane = pane;
-            self.shell.layout.connections_dialog_open = true;
-        }
+        self.dispatch_ui_actions(render.actions, &ctx);
 
         if let Some(apply) = self.dialogs.local_term.show(&ctx, &self.saved_connections) {
             self.apply_local_terminal_settings(apply);
-        }
-
-        if fa.toggle_settings || render.settings_closed {
-            save_prefs(&self.prefs);
-            self.live_font_size = self.resolve_profile(None).font_size;
-            self.reload_terminal_fonts(&ctx);
         }
 
         if self.dialogs.new_conn.request_new_auth_user {
@@ -227,9 +122,10 @@ impl RsTerminalApp {
             self.release_terminal_keyboard_focus(&ctx);
         }
 
-        if let Some(new_conn) =
-            self.dialogs.new_conn
-                .show(&ctx, &self.auth_users, &self.profiles)
+        if let Some(new_conn) = self
+            .dialogs
+            .new_conn
+            .show(&ctx, &self.auth_users, &self.profiles)
         {
             self.save_connection(new_conn);
         }
@@ -255,7 +151,7 @@ impl RsTerminalApp {
         }
 
         // Sync after shell.render so menu "Manage" opens same frame (not cleared).
-        if self.shell.layout.commands_manage_dialog_open {
+        if self.shell.layout.ui.commands_manage_dialog_open {
             self.dialogs.manage_commands.open = true;
         }
         let manage = self
@@ -263,7 +159,7 @@ impl RsTerminalApp {
             .manage_commands
             .show(&ctx, &self.favorite_commands);
         if !self.dialogs.manage_commands.open {
-            self.shell.layout.commands_manage_dialog_open = false;
+            self.shell.layout.ui.commands_manage_dialog_open = false;
         }
         if manage.new {
             self.dialogs.favorite_cmd.open_new();
@@ -277,23 +173,6 @@ impl RsTerminalApp {
         }
         if let Some(id) = manage.delete_id {
             self.delete_favorite_command(&id);
-        }
-
-        if let Some(pane) = wa.close_pane_session {
-            self.close_pane_and_maybe_session(pane);
-        }
-
-        if matches!(wa.terminal, ConnectionViewAction::CloseSession) || wa.file_manager.close {
-            let pane = wa
-                .terminal_pane
-                .unwrap_or(self.shell.layout.workspace.focused_pane);
-            self.close_pane_and_maybe_session(pane);
-        }
-        if let ConnectionViewAction::Reconnect(ref conn_id) = wa.terminal {
-            let pane = wa
-                .terminal_pane
-                .unwrap_or(self.shell.layout.workspace.focused_pane);
-            self.reconnect_ssh_session(pane, conn_id);
         }
 
         self.prefs.chrome.function_pane_width = Some(self.shell.layout.function_width);

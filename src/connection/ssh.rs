@@ -2,26 +2,26 @@
 
 use std::collections::HashMap;
 use std::future::Future;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 
 use russh::client::{self, Handle, KeyboardInteractiveAuthResponse};
-use russh::keys::{decode_secret_key, load_secret_key, PrivateKeyWithHashAlg};
+use russh::keys::{PrivateKeyWithHashAlg, decode_secret_key, load_secret_key};
 use russh::{Channel, ChannelMsg, Disconnect};
 use tokio::sync::mpsc::unbounded_channel;
 use tokio::time::timeout;
 
 use crate::connection::sftp_endpoint::{
-    mark_connected, mark_error, reply_sftp_gone, SftpEndpoint, SftpRequest, SftpStatus,
+    SftpEndpoint, SftpRequest, SftpStatus, mark_connected, mark_error, reply_sftp_gone,
 };
 use crate::connection::sftp_mux;
 use crate::connection::{
-    emit_conn_data, ssh_auth::ResolvedSshAuth, ssh_keys, ConnIn, ConnOut, ConnectionHandle,
-    ConnectionState, RepaintNotifier, SshConnectParams,
+    ConnIn, ConnOut, ConnectionHandle, ConnectionState, RepaintNotifier, SshConnectParams,
+    emit_conn_data, ssh_auth::ResolvedSshAuth, ssh_keys,
 };
-use crate::remote::protocol::{push_bytes, AgentToClient};
-use crate::remote::status::{MetricsEvent, SessionMetrics};
 use crate::remote::AGENT_SCRIPT;
+use crate::remote::protocol::{AgentToClient, push_bytes};
+use crate::remote::status::{MetricsEvent, SessionMetrics};
 
 pub use crate::config::SSH_OSC7_PROMPT_COMMAND;
 
@@ -250,9 +250,7 @@ async fn run_ssh_session(
                     path.as_deref().unwrap_or("stdin")
                 );
                 metrics.push_event(MetricsEvent::AgentStarted {
-                    remote_path: path
-                        .clone()
-                        .unwrap_or_else(|| "stdin:-".into()),
+                    remote_path: path.clone().unwrap_or_else(|| "stdin:-".into()),
                 });
                 repaint.request_repaint();
                 (Some(ch), buf, path)
@@ -465,10 +463,7 @@ async fn start_status_agent(
 }
 
 /// Drain channel messages until SSH `CHANNEL_SUCCESS` / `CHANNEL_FAILURE`.
-async fn wait_channel_success(
-    ch: &mut Channel<client::Msg>,
-    what: &str,
-) -> Result<(), String> {
+async fn wait_channel_success(ch: &mut Channel<client::Msg>, what: &str) -> Result<(), String> {
     loop {
         match timeout(Duration::from_secs(10), ch.wait()).await {
             Err(_) => return Err(format!("{what}: timed out waiting for CHANNEL_SUCCESS")),
@@ -481,7 +476,9 @@ async fn wait_channel_success(
                 return Err(format!("{what}: closed before reply"));
             }
             Ok(Some(ChannelMsg::ExitStatus { exit_status })) => {
-                return Err(format!("{what}: exited before start (status {exit_status})"));
+                return Err(format!(
+                    "{what}: exited before start (status {exit_status})"
+                ));
             }
             Ok(Some(ChannelMsg::Data { data }))
             | Ok(Some(ChannelMsg::ExtendedData { data, .. })) => {

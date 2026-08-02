@@ -26,20 +26,20 @@ pub(crate) mod serial;
 pub(crate) mod shell;
 
 #[cfg(target_os = "android")]
+pub(crate) mod android_back;
+#[cfg(target_os = "android")]
 pub(crate) mod android_btleplug;
 #[cfg(target_os = "android")]
 pub(crate) mod android_ime;
 #[cfg(target_os = "android")]
 pub(crate) mod android_storage;
-#[cfg(target_os = "android")]
-pub(crate) mod android_back;
 
 // ── Platform selection ──────────────────────────────────────────────────────
 
-#[cfg(not(target_os = "android"))]
-mod desktop;
 #[cfg(target_os = "android")]
 mod android;
+#[cfg(not(target_os = "android"))]
+mod desktop;
 
 // ── Platform trait ──────────────────────────────────────────────────────────
 
@@ -123,8 +123,6 @@ pub fn init_android_platform(app: &winit::platform::android::activity::AndroidAp
     }
 }
 
-
-
 /// Retrieve the current platform implementation.
 ///
 /// Panics if [`init_platform`] or [`init_android_platform`] was not called.
@@ -134,5 +132,3 @@ pub fn get() -> &'static dyn Platform {
         None => panic!("platform not initialised – call platform::init_platform() early in main"),
     }
 }
-
-

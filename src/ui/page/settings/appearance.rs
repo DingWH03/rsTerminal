@@ -60,11 +60,8 @@ pub fn page(ui: &mut egui::Ui, ctx: &mut SettingsPageCtx<'_>) {
                 let (rect, _) =
                     ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::hover());
                 if ui.is_rect_visible(rect) {
-                    ui.painter().rect_filled(
-                        rect,
-                        3.0,
-                        egui::Color32::from_rgb(c[0], c[1], c[2]),
-                    );
+                    ui.painter()
+                        .rect_filled(rect, 3.0, egui::Color32::from_rgb(c[0], c[1], c[2]));
                 }
             }
         });

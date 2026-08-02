@@ -10,11 +10,11 @@ use btleplug::platform::Manager;
 use futures::StreamExt;
 use uuid::Uuid;
 
-use crate::connection::{
-    emit_conn_port_data, emit_conn_ports_changed, ConnIn, ConnOut, ConnectionHandle,
-    ConnectionPort, ConnectionPortKind, ConnectionState, RepaintNotifier,
-};
 use crate::connection::BleConnectParams;
+use crate::connection::{
+    ConnIn, ConnOut, ConnectionHandle, ConnectionPort, ConnectionPortKind, ConnectionState,
+    RepaintNotifier, emit_conn_port_data, emit_conn_ports_changed,
+};
 
 // ---------------------------------------------------------------------------
 // Built-in BLE terminal profiles

@@ -4,25 +4,37 @@
 //! 提供文件复制、移动、删除、重命名、信息查看等操作，
 //! 以及后台文件传输（上传/下载）支持。
 
+mod context_menu;
+mod dialogs;
+mod dnd;
+mod list;
+mod ops;
 pub mod transfer;
 
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use egui::{Key, Modifiers};
+use egui::Key;
 
-use crate::fs::entry_info;
-use crate::fs::local;
-use crate::fs::sftp::{join_remote, SftpClient};
 use crate::fs::FileEntry;
+use crate::fs::sftp::SftpClient;
 use crate::session::{
-    FileActivePane, FileClipboard, FileClipboardMode, FileManagerMode, FileManagerSession,
-    InfoDialog, PaneState, RemotePane, RenameDialog,
+    FileActivePane, FileClipboard, FileManagerMode, FileManagerSession, FilePaneState, InfoDialog,
+    RemotePane, RenameDialog,
 };
-use crate::ui::page::file_manager::transfer::{apply_transfer_done, PasteTarget};
 use crate::ui::function_pane::FunctionPane;
+use crate::ui::page::file_manager::transfer::apply_transfer_done;
 use crate::ui::uiframe::style;
+
+use self::context_menu::{
+    install_context_menu, paint_blank_context_menu, row_context_menu_local, row_context_menu_remote,
+};
+use self::dialogs::{show_info_dialog, show_rename_dialog};
+use self::dnd::{apply_external_drag_out, apply_external_drop};
+use self::list::{apply_selection_click, handle_list_keyboard};
+use self::ops::{
+    paste_into_pane, refresh_if_needed, run_local_ops, run_remote_ops, transfer_to_opposite_pane,
+};
 
 /// 文件管理器操作结果。
 #[derive(Debug, Default)]
@@ -33,53 +45,26 @@ pub struct FileManagerAction {
 
 /// 面板操作集合。
 #[derive(Default)]
-struct PaneOps {
-    go_up: bool,
-    open_index: Option<usize>,
-    paste: bool,
+pub(super) struct PaneOps {
+    pub(super) go_up: bool,
+    pub(super) open_index: Option<usize>,
+    pub(super) paste: bool,
     /// Leave multi-select mode and clear row highlights (bottom bar / Cancel).
-    dismiss_multiselect: bool,
+    pub(super) dismiss_multiselect: bool,
     /// Copy / cut / delete targets (bottom bar, keyboard, or context menu).
-    bulk_copy: Option<Vec<usize>>,
-    bulk_cut: Option<Vec<usize>>,
-    bulk_delete: Option<Vec<usize>>,
-    rename_index: Option<usize>,
-    info_index: Option<usize>,
+    pub(super) bulk_copy: Option<Vec<usize>>,
+    pub(super) bulk_cut: Option<Vec<usize>>,
+    pub(super) bulk_delete: Option<Vec<usize>>,
+    pub(super) rename_index: Option<usize>,
+    pub(super) info_index: Option<usize>,
     /// External files dropped onto this pane (desktop inbound).
-    dropped_paths: Vec<std::path::PathBuf>,
+    pub(super) dropped_paths: Vec<std::path::PathBuf>,
     /// Local file rows dragged out (desktop outbound).
-    drag_out_indices: Vec<usize>,
+    pub(super) drag_out_indices: Vec<usize>,
 }
 
 /// 底部操作栏高度
 const BOTTOM_BAR_H: f32 = 40.0;
-/// 上下文菜单最小宽度
-const CONTEXT_MENU_MIN_WIDTH: f32 = 140.0;
-
-/// 安装右键上下文菜单（同时支持触摸长按）。
-fn install_context_menu(
-    _ui: &egui::Ui,
-    resp: &egui::Response,
-    mut build: impl FnMut(&mut egui::Ui),
-) {
-    let menu_id = resp.id.with("ctx_popup");
-    resp.context_menu(|ui| build(ui));
-    if resp.long_touched() {
-        egui::Popup::open_id(&resp.ctx, menu_id);
-    }
-    let long_touch_open = resp
-        .long_touched()
-        .then_some(egui::SetOpenCommand::Bool(true));
-    egui::Popup::from_response(resp)
-        .id(menu_id)
-        .open_memory(long_touch_open)
-        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-        .show(|ui| {
-            ui.set_min_width(CONTEXT_MENU_MIN_WIDTH);
-            build(ui);
-        });
-}
-
 /// 文件管理器主视图渲染入口。
 ///
 /// 处理刷新、传输轮询、标题栏、双面板布局、键盘快捷键（F5 传输）等。
@@ -153,9 +138,7 @@ pub fn file_manager_view(
 
     let block_pane_keyboard = session.rename_dialog.open || session.info_dialog.open;
 
-    if !block_pane_keyboard
-        && !session.transfer.is_active()
-        && ui.input(|i| i.key_pressed(Key::F5))
+    if !block_pane_keyboard && !session.transfer.is_active() && ui.input(|i| i.key_pressed(Key::F5))
     {
         transfer_to_opposite_pane(session);
     }
@@ -167,58 +150,60 @@ pub fn file_manager_view(
     let pane_size = egui::vec2(pane_w, pane_h);
     ui.horizontal(|ui| {
         ui.set_min_height(pane_h);
-        paint_pane_column(ui, pane_size, |ui| {
-            match session.mode {
-                FileManagerMode::SshSftp => {
-                    if let Some(remote) = session.remote.as_mut() {
-                        let (clicked, ops) = paint_remote_pane(
-                            ui,
-                            remote,
-                            &mut session.remote_anchor,
-                            &mut session.clipboard,
-                            &mut session.status,
-                            &mut session.rename_dialog,
-                            &mut session.info_dialog,
-                            "fm_scroll_remote",
-                            has_clipboard,
-                            block_pane_keyboard,
-                            session.active_pane == FileActivePane::Remote,
-                        );
-                        if clicked {
-                            session.active_pane = FileActivePane::Remote;
-                        }
-                        if ops.paste {
-                            paste_into_pane(session, FileActivePane::Remote);
-                        }
-                        apply_external_drop(session, FileActivePane::Remote, &ops.dropped_paths);
+        paint_pane_column(ui, pane_size, |ui| match session.mode {
+            FileManagerMode::SshSftp => {
+                if let Some(remote) = session.remote.as_mut() {
+                    let (clicked, ops) = paint_remote_pane(
+                        ui,
+                        remote,
+                        &mut session.remote_anchor,
+                        &mut session.clipboard,
+                        &mut session.status,
+                        &mut session.rename_dialog,
+                        &mut session.info_dialog,
+                        "fm_scroll_remote",
+                        has_clipboard,
+                        block_pane_keyboard,
+                        session.active_pane == FileActivePane::Remote,
+                    );
+                    if clicked {
+                        session.active_pane = FileActivePane::Remote;
                     }
+                    if ops.paste {
+                        paste_into_pane(session, FileActivePane::Remote);
+                    }
+                    apply_external_drop(session, FileActivePane::Remote, &ops.dropped_paths);
                 }
-                FileManagerMode::LocalDual => {
-                    if let Some(left) = session.left_local.as_mut() {
-                        let (clicked, ops) = paint_local_pane(
-                            ui,
-                            left,
-                            FileActivePane::LeftLocal,
-                            &mut session.local_anchor,
-                            &mut session.clipboard,
-                            &mut session.status,
-                            &mut session.rename_dialog,
-                            &mut session.info_dialog,
-                            None,
-                            "fm_scroll_left",
-                            has_clipboard,
-                            block_pane_keyboard,
-                            session.active_pane == FileActivePane::LeftLocal,
-                        );
-                        if clicked {
-                            session.active_pane = FileActivePane::LeftLocal;
-                        }
-                        if ops.paste {
-                            paste_into_pane(session, FileActivePane::LeftLocal);
-                        }
-                        apply_external_drop(session, FileActivePane::LeftLocal, &ops.dropped_paths);
-                        apply_external_drag_out(session, FileActivePane::LeftLocal, &ops.drag_out_indices);
+            }
+            FileManagerMode::LocalDual => {
+                if let Some(left) = session.left_local.as_mut() {
+                    let (clicked, ops) = paint_local_pane(
+                        ui,
+                        left,
+                        FileActivePane::LeftLocal,
+                        &mut session.local_anchor,
+                        &mut session.clipboard,
+                        &mut session.status,
+                        &mut session.rename_dialog,
+                        &mut session.info_dialog,
+                        None,
+                        "fm_scroll_left",
+                        has_clipboard,
+                        block_pane_keyboard,
+                        session.active_pane == FileActivePane::LeftLocal,
+                    );
+                    if clicked {
+                        session.active_pane = FileActivePane::LeftLocal;
                     }
+                    if ops.paste {
+                        paste_into_pane(session, FileActivePane::LeftLocal);
+                    }
+                    apply_external_drop(session, FileActivePane::LeftLocal, &ops.dropped_paths);
+                    apply_external_drag_out(
+                        session,
+                        FileActivePane::LeftLocal,
+                        &ops.drag_out_indices,
+                    );
                 }
             }
         });
@@ -260,7 +245,11 @@ pub fn file_manager_view(
 }
 
 /// 固定大小的列容器，确保左面板不会重叠右面板并窃取点击事件。
-fn paint_pane_column<R>(ui: &mut egui::Ui, size: egui::Vec2, body: impl FnOnce(&mut egui::Ui) -> R) -> R {
+fn paint_pane_column<R>(
+    ui: &mut egui::Ui,
+    size: egui::Vec2,
+    body: impl FnOnce(&mut egui::Ui) -> R,
+) -> R {
     let rect = egui::Rect::from_min_size(ui.cursor().min, size);
     let _ = ui.allocate_exact_size(size, egui::Sense::hover());
     ui.scope_builder(egui::UiBuilder::new().max_rect(rect), body)
@@ -268,268 +257,6 @@ fn paint_pane_column<R>(ui: &mut egui::Ui, size: egui::Vec2, body: impl FnOnce(&
 }
 
 // toolbar_button 已迁移到 crate::ui::uiframe::components::toolbar_button
-
-/// 获取当前面板的对侧面板。
-fn opposite_pane(active: FileActivePane, mode: FileManagerMode) -> FileActivePane {
-    match mode {
-        FileManagerMode::SshSftp => match active {
-            FileActivePane::Remote => FileActivePane::Right,
-            _ => FileActivePane::Remote,
-        },
-        FileManagerMode::LocalDual => match active {
-            FileActivePane::LeftLocal => FileActivePane::Right,
-            _ => FileActivePane::LeftLocal,
-        },
-    }
-}
-
-/// 将当前面板的文件传输到对侧面板（F5 快捷键）。
-fn transfer_to_opposite_pane(session: &mut FileManagerSession) {
-    let active = session.active_pane;
-    copy_from_pane(session, active);
-    let dest = opposite_pane(active, session.mode);
-    paste_into_pane(session, dest);
-    session.status = Some("Transferred to opposite pane".into());
-}
-
-/// 从指定面板复制选中的文件路径到剪贴板。
-fn copy_from_pane(session: &mut FileManagerSession, pane: FileActivePane) {
-    let clip = match pane {
-        FileActivePane::Remote => session.remote.as_ref().map(|remote| {
-            let paths = selected_remote_paths(remote);
-            (paths, true)
-        }),
-        FileActivePane::LeftLocal => session.left_local.as_ref().map(|left| {
-            let paths: Vec<String> = selected_local_paths(left)
-                .into_iter()
-                .map(|p| p.to_string_lossy().into_owned())
-                .collect();
-            (paths, false)
-        }),
-        FileActivePane::Right => {
-            let paths: Vec<String> = selected_local_paths(&session.right)
-                .into_iter()
-                .map(|p| p.to_string_lossy().into_owned())
-                .collect();
-            Some((paths, false))
-        }
-    };
-    if let Some((paths, from_remote)) = clip.filter(|(p, _)| !p.is_empty()) {
-        session.clipboard = Some(FileClipboard {
-            mode: FileClipboardMode::Copy,
-            from_remote,
-            paths,
-        });
-    }
-}
-
-/// Apply external OS file drops into a file-manager pane (desktop only).
-fn apply_external_drop(
-    session: &mut FileManagerSession,
-    pane: FileActivePane,
-    paths: &[std::path::PathBuf],
-) {
-    if paths.is_empty() {
-        return;
-    }
-    #[cfg(any(target_os = "linux", target_os = "windows"))]
-    {
-        match pane {
-            FileActivePane::Right => {
-                let cwd = session.right.cwd.clone();
-                for src in paths {
-                    let dest = crate::platform::dnd::dest_path(&cwd, src);
-                    if src.is_dir() {
-                        let _ = copy_dir_recursive_fm(src, &dest);
-                    } else if let Err(e) = std::fs::copy(src, &dest) {
-                        session.status = Some(e.to_string());
-                    }
-                }
-                session.right.loading = true;
-            }
-            FileActivePane::LeftLocal => {
-                if let Some(left) = session.left_local.as_mut() {
-                    let cwd = left.cwd.clone();
-                    for src in paths {
-                        let dest = crate::platform::dnd::dest_path(&cwd, src);
-                        if src.is_dir() {
-                            let _ = copy_dir_recursive_fm(src, &dest);
-                        } else if let Err(e) = std::fs::copy(src, &dest) {
-                            session.status = Some(e.to_string());
-                        }
-                    }
-                    left.loading = true;
-                }
-            }
-            FileActivePane::Remote => {
-                if let Some(remote) = session.remote.as_ref() {
-                    let cwd = remote.cwd.clone();
-                    let client = Arc::clone(&remote.client);
-                    for src in paths {
-                        let name = src
-                            .file_name()
-                            .map(|n| n.to_string_lossy().into_owned())
-                            .unwrap_or_else(|| "dropped".into());
-                        let remote_path = join_remote(&cwd, &name);
-                        if let Err(e) = client.upload(src, &remote_path) {
-                            session.status = Some(e);
-                        }
-                    }
-                    if let Some(remote) = session.remote.as_mut() {
-                        remote.loading = true;
-                    }
-                }
-            }
-        }
-    }
-    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
-    {
-        let _ = (session, pane, paths);
-    }
-}
-
-fn apply_external_drag_out(
-    session: &FileManagerSession,
-    pane: FileActivePane,
-    indices: &[usize],
-) {
-    if indices.is_empty() {
-        return;
-    }
-    #[cfg(any(target_os = "linux", target_os = "windows"))]
-    {
-        let paths: Vec<std::path::PathBuf> = match pane {
-            FileActivePane::Right => indices
-                .iter()
-                .filter_map(|&i| session.right.entries.get(i))
-                .map(|e| local::join_path(&session.right.cwd, &e.name))
-                .collect(),
-            FileActivePane::LeftLocal => session
-                .left_local
-                .as_ref()
-                .map(|left| {
-                    indices
-                        .iter()
-                        .filter_map(|&i| left.entries.get(i))
-                        .map(|e| local::join_path(&left.cwd, &e.name))
-                        .collect()
-                })
-                .unwrap_or_default(),
-            FileActivePane::Remote => Vec::new(),
-        };
-        let _ = crate::platform::dnd::begin_file_drag_out(&paths);
-    }
-    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
-    {
-        let _ = (session, pane, indices);
-    }
-}
-
-#[cfg(any(target_os = "linux", target_os = "windows"))]
-fn copy_dir_recursive_fm(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
-    std::fs::create_dir_all(dest).map_err(|e| e.to_string())?;
-    for entry in std::fs::read_dir(src).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let ty = entry.file_type().map_err(|e| e.to_string())?;
-        let to = dest.join(entry.file_name());
-        if ty.is_dir() {
-            copy_dir_recursive_fm(&entry.path(), &to)?;
-        } else {
-            std::fs::copy(entry.path(), &to).map_err(|e| e.to_string())?;
-        }
-    }
-    Ok(())
-}
-
-/// 将剪贴板内容粘贴到指定面板（启动文件传输）。
-fn paste_into_pane(session: &mut FileManagerSession, pane: FileActivePane) {
-    let Some(clip) = session.clipboard.clone() else {
-        session.status = Some("Clipboard is empty".into());
-        return;
-    };
-    if session.transfer.is_active() {
-        session.status = Some("Transfer already in progress".into());
-        return;
-    }
-    let remote_client = session.remote.as_ref().map(|r| Arc::clone(&r.client));
-    match pane {
-        FileActivePane::Remote => {
-            let Some(remote) = session.remote.as_ref() else {
-                return;
-            };
-            session.transfer.start_paste(
-                PasteTarget::Remote,
-                clip,
-                None,
-                Some(remote.cwd.clone()),
-                remote_client,
-            );
-        }
-        FileActivePane::LeftLocal => {
-            let Some(left) = session.left_local.as_ref() else {
-                return;
-            };
-            session.transfer.start_paste(
-                PasteTarget::LocalLeft,
-                clip,
-                Some(left.cwd.clone()),
-                None,
-                remote_client,
-            );
-        }
-        FileActivePane::Right => {
-            session.transfer.start_paste(
-                PasteTarget::LocalRight,
-                clip,
-                Some(session.right.cwd.clone()),
-                None,
-                remote_client,
-            );
-        }
-    }
-}
-
-/// 如果需要，刷新文件管理器面板的内容。
-fn refresh_if_needed(session: &mut FileManagerSession) {
-    if let Some(remote) = session.remote.as_mut() {
-        if remote.loading {
-            // Check if the SFTP connection is ready yet.
-            if let Some(err) = remote.client.connection_error() {
-                remote.loading = false;
-                remote.error = Some(err);
-            } else if remote.client.is_connected() {
-                remote.loading = false;
-                match remote.client.list_dir(&remote.cwd) {
-                    Ok(entries) => {
-                        remote.entries = entries;
-                        remote.error = None;
-                    }
-                    Err(e) => remote.error = Some(e),
-                }
-            }
-            // else: still connecting — keep loading = true, try again next frame
-        }
-    }
-    if let Some(left) = session.left_local.as_mut() {
-        refresh_local_pane(left);
-    }
-    refresh_local_pane(&mut session.right);
-}
-
-/// 刷新本地面板的文件列表。
-fn refresh_local_pane(pane: &mut PaneState) {
-    if !pane.loading {
-        return;
-    }
-    pane.loading = false;
-    match local::list_dir(&pane.cwd) {
-        Ok(entries) => {
-            pane.entries = entries;
-            pane.error = None;
-        }
-        Err(e) => pane.error = Some(e),
-    }
-}
 
 /// 渲染远程 SFTP 面板：工具栏、文件列表、底部操作栏。
 fn paint_remote_pane(
@@ -550,7 +277,12 @@ fn paint_remote_pane(
     let mut list_clicked = false;
 
     ui.vertical(|ui| {
-        if paint_pane_toolbar(ui, &remote.cwd, &mut remote.select_mode, &mut remote.selected) {
+        if paint_pane_toolbar(
+            ui,
+            &remote.cwd,
+            &mut remote.select_mode,
+            &mut remote.selected,
+        ) {
             ops.go_up = true;
         }
         if let Some(err) = &remote.error {
@@ -593,7 +325,6 @@ fn paint_remote_pane(
             &mut ops,
         );
         run_remote_ops(
-            ui,
             remote,
             clipboard,
             status,
@@ -609,7 +340,7 @@ fn paint_remote_pane(
 /// 渲染本地面板：工具栏、文件列表、底部操作栏。
 fn paint_local_pane(
     ui: &mut egui::Ui,
-    pane: &mut PaneState,
+    pane: &mut FilePaneState,
     pane_side: FileActivePane,
     anchor: &mut Option<usize>,
     clipboard: &mut Option<FileClipboard>,
@@ -671,7 +402,6 @@ fn paint_local_pane(
             &mut ops,
         );
         run_local_ops(
-            ui,
             pane,
             pane_side,
             clipboard,
@@ -683,28 +413,6 @@ fn paint_local_pane(
     });
 
     (list_clicked, ops)
-}
-
-/// Normal mode: right-click empty list area → horizontal Paste menu only.
-fn paint_blank_context_menu(ui: &mut egui::Ui, has_clipboard: bool, ops: &mut PaneOps) {
-    paint_horizontal_context_menu(ui, |ui| {
-        if has_clipboard {
-            if ui.button("Paste").clicked() {
-                ops.paste = true;
-                ui.close();
-            }
-        } else {
-            ui.label(egui::RichText::new("Clipboard empty").weak());
-        }
-    });
-}
-
-fn paint_horizontal_context_menu(ui: &mut egui::Ui, content: impl FnOnce(&mut egui::Ui)) {
-    ui.set_min_width(CONTEXT_MENU_MIN_WIDTH);
-    ui.horizontal(|ui| {
-        ui.style_mut().spacing.item_spacing.x = 8.0;
-        content(ui);
-    });
 }
 
 /// Multi-select on: Copy / Cut / Delete / Cancel — any click ends multi-select.
@@ -889,7 +597,7 @@ fn paint_local_list(
     ui: &mut egui::Ui,
     pane_focus_id: egui::Id,
     scroll_id: &str,
-    pane: &mut PaneState,
+    pane: &mut FilePaneState,
     anchor: &mut Option<usize>,
     _clipboard: &mut Option<FileClipboard>,
     _status: &mut Option<String>,
@@ -965,427 +673,6 @@ fn paint_local_list(
     interacted
 }
 
-fn handle_list_keyboard(
-    ui: &egui::Ui,
-    entries: &[FileEntry],
-    selected: &mut HashSet<usize>,
-    focus_index: &mut Option<usize>,
-    select_mode: bool,
-    anchor: &mut Option<usize>,
-    ops: &mut PaneOps,
-) {
-    if ui.ctx().egui_wants_keyboard_input() {
-        return;
-    }
-
-    let len = entries.len();
-    if len == 0 {
-        return;
-    }
-
-    let input = ui.input(|inp| inp.clone());
-
-    if input.key_pressed(Key::A) && input.modifiers.ctrl {
-        selected.clear();
-        for i in 0..len {
-            selected.insert(i);
-        }
-        *focus_index = Some(0);
-        *anchor = Some(0);
-        return;
-    }
-
-    if input.key_pressed(Key::C) && input.modifiers.ctrl {
-        let indices: Vec<usize> = selected.iter().copied().collect();
-        if !indices.is_empty() {
-            ops.bulk_copy = Some(indices);
-            if select_mode {
-                ops.dismiss_multiselect = true;
-            }
-        }
-        return;
-    }
-    if input.key_pressed(Key::X) && input.modifiers.ctrl {
-        let indices: Vec<usize> = selected.iter().copied().collect();
-        if !indices.is_empty() {
-            ops.bulk_cut = Some(indices);
-            if select_mode {
-                ops.dismiss_multiselect = true;
-            }
-        }
-        return;
-    }
-    if input.key_pressed(Key::V) && input.modifiers.ctrl {
-        ops.paste = true;
-        return;
-    }
-    if input.key_pressed(Key::Delete) {
-        let indices: Vec<usize> = selected.iter().copied().collect();
-        if !indices.is_empty() {
-            ops.bulk_delete = Some(indices);
-            if select_mode {
-                ops.dismiss_multiselect = true;
-            }
-        }
-        return;
-    }
-
-    if input.key_pressed(Key::Backspace) || input.key_pressed(Key::ArrowLeft) {
-        ops.go_up = true;
-        return;
-    }
-
-    if input.key_pressed(Key::Space) && select_mode {
-        if let Some(idx) = *focus_index {
-            toggle_index(selected, idx);
-            *anchor = Some(idx);
-        }
-        return;
-    }
-
-    if input.key_pressed(Key::ArrowRight) || input.key_pressed(Key::Enter) {
-        if let Some(idx) = *focus_index {
-            if entries.get(idx).is_some_and(|e| e.is_dir) {
-                ops.open_index = Some(idx);
-            }
-        }
-        return;
-    }
-
-    let delta = if input.key_pressed(Key::ArrowDown) {
-        1
-    } else if input.key_pressed(Key::ArrowUp) {
-        -1
-    } else {
-        return;
-    };
-
-    let next = match *focus_index {
-        Some(i) => (i as i32 + delta).clamp(0, len as i32 - 1) as usize,
-        None => if delta > 0 { 0 } else { len - 1 },
-    };
-
-    if input.modifiers.shift {
-        let a = anchor.unwrap_or(next);
-        selected.clear();
-        let lo = a.min(next);
-        let hi = a.max(next);
-        for i in lo..=hi {
-            selected.insert(i);
-        }
-    } else if !select_mode {
-        selected.clear();
-        selected.insert(next);
-        *anchor = Some(next);
-    } else {
-        *anchor = Some(next);
-    }
-    *focus_index = Some(next);
-}
-
-/// Left-click only; right-click is handled solely by context menus.
-fn apply_selection_click(
-    selected: &mut HashSet<usize>,
-    focus_index: &mut Option<usize>,
-    anchor: &mut Option<usize>,
-    select_mode: bool,
-    idx: usize,
-    mods: Modifiers,
-) {
-    *focus_index = Some(idx);
-
-    if mods.shift {
-        if let Some(a) = *anchor {
-            selected.clear();
-            let lo = a.min(idx);
-            let hi = a.max(idx);
-            for i in lo..=hi {
-                selected.insert(i);
-            }
-        } else {
-            selected.clear();
-            selected.insert(idx);
-            *anchor = Some(idx);
-        }
-        return;
-    }
-
-    if mods.ctrl {
-        toggle_index(selected, idx);
-        *anchor = Some(idx);
-        return;
-    }
-
-    if select_mode {
-        toggle_index(selected, idx);
-        *anchor = Some(idx);
-        return;
-    }
-
-    selected.clear();
-    selected.insert(idx);
-    *anchor = Some(idx);
-}
-
-fn toggle_index(selected: &mut HashSet<usize>, idx: usize) {
-    if selected.contains(&idx) {
-        selected.remove(&idx);
-    } else {
-        selected.insert(idx);
-    }
-}
-
-fn dismiss_multiselect_local(pane: &mut PaneState) {
-    pane.select_mode = false;
-    pane.selected.clear();
-}
-
-fn dismiss_multiselect_remote(remote: &mut RemotePane) {
-    remote.select_mode = false;
-    remote.selected.clear();
-}
-
-fn run_local_ops(
-    _ui: &mut egui::Ui,
-    pane: &mut PaneState,
-    pane_side: FileActivePane,
-    clipboard: &mut Option<FileClipboard>,
-    status: &mut Option<String>,
-    rename_dialog: &mut RenameDialog,
-    info_dialog: &mut InfoDialog,
-    ops: &mut PaneOps,
-) {
-    if ops.go_up {
-        parent_local(pane);
-        pane.loading = true;
-    }
-    if let Some(i) = ops.open_index.take() {
-        open_local_entry(pane, i);
-    }
-
-    if let Some(indices) = ops.bulk_copy.take() {
-        copy_local_indices(pane, &indices, clipboard, status);
-    }
-    if let Some(indices) = ops.bulk_cut.take() {
-        cut_local_indices(pane, &indices, clipboard, status);
-    }
-    if let Some(indices) = ops.bulk_delete.take() {
-        delete_local_indices(pane, &indices, status);
-    }
-
-    if let Some(idx) = ops.rename_index.take() {
-        if let Some(ent) = pane.entries.get(idx) {
-            rename_dialog.open_for(pane_side, &ent.name);
-        }
-    }
-
-    if let Some(idx) = ops.info_index.take() {
-        if let Some(ent) = pane.entries.get(idx) {
-            let path = local::join_path(&pane.cwd, &ent.name);
-            match entry_info::local_entry_info(&path) {
-                Ok(info) => info_dialog.show(info),
-                Err(e) => *status = Some(e),
-            }
-        }
-    }
-
-    if ops.dismiss_multiselect {
-        dismiss_multiselect_local(pane);
-    }
-}
-
-fn run_remote_ops(
-    _ui: &mut egui::Ui,
-    remote: &mut RemotePane,
-    clipboard: &mut Option<FileClipboard>,
-    status: &mut Option<String>,
-    rename_dialog: &mut RenameDialog,
-    info_dialog: &mut InfoDialog,
-    ops: &mut PaneOps,
-) {
-    if ops.go_up {
-        parent_remote(remote);
-        remote.loading = true;
-    }
-    if let Some(i) = ops.open_index.take() {
-        open_remote_entry(remote, i);
-    }
-
-    if let Some(indices) = ops.bulk_copy.take() {
-        copy_remote_indices(remote, &indices, clipboard, status);
-    }
-    if let Some(indices) = ops.bulk_cut.take() {
-        cut_remote_indices(remote, &indices, clipboard, status);
-    }
-    if let Some(indices) = ops.bulk_delete.take() {
-        delete_remote_indices(remote, &indices, status);
-    }
-
-    if let Some(idx) = ops.rename_index.take() {
-        if let Some(ent) = remote.entries.get(idx) {
-            rename_dialog.open_for(FileActivePane::Remote, &ent.name);
-        }
-    }
-
-    if let Some(idx) = ops.info_index.take() {
-        if let Some(ent) = remote.entries.get(idx) {
-            let path = join_remote(&remote.cwd, &ent.name);
-            match remote.client.entry_info(&path) {
-                Ok(info) => info_dialog.show(info),
-                Err(e) => *status = Some(e),
-            }
-        }
-    }
-
-    if ops.dismiss_multiselect {
-        dismiss_multiselect_remote(remote);
-    }
-}
-
-fn show_info_dialog(ctx: &egui::Context, session: &mut FileManagerSession) {
-    if !session.info_dialog.open {
-        return;
-    }
-
-    use crate::ui::uiframe::{DialogFrame, DialogOutcome};
-
-    let mut close = false;
-    let frame = DialogFrame::new("Info").size(420.0, 360.0);
-    if frame.show(ctx, "file_info_dialog", |ui| {
-            egui::Grid::new("file_info_grid")
-                .num_columns(2)
-                .spacing([12.0, 6.0])
-                .show(ui, |ui| {
-                    for crate::session::InfoLine(key, value) in &session.info_dialog.lines {
-                        ui.label(egui::RichText::new(key).strong());
-                        ui.label(value);
-                        ui.end_row();
-                    }
-                });
-            ui.add_space(12.0);
-            if ui.button(rust_i18n::t!("close")).clicked() {
-                close = true;
-            }
-            if ui.input(|i| i.key_pressed(Key::Escape)) {
-                close = true;
-            }
-    }) == DialogOutcome::Closed
-    {
-        close = true;
-    }
-
-    if close {
-        session.info_dialog.open = false;
-    }
-}
-
-fn show_rename_dialog(ctx: &egui::Context, session: &mut FileManagerSession) {
-    if !session.rename_dialog.open {
-        return;
-    }
-
-    use crate::ui::uiframe::{DialogFrame, DialogOutcome};
-
-    let mut close = false;
-    let mut confirm = false;
-
-    let frame = DialogFrame::alert("Rename").size(360.0, 220.0);
-    if frame.show(ctx, "file_rename_dialog", |ui| {
-            ui.label(format!("Original: {}", session.rename_dialog.old_name()));
-            ui.add_space(6.0);
-            ui.label("New name:");
-            let name_edit = ui.text_edit_singleline(&mut session.rename_dialog.new_name);
-            name_edit.request_focus();
-            ui.add_space(12.0);
-            ui.horizontal(|ui| {
-                if ui.button(rust_i18n::t!("cancel")).clicked() {
-                    close = true;
-                }
-                if ui.button("Confirm").clicked() {
-                    confirm = true;
-                }
-            });
-            if ui.input(|i| i.key_pressed(Key::Escape)) {
-                close = true;
-            }
-            if ui.input(|i| i.key_pressed(Key::Enter)) {
-                confirm = true;
-            }
-    }) == DialogOutcome::Closed
-    {
-        close = true;
-    }
-
-    if close {
-        session.rename_dialog.open = false;
-        return;
-    }
-
-    if confirm {
-        let pane = session.rename_dialog.pane;
-        let old_name = session.rename_dialog.old_name().to_string();
-        let new_name = session.rename_dialog.new_name.trim().to_string();
-        match apply_rename(session, pane, &old_name, &new_name) {
-            Ok(()) => {
-                session.status = Some(format!("Renamed \"{old_name}\" → \"{new_name}\""));
-                session.rename_dialog.open = false;
-            }
-            Err(e) => session.status = Some(e),
-        }
-    }
-}
-
-fn apply_rename(
-    session: &mut FileManagerSession,
-    pane: FileActivePane,
-    old_name: &str,
-    new_name: &str,
-) -> Result<(), String> {
-    match pane {
-        FileActivePane::Remote => {
-            let remote = session.remote.as_mut().ok_or("No remote pane")?;
-            let from = join_remote(&remote.cwd, old_name);
-            let to = join_remote(&remote.cwd, new_name);
-            remote.client.rename(&from, &to)?;
-            remote.loading = true;
-        }
-        FileActivePane::LeftLocal => {
-            let pane = session.left_local.as_mut().ok_or("No left pane")?;
-            local::rename_entry(&pane.cwd, old_name, new_name)?;
-            pane.loading = true;
-        }
-        FileActivePane::Right => {
-            local::rename_entry(&session.right.cwd, old_name, new_name)?;
-            session.right.loading = true;
-        }
-    }
-    Ok(())
-}
-
-fn open_local_entry(pane: &mut PaneState, idx: usize) {
-    let Some(ent) = pane.entries.get(idx) else {
-        return;
-    };
-    if ent.is_dir {
-        pane.cwd = local::join_path(&pane.cwd, &ent.name);
-        pane.loading = true;
-        pane.selected.clear();
-        pane.focus_index = None;
-    }
-}
-
-fn open_remote_entry(remote: &mut RemotePane, idx: usize) {
-    let Some(ent) = remote.entries.get(idx) else {
-        return;
-    };
-    if ent.is_dir {
-        remote.cwd = join_remote(&remote.cwd, &ent.name);
-        remote.loading = true;
-        remote.selected.clear();
-        remote.focus_index = None;
-    }
-}
-
 fn paint_pane_toolbar(
     ui: &mut egui::Ui,
     cwd: &str,
@@ -1394,7 +681,11 @@ fn paint_pane_toolbar(
 ) -> bool {
     let mut go_up = false;
     ui.horizontal(|ui| {
-        if ui.small_button("↑").on_hover_text("Parent folder").clicked() {
+        if ui
+            .small_button("↑")
+            .on_hover_text("Parent folder")
+            .clicked()
+        {
             go_up = true;
         }
         ui.label(egui::RichText::new(cwd).small().weak());
@@ -1407,15 +698,6 @@ fn paint_pane_toolbar(
     go_up
 }
 
-/// Context menu targets: all selected rows when any, else the right-clicked row only.
-fn indices_for_context_action(selected: &HashSet<usize>, right_clicked: usize) -> Vec<usize> {
-    if selected.is_empty() {
-        vec![right_clicked]
-    } else {
-        selected.iter().copied().collect()
-    }
-}
-
 fn entry_label(ent: &FileEntry, focused: bool) -> String {
     let icon = if ent.is_dir { "📁" } else { "📄" };
     let name = if focused {
@@ -1425,290 +707,3 @@ fn entry_label(ent: &FileEntry, focused: bool) -> String {
     };
     name
 }
-
-fn row_context_menu_local(
-    ui: &mut egui::Ui,
-    pane: &PaneState,
-    idx: usize,
-    ent: &FileEntry,
-    ops: &mut PaneOps,
-) {
-    let in_multiselect = pane.select_mode;
-    paint_horizontal_context_menu(ui, |ui| {
-        if ent.is_dir && ui.button("Open").clicked() {
-            ops.open_index = Some(idx);
-            if in_multiselect {
-                ops.dismiss_multiselect = true;
-            }
-            ui.close();
-            return;
-        }
-        if ui.button("Copy").clicked() {
-            ops.bulk_copy = Some(indices_for_context_action(&pane.selected, idx));
-            if in_multiselect {
-                ops.dismiss_multiselect = true;
-            }
-            ui.close();
-        }
-        if ui.button("Cut").clicked() {
-            ops.bulk_cut = Some(indices_for_context_action(&pane.selected, idx));
-            if in_multiselect {
-                ops.dismiss_multiselect = true;
-            }
-            ui.close();
-        }
-        if ui.button(rust_i18n::t!("delete")).clicked() {
-            ops.bulk_delete = Some(indices_for_context_action(&pane.selected, idx));
-            if in_multiselect {
-                ops.dismiss_multiselect = true;
-            }
-            ui.close();
-        }
-        if ui.button("Rename").clicked() {
-            ops.rename_index = Some(idx);
-            ui.close();
-        }
-        if ui.button("Info").clicked() {
-            ops.info_index = Some(idx);
-            ui.close();
-        }
-    });
-}
-
-fn row_context_menu_remote(
-    ui: &mut egui::Ui,
-    remote: &RemotePane,
-    idx: usize,
-    ent: &FileEntry,
-    ops: &mut PaneOps,
-) {
-    let in_multiselect = remote.select_mode;
-    paint_horizontal_context_menu(ui, |ui| {
-        if ent.is_dir && ui.button("Open").clicked() {
-            ops.open_index = Some(idx);
-            if in_multiselect {
-                ops.dismiss_multiselect = true;
-            }
-            ui.close();
-            return;
-        }
-        if ui.button("Copy").clicked() {
-            ops.bulk_copy = Some(indices_for_context_action(&remote.selected, idx));
-            if in_multiselect {
-                ops.dismiss_multiselect = true;
-            }
-            ui.close();
-        }
-        if ui.button("Cut").clicked() {
-            ops.bulk_cut = Some(indices_for_context_action(&remote.selected, idx));
-            if in_multiselect {
-                ops.dismiss_multiselect = true;
-            }
-            ui.close();
-        }
-        if ui.button(rust_i18n::t!("delete")).clicked() {
-            ops.bulk_delete = Some(indices_for_context_action(&remote.selected, idx));
-            if in_multiselect {
-                ops.dismiss_multiselect = true;
-            }
-            ui.close();
-        }
-        if ui.button("Rename").clicked() {
-            ops.rename_index = Some(idx);
-            ui.close();
-        }
-        if ui.button("Info").clicked() {
-            ops.info_index = Some(idx);
-            ui.close();
-        }
-    });
-}
-
-fn parent_local(pane: &mut PaneState) {
-    if let Some(parent) = pane.cwd.parent() {
-        pane.cwd = parent.to_path_buf();
-        pane.selected.clear();
-        pane.focus_index = None;
-    }
-}
-
-fn parent_remote(remote: &mut RemotePane) {
-    let p = Path::new(&remote.cwd);
-    if let Some(parent) = p.parent() {
-        remote.cwd = if parent.as_os_str().is_empty() {
-            "/".to_string()
-        } else {
-            parent.to_string_lossy().into_owned()
-        };
-        remote.selected.clear();
-        remote.focus_index = None;
-    }
-}
-
-fn selected_local_paths(pane: &PaneState) -> Vec<PathBuf> {
-    pane.selected
-        .iter()
-        .filter_map(|&i| pane.entries.get(i))
-        .map(|e| local::join_path(&pane.cwd, &e.name))
-        .collect()
-}
-
-fn selected_remote_paths(remote: &RemotePane) -> Vec<String> {
-    remote
-        .selected
-        .iter()
-        .filter_map(|&i| remote.entries.get(i))
-        .map(|e| join_remote(&remote.cwd, &e.name))
-        .collect()
-}
-
-fn local_paths_for_indices(pane: &PaneState, indices: &[usize]) -> Vec<String> {
-    indices
-        .iter()
-        .filter_map(|&i| pane.entries.get(i))
-        .map(|e| local::join_path(&pane.cwd, &e.name).to_string_lossy().into_owned())
-        .collect()
-}
-
-fn remote_paths_for_indices(remote: &RemotePane, indices: &[usize]) -> Vec<String> {
-    indices
-        .iter()
-        .filter_map(|&i| remote.entries.get(i))
-        .map(|e| join_remote(&remote.cwd, &e.name))
-        .collect()
-}
-
-fn cut_local_indices(
-    pane: &PaneState,
-    indices: &[usize],
-    clipboard: &mut Option<FileClipboard>,
-    status: &mut Option<String>,
-) {
-    let paths = local_paths_for_indices(pane, indices);
-    if paths.is_empty() {
-        *status = Some("No items".into());
-        return;
-    }
-    let n = paths.len();
-    *clipboard = Some(FileClipboard {
-        mode: FileClipboardMode::Cut,
-        from_remote: false,
-        paths,
-    });
-    *status = Some(format!("Cut {n} item(s)"));
-}
-
-fn copy_local_indices(
-    pane: &PaneState,
-    indices: &[usize],
-    clipboard: &mut Option<FileClipboard>,
-    status: &mut Option<String>,
-) {
-    let paths = local_paths_for_indices(pane, indices);
-    if paths.is_empty() {
-        *status = Some("No items".into());
-        return;
-    }
-    let n = paths.len();
-    *clipboard = Some(FileClipboard {
-        mode: FileClipboardMode::Copy,
-        from_remote: false,
-        paths,
-    });
-    *status = Some(format!("Copied {n} item(s)"));
-}
-
-fn cut_remote_indices(
-    remote: &RemotePane,
-    indices: &[usize],
-    clipboard: &mut Option<FileClipboard>,
-    status: &mut Option<String>,
-) {
-    let paths = remote_paths_for_indices(remote, indices);
-    if paths.is_empty() {
-        *status = Some("No items".into());
-        return;
-    }
-    let n = paths.len();
-    *clipboard = Some(FileClipboard {
-        mode: FileClipboardMode::Cut,
-        from_remote: true,
-        paths,
-    });
-    *status = Some(format!("Cut {n} item(s)"));
-}
-
-fn copy_remote_indices(
-    remote: &RemotePane,
-    indices: &[usize],
-    clipboard: &mut Option<FileClipboard>,
-    status: &mut Option<String>,
-) {
-    let paths = remote_paths_for_indices(remote, indices);
-    if paths.is_empty() {
-        *status = Some("No items".into());
-        return;
-    }
-    let n = paths.len();
-    *clipboard = Some(FileClipboard {
-        mode: FileClipboardMode::Copy,
-        from_remote: true,
-        paths,
-    });
-    *status = Some(format!("Copied {n} item(s)"));
-}
-
-fn delete_local_indices(pane: &mut PaneState, indices: &[usize], status: &mut Option<String>) {
-    let paths: Vec<PathBuf> = indices
-        .iter()
-        .filter_map(|&i| pane.entries.get(i))
-        .map(|e| local::join_path(&pane.cwd, &e.name))
-        .collect();
-    if paths.is_empty() {
-        *status = Some("No items".into());
-        return;
-    }
-    let mut errors = Vec::new();
-    for p in &paths {
-        if let Err(e) = local::remove_path(p) {
-            errors.push(e);
-        }
-    }
-    if errors.is_empty() {
-        *status = Some(format!("Deleted {} item(s)", paths.len()));
-        pane.loading = true;
-    } else {
-        *status = Some(errors.join("; "));
-    }
-}
-
-fn delete_remote_indices(remote: &mut RemotePane, indices: &[usize], status: &mut Option<String>) {
-    let paths = remote_paths_for_indices(remote, indices);
-    if paths.is_empty() {
-        *status = Some("No items".into());
-        return;
-    }
-    let mut errors = Vec::new();
-    for path in &paths {
-        let is_dir = remote
-            .entries
-            .iter()
-            .filter(|e| e.is_dir)
-            .any(|e| join_remote(&remote.cwd, &e.name) == *path);
-        let err = if is_dir {
-            remote.client.remove(path, true)
-        } else {
-            remote.client.remove(path, false)
-        };
-        if let Err(e) = err {
-            errors.push(e);
-        }
-    }
-    if errors.is_empty() {
-        *status = Some(format!("Deleted {} item(s)", paths.len()));
-        remote.loading = true;
-    } else {
-        *status = Some(errors.join("; "));
-    }
-}
-

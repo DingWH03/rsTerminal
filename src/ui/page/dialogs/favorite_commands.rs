@@ -95,12 +95,8 @@ impl FavoriteCommandDialog {
             );
 
             let can_save = !self.name.trim().is_empty() && !self.command.trim().is_empty();
-            match form::dialog_footer(
-                ui,
-                rust_i18n::t!("cancel"),
-                rust_i18n::t!("save"),
-                can_save,
-            ) {
+            match form::dialog_footer(ui, rust_i18n::t!("cancel"), rust_i18n::t!("save"), can_save)
+            {
                 FooterAction::Cancel => close_requested = true,
                 FooterAction::Save => {
                     let cmd = if let Some(id) = &self.edit_id {
@@ -112,11 +108,7 @@ impl FavoriteCommandDialog {
                             sort_order: self.sort_order,
                         }
                     } else {
-                        FavoriteCommand::new(
-                            self.name.trim(),
-                            &self.command,
-                            self.auto_execute,
-                        )
+                        FavoriteCommand::new(self.name.trim(), &self.command, self.auto_execute)
                     };
                     saved = Some(cmd);
                     close_requested = true;

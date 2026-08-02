@@ -4,8 +4,8 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use super::transfer_progress::ByteProgress;
 use super::FileEntry;
+use super::transfer_progress::ByteProgress;
 
 pub fn list_dir(path: &Path) -> Result<Vec<FileEntry>, String> {
     let mut entries = Vec::new();
@@ -74,9 +74,7 @@ fn copy_file_bytes_progress(
         if n == 0 {
             break;
         }
-        dst_f
-            .write_all(&buf[..n])
-            .map_err(|e| e.to_string())?;
+        dst_f.write_all(&buf[..n]).map_err(|e| e.to_string())?;
         if let Some(p) = progress {
             p.add_bytes(n as u64, label);
         }

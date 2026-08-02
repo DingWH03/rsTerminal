@@ -10,10 +10,10 @@ pub mod session_list;
 pub mod workspace_view;
 
 use crate::data::persist::types::{ConnectionType, FavoriteCommand, SavedConnection};
-use crate::session::WorkspaceSession;
 use crate::data::prefs::Prefs;
+use crate::session::WorkspaceSession;
 use crate::ui::function_pane::pages::FunctionPage;
-use crate::ui::shell::layout_state::WorkspaceLayout;
+use crate::ui::layout::WorkspaceLayout;
 use crate::ui::shell::messages::FunctionAction;
 use crate::ui::uiframe::{TabBar, TabBarItem};
 
@@ -154,7 +154,7 @@ pub fn monitor_tab_visible(
     sessions.iter().find(|s| s.id() == id).is_some_and(|s| {
         matches!(
             s,
-            WorkspaceSession::Terminal(t) if t.conn_type == ConnectionType::Ssh
+            WorkspaceSession::Terminal(t) if t.core.conn_type == ConnectionType::Ssh
         )
     })
 }

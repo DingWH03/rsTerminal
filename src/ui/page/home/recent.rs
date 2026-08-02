@@ -4,9 +4,7 @@ use crate::data::persist::types::SavedConnection;
 use crate::ui::connection_display::connection_type_icon;
 use crate::ui::function_pane::FunctionPane;
 use crate::ui::uiframe::components::empty_state::{self, EmptyStateConfig};
-use crate::ui::uiframe::components::toolbar_button::{
-    icon_toolbar_button, icon_toolbar_danger,
-};
+use crate::ui::uiframe::components::toolbar_button::{icon_toolbar_button, icon_toolbar_danger};
 use crate::ui::uiframe::vector_icons::Icon;
 
 /// 最近连接最大显示数量
@@ -106,7 +104,8 @@ pub fn recent_connections_view(
     // ── Recent list ──────────────────────────────────────────────────────
     let row_step = RECENT_ROW_HEIGHT + RECENT_ROW_GAP;
     let desired_list_height = recent.len() as f32 * row_step;
-    let available_list_height = (ui.available_height() - RECENT_FOOTER_HEIGHT).max(RECENT_ROW_HEIGHT);
+    let available_list_height =
+        (ui.available_height() - RECENT_FOOTER_HEIGHT).max(RECENT_ROW_HEIGHT);
     let list_height = desired_list_height.min(available_list_height);
 
     egui::ScrollArea::vertical()

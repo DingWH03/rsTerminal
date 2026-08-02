@@ -39,10 +39,7 @@ const MONO_FONT_PATHS: &[&str] = &[
 ];
 
 #[cfg(windows)]
-const CJK_FONT_PATHS: &[&str] = &[
-    r"C:\Windows\Fonts\msyh.ttc",
-    r"C:\Windows\Fonts\simhei.ttf",
-];
+const CJK_FONT_PATHS: &[&str] = &[r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\simhei.ttf"];
 
 #[cfg(all(not(windows), not(target_os = "android")))]
 const CJK_FONT_PATHS: &[&str] = &[
@@ -158,16 +155,8 @@ fn build_monospace_font_list() -> Vec<MonospaceFontEntry> {
         let mut seen = std::collections::BTreeSet::new();
         let mut faces: Vec<_> = db.faces().collect();
         faces.sort_by(|a, b| {
-            let na = a
-                .families
-                .first()
-                .map(|(n, _)| n.as_str())
-                .unwrap_or("");
-            let nb = b
-                .families
-                .first()
-                .map(|(n, _)| n.as_str())
-                .unwrap_or("");
+            let na = a.families.first().map(|(n, _)| n.as_str()).unwrap_or("");
+            let nb = b.families.first().map(|(n, _)| n.as_str()).unwrap_or("");
             na.cmp(nb)
         });
         for face in faces {
@@ -287,7 +276,11 @@ pub fn setup_fonts(ctx: &egui::Context, terminal_font_path: &str) {
 #[cfg(target_os = "android")]
 pub fn tune_android_display(ctx: &egui::Context) {
     let ppp = ctx.pixels_per_point();
-    let ppp = if ppp.is_finite() && ppp > 0.0 { ppp } else { 1.0 };
+    let ppp = if ppp.is_finite() && ppp > 0.0 {
+        ppp
+    } else {
+        1.0
+    };
     let ppp = (ppp * 4.0).round() / 4.0;
     ctx.set_pixels_per_point(ppp);
     ctx.options_mut(|o| {

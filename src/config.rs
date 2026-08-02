@@ -1,19 +1,3 @@
-pub struct AppConfig {
-    pub font_size: f32,
-    pub show_virtual_keyboard: bool,
-    pub theme: TerminalTheme,
-}
-
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            font_size: 14.0,
-            show_virtual_keyboard: false,
-            theme: TerminalTheme::default(),
-        }
-    }
-}
-
 use serde::{Deserialize, Serialize};
 
 /// Virtual keyboard layout mode (persisted on terminal profiles).
@@ -30,8 +14,7 @@ pub enum KeyboardMode {
 ///
 /// Sent via SSH `set_env` (no PTY echo). Requires the server to accept the variable
 /// (`AcceptEnv PROMPT_COMMAND` / `SetEnv`, etc.); otherwise it is ignored.
-pub const SSH_OSC7_PROMPT_COMMAND: &str =
-    r#"printf "\033]7;file://%s%s\033\\" "$HOSTNAME" "$PWD""#;
+pub const SSH_OSC7_PROMPT_COMMAND: &str = r#"printf "\033]7;file://%s%s\033\\" "$HOSTNAME" "$PWD""#;
 
 /// Terminal cursor appearance (configurable in settings).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -59,8 +42,12 @@ impl Default for CursorStyle {
 
 impl CursorStyle {
     pub const ALL: [Self; 6] = [
-        Self::Bar, Self::Block, Self::Underline,
-        Self::BarBlink, Self::BlockBlink, Self::UnderlineBlink,
+        Self::Bar,
+        Self::Block,
+        Self::Underline,
+        Self::BarBlink,
+        Self::BlockBlink,
+        Self::UnderlineBlink,
     ];
 
     pub fn label(self) -> String {
@@ -128,9 +115,12 @@ impl Default for TerminalType {
 
 impl TerminalType {
     pub const ALL: [Self; 6] = [
-        Self::Xterm256, Self::Xterm,
-        Self::Screen256, Self::Screen,
-        Self::Tmux256, Self::Tmux,
+        Self::Xterm256,
+        Self::Xterm,
+        Self::Screen256,
+        Self::Screen,
+        Self::Tmux256,
+        Self::Tmux,
     ];
 
     pub fn label(self) -> &'static str {
@@ -285,13 +275,7 @@ impl TerminalTheme {
                 let r = (i / 36) % 6;
                 let g = (i / 6) % 6;
                 let b = i % 6;
-                let level = |c: u8| -> u8 {
-                    if c == 0 {
-                        0
-                    } else {
-                        55 + (c - 1) * 40
-                    }
-                };
+                let level = |c: u8| -> u8 { if c == 0 { 0 } else { 55 + (c - 1) * 40 } };
                 Rgba::from_rgb(level(r), level(g), level(b))
             }
             232..=255 => {

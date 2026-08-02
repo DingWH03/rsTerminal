@@ -60,11 +60,7 @@ fn foreground_command_for_pid(shell_pid: u32) -> Option<String> {
     let pid = foreground_process_pid(shell_pid)?;
     let args = read_cmdline(pid)?;
     let short = format_cmdline(&args);
-    if short.is_empty() {
-        None
-    } else {
-        Some(short)
-    }
+    if short.is_empty() { None } else { Some(short) }
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -76,12 +72,11 @@ fn foreground_command_for_pid(_shell_pid: u32) -> Option<String> {
 fn read_proc_children(pid: u32) -> Option<Vec<u32>> {
     let path = format!("/proc/{pid}/task/{pid}/children");
     let s = fs::read_to_string(path).ok()?;
-    let pids: Vec<u32> = s.split_whitespace().filter_map(|x| x.parse().ok()).collect();
-    if pids.is_empty() {
-        None
-    } else {
-        Some(pids)
-    }
+    let pids: Vec<u32> = s
+        .split_whitespace()
+        .filter_map(|x| x.parse().ok())
+        .collect();
+    if pids.is_empty() { None } else { Some(pids) }
 }
 
 #[cfg(target_os = "linux")]
@@ -92,11 +87,7 @@ fn read_cmdline(pid: u32) -> Option<Vec<String>> {
         .filter(|s| !s.is_empty())
         .map(|s| String::from_utf8_lossy(s).into_owned())
         .collect();
-    if args.is_empty() {
-        None
-    } else {
-        Some(args)
-    }
+    if args.is_empty() { None } else { Some(args) }
 }
 
 fn format_cmdline(args: &[String]) -> String {
@@ -154,7 +145,12 @@ pub fn truncate_label(s: &str, max_chars: usize) -> String {
     if s.chars().count() <= max_chars {
         s.to_string()
     } else {
-        format!("{}…", s.chars().take(max_chars.saturating_sub(1)).collect::<String>())
+        format!(
+            "{}…",
+            s.chars()
+                .take(max_chars.saturating_sub(1))
+                .collect::<String>()
+        )
     }
 }
 

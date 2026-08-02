@@ -4,6 +4,27 @@ use crate::connection::{ConnIn, ConnectionState};
 use crate::session::terminal::ActiveSession;
 use crate::terminal::parser::TermEvent;
 
+/// Split terminal bytes from connection events without touching session state.
+///
+/// Untagged data and data for the active logical port share the active terminal
+/// stream. All other events retain their original order for stateful handling.
+fn collect_terminal_data(events: Vec<ConnIn>, active_port: u8) -> (Vec<u8>, Vec<ConnIn>) {
+    let mut terminal_data = Vec::new();
+    let mut remaining = Vec::new();
+
+    for event in events {
+        match event {
+            ConnIn::Data(data) => terminal_data.extend(data),
+            ConnIn::PortData { port, data } if port == active_port => {
+                terminal_data.extend(data);
+            }
+            event => remaining.push(event),
+        }
+    }
+
+    (terminal_data, remaining)
+}
+
 /// Outcomes from draining / viewing a terminal connection (handled by the app/UI).
 #[derive(Debug)]
 pub enum ConnectionViewAction {
@@ -28,57 +49,54 @@ impl Default for ConnectionViewAction {
 /// 返回 `true` 表示有数据被处理。
 pub fn drain_connection(session: &mut ActiveSession, action: &mut ConnectionViewAction) -> bool {
     let mut updated = false;
-    let mut pty_data = Vec::new();
-    for ev in session.handle.drain() {
+    let (pty_data, remaining) =
+        collect_terminal_data(session.core.handle.drain(), session.core.active_port);
+    for ev in remaining {
         match ev {
-            ConnIn::Data(data) => pty_data.extend(data),
             ConnIn::PortsChanged(ports) => {
                 session.set_connection_ports(ports);
                 updated = true;
             }
             ConnIn::PortData { port, data } => {
-                if port == session.active_port {
-                    pty_data.extend(data);
-                } else {
-                    session.receive_inactive_port_data(port, &data);
-                    updated = true;
-                }
+                session.receive_inactive_port_data(port, &data);
+                updated = true;
             }
             ConnIn::StateChanged(s) => match s {
                 ConnectionState::Error(e) => {
-                    session.disconnect_message = Some(e);
+                    session.core.disconnect_message = Some(e);
                 }
                 ConnectionState::Lost(m) => {
-                    session.disconnect_message = Some(m);
+                    session.core.disconnect_message = Some(m);
                 }
                 ConnectionState::Closed => {
-                    session.disconnect_message = None;
+                    session.core.disconnect_message = None;
                     *action = ConnectionViewAction::CloseSession;
                 }
                 ConnectionState::Connected => {
-                    session.disconnect_message = None;
+                    session.core.disconnect_message = None;
                 }
                 ConnectionState::Connecting => {}
             },
+            ConnIn::Data(_) => unreachable!("terminal data was collected above"),
         }
     }
     if !pty_data.is_empty() {
-        session.terminal.write(&pty_data);
+        session.core.terminal.write(&pty_data);
         updated = true;
     }
-    session.handle.repaint.clear_repaint_pending();
-    for resp in session.terminal.drain_pending() {
+    session.core.handle.repaint.clear_repaint_pending();
+    for resp in session.core.terminal.drain_pending() {
         match resp {
             TermEvent::Response(data) => session.send_active(data),
             TermEvent::PtyResize { rows: _, cols: _ } => {}
         }
     }
-    if let Some(cwd) = session.terminal.screen.cwd.as_deref() {
+    if let Some(cwd) = session.core.terminal.screen.cwd.as_deref() {
         if !cwd.is_empty() {
-            session.metrics.note_osc_cwd(Some(cwd));
+            session.core.metrics.note_osc_cwd(Some(cwd));
         }
     }
-    for ev in session.metrics.drain_events() {
+    for ev in session.core.metrics.drain_events() {
         let line = crate::remote::format_metrics_event(&ev);
         match &ev {
             crate::remote::MetricsEvent::Status(_) => {
@@ -91,4 +109,60 @@ pub fn drain_connection(session: &mut ActiveSession, action: &mut ConnectionView
         updated = true;
     }
     updated
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::connection::ConnectionPort;
+
+    #[test]
+    fn collect_terminal_data_merges_stream_and_active_port_bytes() {
+        let events = vec![
+            ConnIn::Data(b"hello ".to_vec()),
+            ConnIn::PortData {
+                port: 2,
+                data: b"ignored".to_vec(),
+            },
+            ConnIn::PortData {
+                port: 1,
+                data: b"world".to_vec(),
+            },
+            ConnIn::Data(b"!".to_vec()),
+        ];
+
+        let (data, remaining) = collect_terminal_data(events, 1);
+
+        assert_eq!(data, b"hello world!");
+        assert_eq!(remaining.len(), 1);
+        assert!(matches!(
+            &remaining[0],
+            ConnIn::PortData { port: 2, data } if data == b"ignored"
+        ));
+    }
+
+    #[test]
+    fn collect_terminal_data_preserves_control_event_order() {
+        let ports = vec![ConnectionPort::terminal(3, "shell")];
+        let events = vec![
+            ConnIn::StateChanged(ConnectionState::Connecting),
+            ConnIn::Data(Vec::new()),
+            ConnIn::PortsChanged(ports),
+            ConnIn::StateChanged(ConnectionState::Connected),
+        ];
+
+        let (data, remaining) = collect_terminal_data(events, 3);
+
+        assert!(data.is_empty());
+        assert_eq!(remaining.len(), 3);
+        assert!(matches!(
+            remaining[0],
+            ConnIn::StateChanged(ConnectionState::Connecting)
+        ));
+        assert!(matches!(remaining[1], ConnIn::PortsChanged(_)));
+        assert!(matches!(
+            remaining[2],
+            ConnIn::StateChanged(ConnectionState::Connected)
+        ));
+    }
 }

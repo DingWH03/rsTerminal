@@ -4,7 +4,7 @@
 use std::sync::{Mutex, OnceLock};
 
 use egui::Context;
-use jni::{jni_sig, jni_str, JavaVM};
+use jni::{JavaVM, jni_sig, jni_str};
 use winit::platform::android::activity::AndroidApp;
 
 /// Updated on each Activity restart so inset helpers always have a valid
@@ -35,48 +35,55 @@ pub fn top_inset_points(ctx: &Context) -> f32 {
 fn get_status_bar_height_px(app: &AndroidApp) -> i32 {
     let jvm = unsafe { JavaVM::from_raw(app.vm_as_ptr() as *mut jni::sys::JavaVM) };
     jvm.attach_current_thread(|env| -> Result<i32, jni::errors::Error> {
-        let activity = unsafe { jni::objects::JObject::from_raw(env, app.activity_as_ptr() as jni::sys::jobject) };
+        let activity = unsafe {
+            jni::objects::JObject::from_raw(env, app.activity_as_ptr() as jni::sys::jobject)
+        };
 
         // Get Resources via activity.getResources()
-        let resources = env.call_method(
-            &activity,
-            jni_str!("getResources"),
-            jni_sig!("()Landroid/content/res/Resources;"),
-            &[],
-        )?.l()?;
+        let resources = env
+            .call_method(
+                &activity,
+                jni_str!("getResources"),
+                jni_sig!("()Landroid/content/res/Resources;"),
+                &[],
+            )?
+            .l()?;
 
         // Get the resource ID for "status_bar_height" in the "dimen" category
         let name = env.new_string("status_bar_height")?;
         let def_type = env.new_string("dimen")?;
         let def_pkg = env.new_string("android")?;
-        let res_id = env.call_method(
-            &resources,
-            jni_str!("getIdentifier"),
-            jni_sig!("(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I"),
-            &[
-                jni::objects::JValue::Object(&name),
-                jni::objects::JValue::Object(&def_type),
-                jni::objects::JValue::Object(&def_pkg),
-            ],
-        )?.i()?;
+        let res_id = env
+            .call_method(
+                &resources,
+                jni_str!("getIdentifier"),
+                jni_sig!("(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I"),
+                &[
+                    jni::objects::JValue::Object(&name),
+                    jni::objects::JValue::Object(&def_type),
+                    jni::objects::JValue::Object(&def_pkg),
+                ],
+            )?
+            .i()?;
 
         if res_id <= 0 {
             return Ok(0);
         }
 
         // resources.getDimensionPixelSize(res_id)
-        let px = env.call_method(
-            &resources,
-            jni_str!("getDimensionPixelSize"),
-            jni_sig!("(I)I"),
-            &[jni::objects::JValue::Int(res_id)],
-        )?.i()?;
+        let px = env
+            .call_method(
+                &resources,
+                jni_str!("getDimensionPixelSize"),
+                jni_sig!("(I)I"),
+                &[jni::objects::JValue::Int(res_id)],
+            )?
+            .i()?;
 
         Ok(px)
     })
     .unwrap_or(0)
 }
-
 
 /// Explicitly ask the Activity to show rsTerminal's Android IME bridge.
 ///

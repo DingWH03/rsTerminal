@@ -176,7 +176,11 @@ impl CardToolbar {
             None
         };
 
-        Self { file, edit, actions }
+        Self {
+            file,
+            edit,
+            actions,
+        }
     }
 
     pub fn reserved_width(show_file: bool, show_edit: bool) -> f32 {

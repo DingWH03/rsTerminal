@@ -5,7 +5,7 @@ use std::sync::Mutex;
 
 use jni::errors::Error;
 use jni::objects::{JObject, JObjectArray, JString, JValue};
-use jni::{jni_sig, jni_str, Env, JavaVM};
+use jni::{Env, JavaVM, jni_sig, jni_str};
 use winit::platform::android::activity::AndroidApp;
 
 const PERM_READ: &str = "android.permission.READ_EXTERNAL_STORAGE";
@@ -95,10 +95,7 @@ fn request_legacy_permissions(env: &mut Env<'_>, activity: &JObject) -> Result<(
         activity,
         jni_str!("requestPermissions"),
         jni_sig!("([Ljava/lang/String;I)V"),
-        &[
-            JValue::Object(&array),
-            JValue::Int(REQUEST_CODE_STORAGE),
-        ],
+        &[JValue::Object(&array), JValue::Int(REQUEST_CODE_STORAGE)],
     )?;
     log::info!("requested storage permissions: {:?}", perms);
     Ok(())
@@ -132,7 +129,12 @@ fn ensure_all_files_access(env: &mut Env<'_>, activity: &JObject) -> Result<(), 
     )?;
 
     let package_obj: JObject = env
-        .call_method(activity, jni_str!("getPackageName"), jni_sig!("()Ljava/lang/String;"), &[])?
+        .call_method(
+            activity,
+            jni_str!("getPackageName"),
+            jni_sig!("()Ljava/lang/String;"),
+            &[],
+        )?
         .try_into()?;
     let package_jstr = env.as_cast::<JString>(&package_obj)?;
     let package = package_jstr.to_string();
@@ -224,10 +226,8 @@ fn check_ble_permissions(app: &AndroidApp) -> Result<bool, String> {
         let activity = activity_jobject(env, app);
 
         if sdk >= 31 {
-            return Ok(
-                has_permission(env, &activity, PERM_BLE_SCAN)?
-                    && has_permission(env, &activity, PERM_BLE_CONNECT)?,
-            );
+            return Ok(has_permission(env, &activity, PERM_BLE_SCAN)?
+                && has_permission(env, &activity, PERM_BLE_CONNECT)?);
         }
 
         if (29..=30).contains(&sdk) {

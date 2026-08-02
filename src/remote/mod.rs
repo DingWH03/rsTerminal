@@ -10,11 +10,11 @@ pub mod protocol;
 pub mod status;
 
 pub use protocol::{
-    parse_agent_line, push_bytes, AgentToClient, ClientToAgent, MAX_FRAME_BYTES, PROTOCOL_VERSION,
+    AgentToClient, ClientToAgent, MAX_FRAME_BYTES, PROTOCOL_VERSION, parse_agent_line, push_bytes,
 };
 pub use status::{
-    format_metrics_event, CpuInfo, DiskInfo, MemInfo, MetricsEvent, MetricsSample, MetricsSource,
-    RemoteStatus, SessionMetrics, METRICS_HISTORY_LEN,
+    CpuInfo, DiskInfo, METRICS_HISTORY_LEN, MemInfo, MetricsEvent, MetricsSample, MetricsSource,
+    RemoteStatus, SessionMetrics, format_metrics_event,
 };
 
 /// POSIX shell agent uploaded to the remote host (no cross-compile).

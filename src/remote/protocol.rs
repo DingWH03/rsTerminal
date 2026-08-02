@@ -97,7 +97,13 @@ impl AgentToClient {
 
     /// Whether this status patch explicitly carries a disk list (possibly empty).
     pub fn status_disk_present(&self) -> bool {
-        matches!(self, AgentToClient::Status { disk_present: true, .. })
+        matches!(
+            self,
+            AgentToClient::Status {
+                disk_present: true,
+                ..
+            }
+        )
     }
 }
 
@@ -258,7 +264,10 @@ fn parse_status_tags(rest: &str) -> Result<AgentToClient, String> {
 }
 
 /// Parse `key=value` tokens. If `cwd_rest` is true, `w=` / `m=` (error msg) consume the remainder.
-fn parse_tags(rest: &str, cwd_or_msg_rest: bool) -> Result<std::collections::HashMap<String, String>, String> {
+fn parse_tags(
+    rest: &str,
+    cwd_or_msg_rest: bool,
+) -> Result<std::collections::HashMap<String, String>, String> {
     let mut tags = std::collections::HashMap::new();
     let mut rest = rest;
 
@@ -346,7 +355,11 @@ fn kib_to_bytes(s: &str) -> Result<u64, String> {
 }
 
 /// Feed byte chunks into a line buffer; returns completed frames.
-pub fn push_bytes(buf: &mut String, data: &[u8], out: &mut Vec<AgentToClient>) -> Result<(), String> {
+pub fn push_bytes(
+    buf: &mut String,
+    data: &[u8],
+    out: &mut Vec<AgentToClient>,
+) -> Result<(), String> {
     let chunk = std::str::from_utf8(data).map_err(|e| e.to_string())?;
     buf.push_str(chunk);
     while let Some(idx) = buf.find('\n') {

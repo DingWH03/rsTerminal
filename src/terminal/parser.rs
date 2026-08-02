@@ -92,11 +92,7 @@ impl Parser {
     }
 
     fn finish_dcs(&mut self, handler: &mut dyn TermHandler) {
-        let prefix: String = self
-            .intermediates
-            .iter()
-            .map(|&b| b as char)
-            .collect();
+        let prefix: String = self.intermediates.iter().map(|&b| b as char).collect();
         let body = String::from_utf8_lossy(&self.dcs_buf).to_string();
         let data = format!("{prefix}{body}");
         handler.dcs_dispatch(&data);
@@ -278,7 +274,10 @@ impl Parser {
                 self.state = State::CsiIntermediate;
             }
             0x30..=0x39 => {
-                self.current_param = self.current_param.saturating_mul(10).saturating_add((byte - 0x30) as i64);
+                self.current_param = self
+                    .current_param
+                    .saturating_mul(10)
+                    .saturating_add((byte - 0x30) as i64);
             }
             0x3B => {
                 self.params.push(self.current_param);
@@ -409,7 +408,10 @@ impl Parser {
                 self.state = State::DcsIntermediate;
             }
             0x30..=0x39 => {
-                self.current_param = self.current_param.saturating_mul(10).saturating_add((byte - 0x30) as i64);
+                self.current_param = self
+                    .current_param
+                    .saturating_mul(10)
+                    .saturating_add((byte - 0x30) as i64);
             }
             0x3B => {
                 self.params.push(self.current_param);

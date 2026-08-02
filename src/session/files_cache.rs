@@ -4,15 +4,15 @@
 //! cwd / prompt-mark changes (and SFTP replies), not by the Files tab painting.
 
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
 use std::sync::Arc;
+use std::sync::mpsc;
 
-use crate::fs::local;
-use crate::fs::sftp::{join_remote, SftpClient};
+use crate::data::persist::types::{ConnectionType, SavedConnection};
 use crate::fs::FileEntry;
+use crate::fs::local;
+use crate::fs::sftp::{SftpClient, join_remote};
 use crate::session::terminal::ActiveSession;
 use crate::session::workspace::WorkspaceSession;
-use crate::data::persist::types::{ConnectionType, SavedConnection};
 
 enum PendingOp {
     Home(mpsc::Receiver<Result<String, String>>),
@@ -40,9 +40,7 @@ pub struct SessionFilesCache {
 
 impl SessionFilesCache {
     pub fn effective_cwd(&self) -> Option<&str> {
-        self.browse_cwd
-            .as_deref()
-            .or(self.tracked_cwd.as_deref())
+        self.browse_cwd.as_deref().or(self.tracked_cwd.as_deref())
     }
 
     pub fn entries(&self) -> &[FileEntry] {
@@ -208,7 +206,7 @@ pub fn tick_session_files(
     connections: &[SavedConnection],
     auth_users: &[crate::data::persist::types::AuthUser],
 ) {
-    match session.conn_type {
+    match session.core.conn_type {
         ConnectionType::Local => tick_local(session),
         ConnectionType::Ssh => tick_ssh(session, connections, auth_users),
         ConnectionType::Serial | ConnectionType::Ble => {}
@@ -216,10 +214,10 @@ pub fn tick_session_files(
 }
 
 fn tick_local(session: &mut ActiveSession) {
-    let cache = &mut session.files;
-    let osc = session.terminal.screen.cwd.clone();
-    let mark_seq = session.terminal.screen.semantic.mark_seq;
-    let proc_cwd = local_shell_cwd(session.handle.shell_pid);
+    let cache = &mut session.core.files;
+    let osc = session.core.terminal.screen.cwd.clone();
+    let mark_seq = session.core.terminal.screen.semantic.mark_seq;
+    let proc_cwd = local_shell_cwd(session.core.handle.shell_pid);
 
     let cwd = osc
         .as_deref()
@@ -236,7 +234,7 @@ fn tick_local(session: &mut ActiveSession) {
 
     // Prefer live /proc while following the shell (no manual browse).
     if cache.browse_cwd.is_none() {
-        if let Some(cwd) = local_shell_cwd(session.handle.shell_pid) {
+        if let Some(cwd) = local_shell_cwd(session.core.handle.shell_pid) {
             cache.set_shell_cwd(&cwd);
         }
     }
@@ -267,18 +265,18 @@ fn tick_ssh(
     connections: &[SavedConnection],
     auth_users: &[crate::data::persist::types::AuthUser],
 ) {
-    if let Some(cwd) = session.terminal.screen.cwd.as_deref() {
+    if let Some(cwd) = session.core.terminal.screen.cwd.as_deref() {
         if !cwd.is_empty() {
-            session.metrics.note_osc_cwd(Some(cwd));
+            session.core.metrics.note_osc_cwd(Some(cwd));
         }
     }
 
-    let osc = session.terminal.screen.cwd.clone();
-    let mark_seq = session.terminal.screen.semantic.mark_seq;
-    let merged = session.metrics.effective_cwd(osc.as_deref());
+    let osc = session.core.terminal.screen.cwd.clone();
+    let mark_seq = session.core.terminal.screen.semantic.mark_seq;
+    let merged = session.core.metrics.effective_cwd(osc.as_deref());
 
     {
-        let cache = &mut session.files;
+        let cache = &mut session.core.files;
         if let Some(ref cwd) = merged {
             cache.set_shell_cwd(cwd);
         }
@@ -288,14 +286,14 @@ fn tick_ssh(
 
     ensure_session_sftp(session, connections, auth_users);
 
-    let Some(client) = session.session_sftp.clone() else {
+    let Some(client) = session.core.session_sftp.clone() else {
         return;
     };
     if client.connection_error().is_some() || client.is_connecting() {
         return;
     }
 
-    let cache = &mut session.files;
+    let cache = &mut session.core.files;
     if cache.tracked_cwd.is_none() && cache.pending.is_none() {
         match client.begin_home_dir() {
             Ok(rx) => {
@@ -325,10 +323,10 @@ fn ensure_session_sftp(
     connections: &[SavedConnection],
     auth_users: &[crate::data::persist::types::AuthUser],
 ) {
-    if session.session_sftp.is_some() {
+    if session.core.session_sftp.is_some() {
         return;
     }
-    let Some(conn_id) = session.saved_conn_id.as_deref() else {
+    let Some(conn_id) = session.core.saved_conn_id.as_deref() else {
         return;
     };
     let Some(conn) = connections.iter().find(|c| c.id == conn_id) else {
@@ -340,20 +338,20 @@ fn ensure_session_sftp(
         .and_then(|id| auth_users.iter().find(|u| u.id == *id));
     let auth = crate::app::connect_params::ssh_auth(conn, auth_user);
     let Some(host) = conn.ssh_host.clone() else {
-        session.files.error = Some("SSH host not configured".into());
-        session.files.loading = false;
+        session.core.files.error = Some("SSH host not configured".into());
+        session.core.files.loading = false;
         return;
     };
     let port = conn.ssh_port.unwrap_or(22);
-    let repaint = session.handle.repaint.clone();
+    let repaint = session.core.handle.repaint.clone();
     match SftpClient::connect(host, port, auth, Some(repaint)) {
         Ok(client) => {
-            session.session_sftp = Some(Arc::new(client));
-            session.files.invalidate_pending();
+            session.core.session_sftp = Some(Arc::new(client));
+            session.core.files.invalidate_pending();
         }
         Err(e) => {
-            session.files.error = Some(e);
-            session.files.loading = false;
+            session.core.files.error = Some(e);
+            session.core.files.loading = false;
         }
     }
 }
@@ -419,11 +417,7 @@ fn local_shell_cwd(pid: Option<u32>) -> Option<String> {
         let pid = pid?;
         let path = std::fs::read_link(format!("/proc/{pid}/cwd")).ok()?;
         let s = path.to_string_lossy().into_owned();
-        if s.is_empty() {
-            None
-        } else {
-            Some(s)
-        }
+        if s.is_empty() { None } else { Some(s) }
     }
     #[cfg(not(target_os = "linux"))]
     {
@@ -460,4 +454,3 @@ pub fn tick_all_session_files(
         }
     }
 }
-

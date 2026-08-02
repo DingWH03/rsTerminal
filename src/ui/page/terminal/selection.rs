@@ -3,12 +3,10 @@
 use egui::{Context, Painter, Pos2, Rect, Response, TouchPhase, Ui};
 
 use crate::config::TerminalTheme;
+use crate::terminal::screen::{Screen, cell_display_width};
 use crate::ui::theme_color::to_egui;
-use crate::terminal::screen::{cell_display_width, Screen};
 
-pub use crate::session::{
-    extract_range_text, CellPos, TerminalSelection, TerminalTouchState,
-};
+pub use crate::session::{CellPos, TerminalSelection, TerminalTouchState, extract_range_text};
 
 /// 从触摸长按位置选择一个单词。
 pub fn touch_long_press_selection_from_pos(
@@ -71,8 +69,14 @@ fn word_selection_at_cell(screen: &Screen, cell: CellPos) -> Option<TerminalSele
     }
 
     Some(TerminalSelection {
-        anchor: CellPos { line: cell.line, col: start },
-        cursor: CellPos { line: cell.line, col: end },
+        anchor: CellPos {
+            line: cell.line,
+            col: start,
+        },
+        cursor: CellPos {
+            line: cell.line,
+            col: end,
+        },
     })
 }
 
@@ -291,9 +295,8 @@ pub fn update_terminal_selection(
     let contains = term_resp.contains_pointer();
     let pointer_selection_enabled = !has_touch || touch_selection_enabled;
     let shift = ui.input(|i| i.modifiers.shift);
-    let primary_pressed = pointer_selection_enabled
-        && ui.input(|i| i.pointer.primary_pressed())
-        && contains;
+    let primary_pressed =
+        pointer_selection_enabled && ui.input(|i| i.pointer.primary_pressed()) && contains;
     let primary_down = pointer_selection_enabled && ui.input(|i| i.pointer.primary_down());
     let primary_released = pointer_selection_enabled && ui.input(|i| i.pointer.primary_released());
 
@@ -490,11 +493,13 @@ pub fn paint_selection(
                 .unwrap_or(1)
                 .max(1);
             let x = rect.left() + col as f32 * cell_w;
-            let cell_rect = Rect::from_min_size(
-                Pos2::new(x, y),
-                egui::vec2(cell_w * span as f32, cell_h),
+            let cell_rect =
+                Rect::from_min_size(Pos2::new(x, y), egui::vec2(cell_w * span as f32, cell_h));
+            painter.rect_filled(
+                cell_rect,
+                egui::CornerRadius::ZERO,
+                to_egui(theme.selection),
             );
-            painter.rect_filled(cell_rect, egui::CornerRadius::ZERO, to_egui(theme.selection));
             col += span;
         }
     }
@@ -576,11 +581,7 @@ pub fn paint_selection_handles(
         let cx = rect.left() + start.col as f32 * cell_w;
         let cy = rect.top() + viewport_row as f32 * cell_h + cell_h * 0.5;
         // Small filled circle
-        painter.circle_filled(
-            egui::pos2(cx, cy),
-            handle_radius,
-            handle_color,
-        );
+        painter.circle_filled(egui::pos2(cx, cy), handle_radius, handle_color);
         painter.circle_stroke(
             egui::pos2(cx, cy),
             handle_radius,
@@ -606,11 +607,7 @@ pub fn paint_selection_handles(
         };
         let cx = rect.left() + end_col_display.min(cols) as f32 * cell_w;
         let cy = rect.top() + viewport_row as f32 * cell_h + cell_h * 0.5;
-        painter.circle_filled(
-            egui::pos2(cx, cy),
-            handle_radius,
-            handle_color,
-        );
+        painter.circle_filled(egui::pos2(cx, cy), handle_radius, handle_color);
         painter.circle_stroke(
             egui::pos2(cx, cy),
             handle_radius,
@@ -621,21 +618,12 @@ pub fn paint_selection_handles(
 
 /// 规范化粘贴文本：将 `\r\n` 替换为 `\n`，将 `\r` 替换为 `\n`。
 pub fn normalize_paste_text(text: &str) -> String {
-    text.replace("\r\n", "\n").replace('\r', "\n")
+    crate::session::normalize_paste_text(text)
 }
 
 /// 构造粘贴负载：如果启用括号粘贴模式，包裹 `\x1b[200~` / `\x1b[201~`。
 pub fn paste_payload(text: &str, bracketed: bool) -> Vec<u8> {
-    let normalized = normalize_paste_text(text);
-    if bracketed {
-        let mut bytes = Vec::with_capacity(normalized.len() + 14);
-        bytes.extend_from_slice(b"\x1b[200~");
-        bytes.extend_from_slice(normalized.as_bytes());
-        bytes.extend_from_slice(b"\x1b[201~");
-        bytes
-    } else {
-        normalized.into_bytes()
-    }
+    crate::session::paste_payload(text, bracketed)
 }
 
 #[cfg(test)]
@@ -650,10 +638,7 @@ mod tests {
         screen.cells[1][0].ch = 'c';
         let text = extract_range_text(
             &screen,
-            (
-                CellPos { line: 0, col: 0 },
-                CellPos { line: 1, col: 0 },
-            ),
+            (CellPos { line: 0, col: 0 }, CellPos { line: 1, col: 0 }),
         );
         assert_eq!(text, "ab\nc");
     }
@@ -665,10 +650,7 @@ mod tests {
         screen.cells[0][2].ch = 'y';
         let text = extract_range_text(
             &screen,
-            (
-                CellPos { line: 0, col: 0 },
-                CellPos { line: 0, col: 3 },
-            ),
+            (CellPos { line: 0, col: 0 }, CellPos { line: 0, col: 3 }),
         );
         assert_eq!(text, "x y");
     }

@@ -1,8 +1,8 @@
 //! Workspace session enum — terminal or file-manager tab.
 
+use crate::data::persist::types::ConnectionType;
 use crate::session::file_manager::FileManagerSession;
 use crate::session::terminal::ActiveSession;
-use crate::data::persist::types::ConnectionType;
 
 /// 工作区标签页：可以是终端仿真器或文件管理器。
 pub enum WorkspaceSession {
@@ -15,7 +15,7 @@ pub enum WorkspaceSession {
 impl WorkspaceSession {
     pub fn id(&self) -> &str {
         match self {
-            WorkspaceSession::Terminal(s) => &s.id,
+            WorkspaceSession::Terminal(s) => &s.core.id,
             WorkspaceSession::FileManager(s) => &s.id,
         }
     }
@@ -48,7 +48,7 @@ impl WorkspaceSession {
 
 pub fn terminal_conn_type(session: &WorkspaceSession) -> Option<&ConnectionType> {
     match session {
-        WorkspaceSession::Terminal(s) => Some(&s.conn_type),
+        WorkspaceSession::Terminal(s) => Some(&s.core.conn_type),
         _ => None,
     }
 }

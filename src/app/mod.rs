@@ -5,16 +5,17 @@ mod commands;
 pub mod connect_params;
 mod connections;
 mod dialogs;
+mod dispatch;
 mod frame;
 mod lifecycle;
 mod notices;
 mod sessions;
 
 use crate::data::persist::{
-    types::{resolve_profile, AuthUser, FavoriteCommand, SavedConnection, TerminalProfile},
     Persist,
+    types::{AuthUser, FavoriteCommand, SavedConnection, TerminalProfile, resolve_profile},
 };
-use crate::data::prefs::{load_prefs, Prefs};
+use crate::data::prefs::{Prefs, load_prefs};
 use crate::session::WorkspaceSession;
 use crate::ui::shell::AppShell;
 use crate::ui::uiframe::keyboard::VirtualKeyboard;

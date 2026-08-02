@@ -21,7 +21,6 @@ pub fn default_terminal_widget_id() -> Id {
     terminal_widget_id(0)
 }
 
-
 /// 阻止方向键/Tab/Esc 将 egui 焦点移出终端区域的事件过滤器。
 pub fn terminal_event_filter() -> EventFilter {
     EventFilter {
@@ -108,13 +107,41 @@ pub fn has_any_keyboard_input(ctx: &Context) -> bool {
                 // IME 提交 — 输入法确认
                 Event::Ime(egui::ImeEvent::Commit(text)) => !text.is_empty(),
                 // 按键事件 — 排除方向键/功能键/修饰键
-                Event::Key { key, pressed: true, .. } => {
-                    matches!(key,
-                        Key::Enter | Key::Backspace | Key::Tab | Key::Space
-                        | Key::A | Key::B | Key::C | Key::D | Key::E | Key::F | Key::G
-                        | Key::H | Key::I | Key::J | Key::K | Key::L | Key::M
-                        | Key::N | Key::O | Key::P | Key::Q | Key::R | Key::S
-                        | Key::T | Key::U | Key::V | Key::W | Key::X | Key::Y | Key::Z
+                Event::Key {
+                    key, pressed: true, ..
+                } => {
+                    matches!(
+                        key,
+                        Key::Enter
+                            | Key::Backspace
+                            | Key::Tab
+                            | Key::Space
+                            | Key::A
+                            | Key::B
+                            | Key::C
+                            | Key::D
+                            | Key::E
+                            | Key::F
+                            | Key::G
+                            | Key::H
+                            | Key::I
+                            | Key::J
+                            | Key::K
+                            | Key::L
+                            | Key::M
+                            | Key::N
+                            | Key::O
+                            | Key::P
+                            | Key::Q
+                            | Key::R
+                            | Key::S
+                            | Key::T
+                            | Key::U
+                            | Key::V
+                            | Key::W
+                            | Key::X
+                            | Key::Y
+                            | Key::Z
                     )
                 }
                 _ => false,
@@ -136,19 +163,65 @@ pub fn has_terminal_bound_key(ctx: &Context) -> bool {
                     !text.is_empty() && !text.chars().all(|c| c.is_ascii_control())
                 }
                 Event::Ime(egui::ImeEvent::Commit(text)) => !text.is_empty(),
-                Event::Key { key, pressed: true, .. } => {
+                Event::Key {
+                    key, pressed: true, ..
+                } => {
                     // 所有会被 key_to_pty 映射为字节序列的键
-                    matches!(key,
-                        Key::Enter | Key::Backspace | Key::Tab | Key::Escape | Key::Space
-                        | Key::A | Key::B | Key::C | Key::D | Key::E | Key::F | Key::G
-                        | Key::H | Key::I | Key::J | Key::K | Key::L | Key::M
-                        | Key::N | Key::O | Key::P | Key::Q | Key::R | Key::S
-                        | Key::T | Key::U | Key::V | Key::W | Key::X | Key::Y | Key::Z
-                        | Key::ArrowUp | Key::ArrowDown | Key::ArrowLeft | Key::ArrowRight
-                        | Key::Home | Key::End | Key::PageUp | Key::PageDown
-                        | Key::Insert | Key::Delete
-                        | Key::F1 | Key::F2 | Key::F3 | Key::F4 | Key::F5
-                        | Key::F6 | Key::F7 | Key::F8 | Key::F9 | Key::F10 | Key::F11 | Key::F12
+                    matches!(
+                        key,
+                        Key::Enter
+                            | Key::Backspace
+                            | Key::Tab
+                            | Key::Escape
+                            | Key::Space
+                            | Key::A
+                            | Key::B
+                            | Key::C
+                            | Key::D
+                            | Key::E
+                            | Key::F
+                            | Key::G
+                            | Key::H
+                            | Key::I
+                            | Key::J
+                            | Key::K
+                            | Key::L
+                            | Key::M
+                            | Key::N
+                            | Key::O
+                            | Key::P
+                            | Key::Q
+                            | Key::R
+                            | Key::S
+                            | Key::T
+                            | Key::U
+                            | Key::V
+                            | Key::W
+                            | Key::X
+                            | Key::Y
+                            | Key::Z
+                            | Key::ArrowUp
+                            | Key::ArrowDown
+                            | Key::ArrowLeft
+                            | Key::ArrowRight
+                            | Key::Home
+                            | Key::End
+                            | Key::PageUp
+                            | Key::PageDown
+                            | Key::Insert
+                            | Key::Delete
+                            | Key::F1
+                            | Key::F2
+                            | Key::F3
+                            | Key::F4
+                            | Key::F5
+                            | Key::F6
+                            | Key::F7
+                            | Key::F8
+                            | Key::F9
+                            | Key::F10
+                            | Key::F11
+                            | Key::F12
                     )
                 }
                 _ => false,
@@ -187,76 +260,73 @@ pub fn process_keyboard_input(
     lock_terminal_focus(ctx, widget_id);
 
     ctx.input_mut(|i| {
-        i.events.retain(|event| {
-            match event {
-                Event::Copy => {
-                    if modifiers.shift && has_selection {
-                        *copy_requested = true;
-                    } else if !modifiers.shift {
-                        pending_input.push(vec![0x03]);
-                    }
-                    false
+        i.events.retain(|event| match event {
+            Event::Copy => {
+                if modifiers.shift && has_selection {
+                    *copy_requested = true;
+                } else if !modifiers.shift {
+                    pending_input.push(vec![0x03]);
                 }
-                Event::Cut => {
-                    if !modifiers.shift {
-                        pending_input.push(vec![0x18]);
-                    }
-                    false
-                }
-                Event::Paste(text) => {
-                    if modifiers.shift {
-                        paste_texts.push(text.clone());
-                    } else {
-                        pending_input.push(vec![0x16]);
-                    }
-                    false
-                }
-                Event::Text(text) => {
-                    route_text_to_terminal(
-                        text,
-                        modifiers,
-                        virtual_ctrl,
-                        has_selection,
-                        copy_requested,
-                        pending_input,
-                    );
-                    false
-                }
-                Event::Ime(egui::ImeEvent::Commit(text)) => {
-                    route_text_to_terminal(
-                        text,
-                        modifiers,
-                        virtual_ctrl,
-                        has_selection,
-                        copy_requested,
-                        pending_input,
-                    );
-                    false
-                }
-                Event::Key {
-                    key,
-                    pressed: true,
-                    modifiers: key_mods,
-                    ..
-                } => {
-                    if *key == Key::V && key_mods.command && key_mods.shift {
-                        if let Some(t) = read_text() {
-                            paste_texts.push(t);
-                        }
-                        false
-                    } else if let Some(bytes) = key_to_pty(*key, *key_mods, app_cursor_keys) {
-                        pending_input.push(bytes);
-                        false
-                    } else {
-                        true
-                    }
-                }
-                _ => true,
+                false
             }
+            Event::Cut => {
+                if !modifiers.shift {
+                    pending_input.push(vec![0x18]);
+                }
+                false
+            }
+            Event::Paste(text) => {
+                if modifiers.shift {
+                    paste_texts.push(text.clone());
+                } else {
+                    pending_input.push(vec![0x16]);
+                }
+                false
+            }
+            Event::Text(text) => {
+                route_text_to_terminal(
+                    text,
+                    modifiers,
+                    virtual_ctrl,
+                    has_selection,
+                    copy_requested,
+                    pending_input,
+                );
+                false
+            }
+            Event::Ime(egui::ImeEvent::Commit(text)) => {
+                route_text_to_terminal(
+                    text,
+                    modifiers,
+                    virtual_ctrl,
+                    has_selection,
+                    copy_requested,
+                    pending_input,
+                );
+                false
+            }
+            Event::Key {
+                key,
+                pressed: true,
+                modifiers: key_mods,
+                ..
+            } => {
+                if *key == Key::V && key_mods.command && key_mods.shift {
+                    if let Some(t) = read_text() {
+                        paste_texts.push(t);
+                    }
+                    false
+                } else if let Some(bytes) = key_to_pty(*key, *key_mods, app_cursor_keys) {
+                    pending_input.push(bytes);
+                    false
+                } else {
+                    true
+                }
+            }
+            _ => true,
         });
     });
 }
-
 
 /// 将文本事件路由到终端：Ctrl 组合键转换为控制字节，普通文本直接发送。
 fn route_text_to_terminal(
@@ -373,8 +443,14 @@ mod tests {
     #[test]
     fn app_cursor_keys_use_ss3_arrows() {
         let mods = Modifiers::default();
-        assert_eq!(key_to_pty(Key::ArrowUp, mods, true), Some(b"\x1bOA".to_vec()));
-        assert_eq!(key_to_pty(Key::ArrowUp, mods, false), Some(b"\x1b[A".to_vec()));
+        assert_eq!(
+            key_to_pty(Key::ArrowUp, mods, true),
+            Some(b"\x1bOA".to_vec())
+        );
+        assert_eq!(
+            key_to_pty(Key::ArrowUp, mods, false),
+            Some(b"\x1b[A".to_vec())
+        );
         assert_eq!(key_to_pty(Key::Home, mods, true), Some(b"\x1bOH".to_vec()));
     }
 }

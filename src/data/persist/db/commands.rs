@@ -1,6 +1,6 @@
 //! Favorite commands table CRUD.
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::data::persist::types::FavoriteCommand;
 

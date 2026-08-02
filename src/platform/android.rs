@@ -6,15 +6,13 @@ use std::sync::OnceLock;
 
 use egui::Context;
 
+use crate::platform::Platform;
 use crate::platform::process;
 use crate::platform::serial::{self, SerialDevice};
-use crate::platform::Platform;
 
 pub(super) static PLATFORM: OnceLock<AndroidPlatform> = OnceLock::new();
 
-pub(super) fn init(
-    app: &winit::platform::android::activity::AndroidApp,
-) {
+pub(super) fn init(app: &winit::platform::android::activity::AndroidApp) {
     // Run Android-specific init before storing the platform.
     crate::platform::android_ime::init(app.clone());
     crate::platform::android_storage::ensure_storage_access(app);

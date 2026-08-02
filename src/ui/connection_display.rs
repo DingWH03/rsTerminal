@@ -1,8 +1,8 @@
 //! UI-facing labels/icons for persist connection types.
 
 use crate::data::persist::types::ConnectionType;
-use crate::session::file_manager::FileManagerMode;
 use crate::session::WorkspaceSession;
+use crate::session::file_manager::FileManagerMode;
 
 pub fn connection_type_label(conn_type: ConnectionType) -> &'static str {
     match conn_type {
@@ -24,7 +24,7 @@ pub fn connection_type_icon(conn_type: ConnectionType) -> &'static str {
 
 pub fn workspace_session_icon(session: &WorkspaceSession) -> &str {
     match session {
-        WorkspaceSession::Terminal(s) => connection_type_icon(s.conn_type),
+        WorkspaceSession::Terminal(s) => connection_type_icon(s.core.conn_type),
         WorkspaceSession::FileManager(s) => match s.mode {
             FileManagerMode::SshSftp => "📁",
             FileManagerMode::LocalDual => "📂",

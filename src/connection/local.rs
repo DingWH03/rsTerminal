@@ -4,11 +4,11 @@ use std::time::Duration;
 
 use portable_pty::{CommandBuilder, MasterPty, PtySize};
 
+use crate::connection::LocalConnectParams;
 use crate::connection::{
     ConnIn, ConnOut, ConnectionHandle, ConnectionState, RepaintNotifier, emit_conn_data, pty_burst,
     winchg,
 };
-use crate::connection::LocalConnectParams;
 
 fn pty_size(rows: u16, cols: u16) -> PtySize {
     PtySize {

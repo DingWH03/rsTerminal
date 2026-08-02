@@ -1,6 +1,6 @@
 //! Draggable split handle for multi-pane layouts.
 
-use crate::ui::shell::layout_state::SplitAxis;
+use crate::ui::layout::{MIN_PANE_WIDTH, SplitAxis};
 use crate::ui::uiframe::style::PANE_GAP;
 
 /// Gap between split panes (also the splitter hit strip width).
@@ -16,8 +16,14 @@ pub fn drag_splitter(
     id: egui::Id,
 ) -> Option<f32> {
     let (splitter_size, cursor) = match axis {
-        SplitAxis::Horizontal => (egui::vec2(SPLITTER_SIZE, available.y), egui::CursorIcon::ResizeHorizontal),
-        SplitAxis::Vertical => (egui::vec2(available.x, SPLITTER_SIZE), egui::CursorIcon::ResizeVertical),
+        SplitAxis::Horizontal => (
+            egui::vec2(SPLITTER_SIZE, available.y),
+            egui::CursorIcon::ResizeHorizontal,
+        ),
+        SplitAxis::Vertical => (
+            egui::vec2(available.x, SPLITTER_SIZE),
+            egui::CursorIcon::ResizeVertical,
+        ),
     };
 
     let total = match axis {
@@ -46,8 +52,8 @@ pub fn drag_splitter(
             SplitAxis::Vertical => resp.drag_delta().y,
         };
         let new_first = (first_size + delta).clamp(
-            crate::ui::shell::layout_state::MIN_PANE_WIDTH.min(total * 0.15),
-            total - SPLITTER_SIZE - crate::ui::shell::layout_state::MIN_PANE_WIDTH.min(total * 0.15),
+            MIN_PANE_WIDTH.min(total * 0.15),
+            total - SPLITTER_SIZE - MIN_PANE_WIDTH.min(total * 0.15),
         );
         let new_ratio = new_first / (total - SPLITTER_SIZE);
         return Some(new_ratio.clamp(0.15, 0.85));

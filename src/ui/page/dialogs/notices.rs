@@ -8,11 +8,7 @@ use crate::ui::uiframe::style;
 /// Paint quit-with-sessions confirmation. Returns `true` if the user confirmed.
 ///
 /// Embedded centered modal: dims and blocks the host; dialog stays clickable.
-pub fn paint_quit_confirm(
-    ctx: &egui::Context,
-    open: &mut bool,
-    session_count: usize,
-) -> bool {
+pub fn paint_quit_confirm(ctx: &egui::Context, open: &mut bool, session_count: usize) -> bool {
     if !*open {
         return false;
     }

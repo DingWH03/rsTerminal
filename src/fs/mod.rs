@@ -38,11 +38,7 @@ pub fn home_dir() -> PathBuf {
 /// Primary shared storage root on Android (needs storage / all-files permission).
 #[cfg(target_os = "android")]
 fn android_external_home() -> PathBuf {
-    for candidate in [
-        "/storage/emulated/0",
-        "/sdcard",
-        "/storage/self/primary",
-    ] {
+    for candidate in ["/storage/emulated/0", "/sdcard", "/storage/self/primary"] {
         let p = PathBuf::from(candidate);
         if p.is_dir() {
             return p;

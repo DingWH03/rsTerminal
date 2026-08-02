@@ -9,35 +9,37 @@ use crate::session::{ActiveSession, ConnectionViewAction};
 pub fn sync_emulator_grid(session: &mut ActiveSession, rows: usize, cols: usize, font_size: f32) {
     let rows = rows.max(1);
     let cols = cols.max(1);
-    if session.grid_rows == rows
-        && session.grid_cols == cols
-        && (session.layout_font_size - font_size).abs() <= f32::EPSILON
+    if session.view.grid_rows == rows
+        && session.view.grid_cols == cols
+        && (session.view.layout_font_size - font_size).abs() <= f32::EPSILON
     {
         return;
     }
-    session.grid_rows = rows;
-    session.grid_cols = cols;
-    session.terminal.resize(rows, cols);
-    for state in session.inactive_port_states.values_mut() {
+    session.view.grid_rows = rows;
+    session.view.grid_cols = cols;
+    session.core.terminal.resize(rows, cols);
+    for state in session.core.inactive_port_states.values_mut() {
         state.terminal.resize(rows, cols);
+    }
+    for state in session.view.inactive_port_states.values_mut() {
         state.scroll_offset = 0;
         state.row_galley_cache.clear();
     }
-    session.layout_font_size = font_size;
-    session.row_galley_cache.clear();
-    session.scroll_offset = 0;
+    session.view.layout_font_size = font_size;
+    session.view.row_galley_cache.clear();
+    session.view.scroll_offset = 0;
 }
 
 /// 同步 PTY 终端尺寸。如果尺寸未变化则跳过。
 pub fn sync_pty_size(session: &mut ActiveSession, rows: usize, cols: usize) {
     let rows = rows.max(1) as u16;
     let cols = cols.max(1) as u16;
-    if session.last_pty_rows == rows && session.last_pty_cols == cols {
+    if session.view.last_pty_rows == rows && session.view.last_pty_cols == cols {
         return;
     }
-    session.last_pty_rows = rows;
-    session.last_pty_cols = cols;
-    session.handle.resize(rows, cols);
+    session.view.last_pty_rows = rows;
+    session.view.last_pty_cols = cols;
+    session.core.handle.resize(rows, cols);
 }
 
 /// 应用尺寸调整。在 alt-screen 模式下先调仿真器再调 PTY，否则顺序相反。
@@ -72,7 +74,7 @@ pub fn drain_after_resize(
         }
     }
     if in_alt {
-        session.handle.signal_winch();
+        session.core.handle.signal_winch();
         for _ in 0..128 {
             if !drain(session, action) {
                 break;

@@ -29,11 +29,7 @@ pub fn page(ui: &mut egui::Ui, ctx: &mut SettingsPageCtx<'_>) {
                         };
                         ui.label(egui::RichText::new(label).strong().size(13.0));
                         if !profile.description.is_empty() {
-                            ui.label(
-                                egui::RichText::new(&profile.description)
-                                    .size(11.0)
-                                    .weak(),
-                            );
+                            ui.label(egui::RichText::new(&profile.description).size(11.0).weak());
                         }
                     });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

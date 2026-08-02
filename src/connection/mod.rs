@@ -1,16 +1,16 @@
 pub mod ble;
+pub mod enumeration;
 #[cfg(not(target_os = "android"))]
 pub mod local;
 pub mod params;
 pub mod pty_burst;
+pub mod serial;
+pub mod sftp_endpoint;
+pub mod sftp_mux;
+pub mod ssh;
 pub mod ssh_auth;
 pub mod ssh_keys;
 pub mod winchg;
-pub mod serial;
-pub mod ssh;
-pub mod sftp_endpoint;
-pub mod sftp_mux;
-pub mod enumeration;
 
 pub use params::{BleConnectParams, LocalConnectParams, SerialConnectParams, SshConnectParams};
 pub use sftp_endpoint::{
@@ -94,7 +94,10 @@ pub enum ConnIn {
     /// A connection can expose multiple logical terminal/serial ports over one transport.
     PortsChanged(Vec<ConnectionPort>),
     /// Data tagged with a logical port. BLE multi-UART and future mux transports use this.
-    PortData { port: u8, data: Vec<u8> },
+    PortData {
+        port: u8,
+        data: Vec<u8>,
+    },
     StateChanged(ConnectionState),
 }
 
@@ -102,7 +105,10 @@ pub enum ConnIn {
 pub enum ConnOut {
     Data(Vec<u8>),
     /// Write bytes to a logical port. Transports that do not support ports treat port 0 as Data.
-    PortData { port: u8, data: Vec<u8> },
+    PortData {
+        port: u8,
+        data: Vec<u8>,
+    },
     Resize(u16, u16),
     /// Re-deliver SIGWINCH without changing winsize (ncurses full refresh after resize).
     Winch,
@@ -236,10 +242,7 @@ impl ConnectionHandle {
         self
     }
 
-    pub fn with_blocking_resize(
-        mut self,
-        tx: std::sync::mpsc::SyncSender<(u16, u16)>,
-    ) -> Self {
+    pub fn with_blocking_resize(mut self, tx: std::sync::mpsc::SyncSender<(u16, u16)>) -> Self {
         self.blocking_resize = Some(tx);
         self
     }

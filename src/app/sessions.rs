@@ -3,17 +3,18 @@
 use log::info;
 
 use super::RsTerminalApp;
-use crate::connection::ssh;
 #[cfg(not(target_os = "android"))]
 use crate::connection::local;
-use crate::session::{
-    drain_connection, ActiveSession, ConnectionViewAction, FileManagerMode,
-    FileManagerSession, WorkspaceSession,
-};
+use crate::connection::ssh;
 use crate::data::persist::types::{ConnectionType, SavedConnection};
-use crate::terminal::{DEFAULT_GRID_COLS, DEFAULT_GRID_ROWS};
+use crate::session::{
+    ActiveSession, ConnectionViewAction, FileManagerMode, FileManagerSession, TerminalSessionCore,
+    WorkspaceSession, drain_connection,
+};
 use crate::terminal::Terminal;
+use crate::terminal::{DEFAULT_GRID_COLS, DEFAULT_GRID_ROWS};
 use crate::ui::shell::coordinator::ShellCoordinator;
+use crate::ui::terminal::TerminalViewState;
 use crate::ui::uiframe::keyboard::VirtualKeyboard;
 
 impl RsTerminalApp {
@@ -42,7 +43,9 @@ impl RsTerminalApp {
     }
 
     pub(crate) fn open_file_manager_local(&mut self) {
-        self.push_session(WorkspaceSession::FileManager(FileManagerSession::open_local()));
+        self.push_session(WorkspaceSession::FileManager(
+            FileManagerSession::open_local(),
+        ));
     }
 
     #[cfg(not(target_os = "android"))]
@@ -54,25 +57,25 @@ impl RsTerminalApp {
         let WorkspaceSession::Terminal(term) = &mut self.sessions[idx] else {
             return;
         };
-        if term.conn_type != ConnectionType::Local {
+        if term.core.conn_type != ConnectionType::Local {
             return;
         }
-        term.handle.close();
-        let rows = term.last_pty_rows.max(1);
-        let cols = term.last_pty_cols.max(1);
+        term.core.handle.close();
+        let rows = term.view.last_pty_rows.max(1);
+        let cols = term.view.last_pty_cols.max(1);
         match local::connect_local(&super::connect_params::local_params(config), rows, cols) {
             Ok(handle) => {
-                term.handle = handle;
-                term.saved_conn_id = Some(config.id.clone());
-                term.profile_id = profile.id.clone();
-                term.live_font_size = profile.font_size;
-                term.name = config.name.clone();
-                term.user_at_host = crate::platform::get().local_user_at_host();
-                term.want_terminal_focus = true;
-                term.selection = None;
-                term.selection_pointer = None;
+                term.core.handle = handle;
+                term.core.saved_conn_id = Some(config.id.clone());
+                term.view.profile_id = profile.id.clone();
+                term.view.live_font_size = profile.font_size;
+                term.core.name = config.name.clone();
+                term.core.user_at_host = crate::platform::get().local_user_at_host();
+                term.view.want_terminal_focus = true;
+                term.view.selection = None;
+                term.view.selection_pointer = None;
             }
-            Err(e) => term.disconnect_message = Some(e),
+            Err(e) => term.core.disconnect_message = Some(e),
         }
     }
 
@@ -84,22 +87,26 @@ impl RsTerminalApp {
             FileSsh(String),
             FileLocal,
         }
-        let plan = self.sessions.iter().find(|s| s.id() == session_id).and_then(|s| {
-            match s {
-                WorkspaceSession::Terminal(term) => match term.conn_type {
+        let plan = self
+            .sessions
+            .iter()
+            .find(|s| s.id() == session_id)
+            .and_then(|s| match s {
+                WorkspaceSession::Terminal(term) => match term.core.conn_type {
                     #[cfg(not(target_os = "android"))]
                     ConnectionType::Local => Some(DupPlan::TerminalLocal),
                     #[cfg(target_os = "android")]
                     ConnectionType::Local => None,
-                    ConnectionType::Ssh => term.saved_conn_id.clone().map(DupPlan::TerminalSsh),
+                    ConnectionType::Ssh => {
+                        term.core.saved_conn_id.clone().map(DupPlan::TerminalSsh)
+                    }
                     ConnectionType::Serial | ConnectionType::Ble => None,
                 },
                 WorkspaceSession::FileManager(fm) => match fm.mode {
                     FileManagerMode::SshSftp => fm.saved_conn_id.clone().map(DupPlan::FileSsh),
                     FileManagerMode::LocalDual => Some(DupPlan::FileLocal),
                 },
-            }
-        });
+            });
         match plan {
             #[cfg(not(target_os = "android"))]
             Some(DupPlan::TerminalLocal) => self.connect_local(),
@@ -130,7 +137,7 @@ impl RsTerminalApp {
         handle: crate::connection::ConnectionHandle,
         config: &SavedConnection,
         scrollback_lines: usize,
-        pane: crate::ui::shell::layout_state::PaneId,
+        pane: crate::ui::layout::PaneId,
         ssh_extras: Option<(
             crate::remote::SessionMetrics,
             std::sync::Arc<crate::fs::sftp::SftpClient>,
@@ -161,43 +168,49 @@ impl RsTerminalApp {
         };
 
         let id = uuid::Uuid::new_v4().to_string();
-        self.sessions.push(WorkspaceSession::Terminal(ActiveSession {
-            id: id.clone(),
-            conn_type: config.conn_type.clone(),
-            saved_conn_id: Some(config.id.clone()),
-            profile_id,
-            live_font_size,
-            name: config.name.clone(),
-            user_at_host,
-            handle,
-            terminal,
-            active_port: 0,
-            ports: Vec::new(),
-            inactive_port_states: Default::default(),
-            port_unread: Default::default(),
-            scrollback_lines,
-            scroll_offset: 0,
-            selection: None,
-            selection_pointer: None,
-            touch_state: Default::default(),
-            want_terminal_focus: true,
-            terminal_had_focus: false,
-            row_galley_cache: Default::default(),
-            layout_font_size: live_font_size,
-            grid_rows: DEFAULT_GRID_ROWS,
-            grid_cols: DEFAULT_GRID_COLS,
-            last_pty_rows: DEFAULT_GRID_ROWS as u16,
-            last_pty_cols: DEFAULT_GRID_COLS as u16,
-            size_label_dims: (DEFAULT_GRID_COLS, DEFAULT_GRID_ROWS),
-            size_label_hide_at: None,
-            size_label_active: false,
-            mouse_motion_last: None,
-            font_generation: crate::fonts::font_generation(),
-            disconnect_message: None,
-            metrics,
-            session_sftp,
-            files: Default::default(),
-        }));
+        self.sessions
+            .push(WorkspaceSession::Terminal(ActiveSession::new(
+                TerminalSessionCore {
+                    id: id.clone(),
+                    conn_type: config.conn_type.clone(),
+                    disconnect_message: None,
+                    saved_conn_id: Some(config.id.clone()),
+                    name: config.name.clone(),
+                    user_at_host,
+                    handle,
+                    terminal,
+                    active_port: 0,
+                    ports: Vec::new(),
+                    inactive_port_states: Default::default(),
+                    port_unread: Default::default(),
+                    scrollback_lines,
+                    metrics,
+                    session_sftp,
+                    files: Default::default(),
+                },
+                TerminalViewState {
+                    profile_id,
+                    live_font_size,
+                    inactive_port_states: Default::default(),
+                    scroll_offset: 0,
+                    selection: None,
+                    selection_pointer: None,
+                    touch_state: Default::default(),
+                    want_terminal_focus: true,
+                    terminal_had_focus: false,
+                    row_galley_cache: Default::default(),
+                    layout_font_size: live_font_size,
+                    grid_rows: DEFAULT_GRID_ROWS,
+                    grid_cols: DEFAULT_GRID_COLS,
+                    last_pty_rows: DEFAULT_GRID_ROWS as u16,
+                    last_pty_cols: DEFAULT_GRID_COLS as u16,
+                    size_label_dims: (DEFAULT_GRID_COLS, DEFAULT_GRID_ROWS),
+                    size_label_hide_at: None,
+                    size_label_active: false,
+                    mouse_motion_last: None,
+                    font_generation: crate::fonts::font_generation(),
+                },
+            )));
         ShellCoordinator::assign_session_to_pane(&mut self.shell.layout, pane, id);
     }
 
@@ -212,10 +225,7 @@ impl RsTerminalApp {
         }
     }
 
-    pub(crate) fn close_pane_and_maybe_session(
-        &mut self,
-        pane: crate::ui::shell::layout_state::PaneId,
-    ) {
+    pub(crate) fn close_pane_and_maybe_session(&mut self, pane: crate::ui::layout::PaneId) {
         let sid = self
             .shell
             .layout
@@ -234,7 +244,7 @@ impl RsTerminalApp {
     pub(crate) fn close_session(&mut self, id: &str) {
         if let Some(pos) = self.sessions.iter().position(|s| s.id() == id) {
             if let WorkspaceSession::Terminal(s) = &mut self.sessions[pos] {
-                s.handle.close();
+                s.core.handle.close();
             }
             self.sessions.remove(pos);
         }
@@ -263,7 +273,7 @@ impl RsTerminalApp {
             .and_then(|id| self.sessions.iter().position(|s| s.id() == id))
     }
 
-    pub(crate) fn reconnect_ssh_session(&mut self, pane: crate::ui::shell::layout_state::PaneId, conn_id: &str) {
+    pub(crate) fn reconnect_ssh_session(&mut self, pane: crate::ui::layout::PaneId, conn_id: &str) {
         let Some(config) = self
             .saved_connections
             .iter()
@@ -300,19 +310,19 @@ impl RsTerminalApp {
         let WorkspaceSession::Terminal(session) = &mut self.sessions[idx] else {
             return;
         };
-        if !matches!(session.conn_type, ConnectionType::Ssh) {
+        if !matches!(session.core.conn_type, ConnectionType::Ssh) {
             return;
         }
         match ssh::connect_ssh_session(&params, auth, 24, 80) {
             Ok(out) => {
-                session.handle = out.handle;
-                session.metrics = out.metrics;
-                session.session_sftp = Some(std::sync::Arc::new(
+                session.core.handle = out.handle;
+                session.core.metrics = out.metrics;
+                session.core.session_sftp = Some(std::sync::Arc::new(
                     crate::fs::sftp::SftpClient::from_endpoint(out.sftp_endpoint),
                 ));
-                session.files.invalidate_pending();
-                session.disconnect_message = None;
-                session.want_terminal_focus = true;
+                session.core.files.invalidate_pending();
+                session.core.disconnect_message = None;
+                session.view.want_terminal_focus = true;
             }
             Err(e) => self.connection_notice = Some(e),
         }

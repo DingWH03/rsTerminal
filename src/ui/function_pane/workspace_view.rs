@@ -4,10 +4,10 @@ use std::collections::HashSet;
 
 use crate::data::prefs::Prefs;
 use crate::session::WorkspaceSession;
-use crate::ui::function_pane::session_list::{paint_session_rows, SessionListContext};
-use crate::ui::function_pane::{drag_split_enabled, FunctionPane};
+use crate::ui::function_pane::session_list::{SessionListContext, paint_session_rows};
+use crate::ui::function_pane::{FunctionPane, drag_split_enabled};
+use crate::ui::layout::WorkspaceLayout;
 use crate::ui::pane_colors::session_accent_map;
-use crate::ui::shell::layout_state::WorkspaceLayout;
 use crate::ui::shell::messages::FunctionAction;
 
 pub fn render(
@@ -40,7 +40,9 @@ pub fn render(
     let sess_action = egui::ScrollArea::vertical()
         .id_salt("function_sessions_scroll")
         .auto_shrink([false; 2])
-        .show(ui, |ui| paint_session_rows(ui, sessions, highlighted_session, &ctx))
+        .show(ui, |ui| {
+            paint_session_rows(ui, sessions, highlighted_session, &ctx)
+        })
         .inner;
 
     if let Some(id) = sess_action.select_session {

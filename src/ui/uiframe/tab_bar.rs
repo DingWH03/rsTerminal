@@ -46,10 +46,7 @@ impl TabBar {
         // Center the strip when there is leftover width.
         let start_x = ((avail - needed) * 0.5).max(0.0);
 
-        let (_, row_resp) = ui.allocate_exact_size(
-            egui::vec2(avail, cell),
-            egui::Sense::hover(),
-        );
+        let (_, row_resp) = ui.allocate_exact_size(egui::vec2(avail, cell), egui::Sense::hover());
         let row_left = row_resp.rect.left() + start_x;
         let row_top = row_resp.rect.top();
 
@@ -70,8 +67,7 @@ impl TabBar {
                     egui::Color32::TRANSPARENT
                 };
                 if bg != egui::Color32::TRANSPARENT {
-                    ui.painter()
-                        .rect_filled(rect, style::CORNER_RADIUS_XS, bg);
+                    ui.painter().rect_filled(rect, style::CORNER_RADIUS_XS, bg);
                 }
                 if selected_here {
                     ui.painter().rect_stroke(
@@ -87,10 +83,8 @@ impl TabBar {
                 } else {
                     ui.visuals().weak_text_color()
                 };
-                let icon_rect = egui::Rect::from_center_size(
-                    rect.center(),
-                    egui::vec2(Self::ICON, Self::ICON),
-                );
+                let icon_rect =
+                    egui::Rect::from_center_size(rect.center(), egui::vec2(Self::ICON, Self::ICON));
                 vector_icons::paint(ui, icon_rect, item.icon, color, 1.4);
             }
 

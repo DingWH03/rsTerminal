@@ -19,6 +19,5 @@ pub fn config_dir() -> Option<PathBuf> {
             return Some(dir.join("config"));
         }
     }
-    ProjectDirs::from("io", "rsTerminal", "rsTerminal")
-        .map(|d| d.config_dir().to_path_buf())
+    ProjectDirs::from("io", "rsTerminal", "rsTerminal").map(|d| d.config_dir().to_path_buf())
 }

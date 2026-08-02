@@ -1,7 +1,11 @@
 use super::{android_ime_for_text_edit, labeled_row, text_edit};
 
 /// Labeled single-line text field (control fills remaining width).
-pub fn labeled_text(ui: &mut egui::Ui, label: impl Into<String>, text: &mut String) -> egui::Response {
+pub fn labeled_text(
+    ui: &mut egui::Ui,
+    label: impl Into<String>,
+    text: &mut String,
+) -> egui::Response {
     let mut resp = None;
     labeled_row(ui, label, |ui| {
         resp = Some(text_edit(ui, text));
@@ -105,7 +109,10 @@ pub fn labeled_slider<Num: egui::emath::Numeric>(
 ) {
     labeled_row(ui, label, |ui| {
         let w = ui.available_width().max(80.0);
-        ui.add_sized([w, ui.spacing().interact_size.y], egui::Slider::new(value, range));
+        ui.add_sized(
+            [w, ui.spacing().interact_size.y],
+            egui::Slider::new(value, range),
+        );
     });
 }
 
@@ -125,7 +132,11 @@ pub fn labeled_checkbox(
 }
 
 /// Simple checkbox without a left label column (full-width row).
-pub fn checkbox_row(ui: &mut egui::Ui, checked: &mut bool, text: impl Into<String>) -> egui::Response {
+pub fn checkbox_row(
+    ui: &mut egui::Ui,
+    checked: &mut bool,
+    text: impl Into<String>,
+) -> egui::Response {
     let resp = ui.checkbox(checked, text.into());
     ui.add_space(super::FIELD_GAP);
     resp

@@ -1,8 +1,8 @@
 //! Shell message bus — actions from function pane and workspace pane.
 
 use crate::session::ConnectionViewAction;
+use crate::ui::layout::PaneId;
 use crate::ui::page::file_manager::FileManagerAction;
-use crate::ui::shell::layout_state::PaneId;
 
 /// Actions emitted by the left function pane.
 #[derive(Debug, Default)]

@@ -8,11 +8,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+use crate::fs::TransferSnapshot;
 use crate::fs::entry_info;
 use crate::fs::local;
-use crate::fs::sftp::{join_remote, SftpClient};
+use crate::fs::sftp::{SftpClient, join_remote};
 use crate::fs::transfer_progress::ByteProgress;
-use crate::fs::TransferSnapshot;
 use crate::session::{FileClipboard, FileClipboardMode, FileTransferState};
 
 /// 粘贴目标面板。
@@ -28,17 +28,11 @@ pub enum PasteTarget {
 
 impl FileTransferState {
     pub fn is_active(&self) -> bool {
-        self.snapshot
-            .lock()
-            .map(|s| s.active)
-            .unwrap_or(false)
+        self.snapshot.lock().map(|s| s.active).unwrap_or(false)
     }
 
     pub fn read_ui(&self) -> TransferSnapshot {
-        self.snapshot
-            .lock()
-            .map(|s| s.clone())
-            .unwrap_or_default()
+        self.snapshot.lock().map(|s| s.clone()).unwrap_or_default()
     }
 
     pub fn request_cancel(&self) {
@@ -84,11 +78,7 @@ impl FileTransferState {
     }
 
     pub fn poll(&mut self, ctx: &egui::Context) -> Option<TransferDone> {
-        let finished = self
-            .snapshot
-            .lock()
-            .map(|s| s.finished)
-            .unwrap_or(false);
+        let finished = self.snapshot.lock().map(|s| s.finished).unwrap_or(false);
         if !finished {
             if self.is_active() {
                 ctx.request_repaint();
@@ -177,9 +167,12 @@ fn run_paste_job(
                     let name = file_name_from_path(remote_path);
                     let label = format!("Downloading {name}");
                     let local_path = dest_dir.join(&name);
-                    if let Err(e) =
-                        client.download_with_progress(remote_path, &local_path, Some(progress.clone()), &label)
-                    {
+                    if let Err(e) = client.download_with_progress(
+                        remote_path,
+                        &local_path,
+                        Some(progress.clone()),
+                        &label,
+                    ) {
                         errors.push(e);
                     }
                 }
@@ -250,7 +243,12 @@ fn run_paste_job(
                             client
                                 .download_with_progress(from, &tmp, Some(progress.clone()), &label)
                                 .and_then(|_| {
-                                    client.upload_with_progress(&tmp, &to, Some(progress.clone()), &label)
+                                    client.upload_with_progress(
+                                        &tmp,
+                                        &to,
+                                        Some(progress.clone()),
+                                        &label,
+                                    )
                                 })
                                 .map(|_| {
                                     if tmp.is_file() {
@@ -276,9 +274,12 @@ fn run_paste_job(
                         .unwrap_or("untitled");
                     let label = format!("Uploading {name}");
                     let remote_path = join_remote(&cwd, name);
-                    if let Err(e) =
-                        client.upload_with_progress(&src, &remote_path, Some(progress.clone()), &label)
-                    {
+                    if let Err(e) = client.upload_with_progress(
+                        &src,
+                        &remote_path,
+                        Some(progress.clone()),
+                        &label,
+                    ) {
                         errors.push(e);
                     } else if clip.mode == FileClipboardMode::Cut {
                         let _ = local::remove_path(&src);

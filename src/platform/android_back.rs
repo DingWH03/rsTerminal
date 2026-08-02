@@ -4,8 +4,8 @@
 //! and calls the JNI function to signal Rust.  We set an atomic flag; the
 //! next egui frame runs `handle_back_navigation()`.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use jni_0_19::objects::GlobalRef;
 
@@ -22,9 +22,9 @@ pub fn init(app: &winit::platform::android::activity::AndroidApp) {
     // Clear any stale signal before the new UI starts polling input.
     BACK_PRESSED.store(false, Ordering::SeqCst);
 
-    if let Ok(jvm) = unsafe {
-        jni_0_19::JavaVM::from_raw(app.vm_as_ptr() as *mut jni_0_19::sys::JavaVM)
-    } {
+    if let Ok(jvm) =
+        unsafe { jni_0_19::JavaVM::from_raw(app.vm_as_ptr() as *mut jni_0_19::sys::JavaVM) }
+    {
         *JVM.lock().unwrap() = Some(jvm);
     }
     if let Some(ref jvm) = *JVM.lock().unwrap() {
@@ -82,8 +82,8 @@ pub fn move_task_to_back() -> bool {
             "(Z)Z",
             &[jni_0_19::objects::JValue::Bool(jni_0_19::sys::JNI_TRUE)],
         )
-            .and_then(|v| v.z())
-            .unwrap_or(false)
+        .and_then(|v| v.z())
+        .unwrap_or(false)
     })
     .unwrap_or(false)
 }
@@ -92,8 +92,6 @@ pub fn move_task_to_back() -> bool {
 /// lifecycle paths, but normal Android back navigation should prefer
 /// [`move_task_to_back`] to avoid same-process event-loop recreation crashes.
 pub fn finish_activity() -> bool {
-    with_activity(|env, act| {
-        env.call_method(act.as_obj(), "finish", "()V", &[]).is_ok()
-    })
-    .unwrap_or(false)
+    with_activity(|env, act| env.call_method(act.as_obj(), "finish", "()V", &[]).is_ok())
+        .unwrap_or(false)
 }

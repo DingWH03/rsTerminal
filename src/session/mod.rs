@@ -11,12 +11,19 @@ pub mod selection_state;
 pub mod terminal;
 pub mod workspace;
 
-pub use drain::{drain_connection, ConnectionViewAction};
-pub use file_manager::*;
-pub use files_cache::{tick_all_session_files, tick_session_files, SessionFilesCache};
-pub use galley_cache::RowGalleyCache;
-pub use selection_state::{
-    extract_range_text, CellPos, TerminalSelection, TerminalTouchState,
+pub use drain::{ConnectionViewAction, drain_connection};
+pub use file_manager::{
+    FileActivePane, FileClipboard, FileClipboardMode, FileManagerMode, FileManagerSession,
+    FilePaneState, FileTransferState, InfoDialog, InfoLine, PaneSide, PaneState, RemotePane,
+    RenameDialog,
 };
-pub use terminal::{ActiveSession, PortUiState};
-pub use workspace::{terminal_conn_type, WorkspaceSession};
+pub use files_cache::{SessionFilesCache, tick_all_session_files, tick_session_files};
+pub use terminal::{
+    ActiveSession, PortCoreState, PortUiState, TerminalSessionCore, normalize_paste_text,
+    paste_payload,
+};
+// Compatibility exports for the pre-phase-4 session paths.
+pub use crate::ui::terminal::{
+    CellPos, RowGalleyCache, TerminalSelection, TerminalTouchState, extract_range_text,
+};
+pub use workspace::{WorkspaceSession, terminal_conn_type};

@@ -38,7 +38,11 @@ pub fn icon_toolbar_toggle(ui: &mut Ui, id: Id, icon: Icon, active: bool) -> Res
             ui.visuals().weak_text_color()
         };
         if resp.hovered() && !active {
-            ui.painter().rect_filled(rect, style::CORNER_RADIUS_XS, ui.visuals().widgets.hovered.bg_fill);
+            ui.painter().rect_filled(
+                rect,
+                style::CORNER_RADIUS_XS,
+                ui.visuals().widgets.hovered.bg_fill,
+            );
         }
         vector_icons::paint(ui, rect.shrink(3.0), icon, color, ICON_STROKE);
     }
@@ -51,15 +55,14 @@ pub fn text_toolbar_button(ui: &mut Ui, id: Id, label: impl Into<WidgetText>) ->
     let (rect, resp) = ui.allocate_exact_size(TOOLBAR_BTN_SIZE, Sense::click());
     if ui.is_rect_visible(rect) {
         if resp.hovered() {
-            ui.painter().rect_filled(rect, style::CORNER_RADIUS_XS, ui.visuals().widgets.hovered.bg_fill);
+            ui.painter().rect_filled(
+                rect,
+                style::CORNER_RADIUS_XS,
+                ui.visuals().widgets.hovered.bg_fill,
+            );
         }
         let text: WidgetText = label.into();
-        let galley = text.into_galley(
-            ui,
-            None,
-            f32::INFINITY,
-            egui::TextStyle::Button,
-        );
+        let galley = text.into_galley(ui, None, f32::INFINITY, egui::TextStyle::Button);
         let pos = rect.center() - galley.size() / 2.0;
         let color = if resp.hovered() {
             ui.visuals().selection.stroke.color
@@ -93,7 +96,8 @@ fn paint_icon_btn(ui: &mut Ui, rect: egui::Rect, resp: &Response, icon: Icon, da
         } else {
             ui.visuals().widgets.hovered.bg_fill
         };
-        ui.painter().rect_filled(rect, style::CORNER_RADIUS_XS, fill);
+        ui.painter()
+            .rect_filled(rect, style::CORNER_RADIUS_XS, fill);
     }
     let color = if danger {
         if resp.hovered() {

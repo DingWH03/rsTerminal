@@ -1,11 +1,11 @@
 //! Desktop / non-Android platform implementation.
 //! Supports local terminal, serial, BLE, and standard host identity.
 
+use crate::platform::Platform;
 use crate::platform::ble;
 use crate::platform::process;
 use crate::platform::serial::{self, SerialDevice};
 use crate::platform::shell;
-use crate::platform::Platform;
 
 #[derive(Debug)]
 pub struct DesktopPlatform;

@@ -90,7 +90,11 @@ impl UiTheme {
                         .ok()
                         .map(|t| t.contains("dark") || t.contains("Dark"))
                         .unwrap_or(false);
-                if dark { egui::Visuals::dark() } else { egui::Visuals::light() }
+                if dark {
+                    egui::Visuals::dark()
+                } else {
+                    egui::Visuals::light()
+                }
             }
             Self::Light => egui::Visuals::light(),
             Self::Dark => egui::Visuals::dark(),

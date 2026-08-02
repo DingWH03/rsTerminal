@@ -12,6 +12,4 @@ pub use paths::config_dir;
 pub use paths::init_android_base_dir;
 
 pub use persist::{Persist, PersistError};
-pub use prefs::{
-    load_prefs, save_prefs, AppearancePrefs, ChromePrefs, GeneralPrefs, Prefs,
-};
+pub use prefs::{AppearancePrefs, ChromePrefs, GeneralPrefs, Prefs, load_prefs, save_prefs};

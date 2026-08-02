@@ -1,6 +1,7 @@
 //! Shell coordinator — applies actions from function and workspace panes.
 
-use crate::ui::shell::layout_state::{PaneId, ShellLayout};
+use crate::ui::layout::PaneId;
+use crate::ui::shell::layout_state::ShellLayout;
 use crate::ui::shell::messages::{FunctionAction, WorkspaceAction};
 
 pub struct ShellCoordinator;

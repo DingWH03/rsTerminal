@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
 use crate::fs::sftp::SftpClient;
-use crate::fs::{home_dir, FileEntry};
+use crate::fs::{FileEntry, home_dir};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PaneSide {
@@ -44,7 +44,7 @@ pub enum FileActivePane {
     LeftLocal,
 }
 
-pub struct PaneState {
+pub struct FilePaneState {
     pub cwd: PathBuf,
     pub entries: Vec<FileEntry>,
     pub selected: HashSet<usize>,
@@ -54,7 +54,10 @@ pub struct PaneState {
     pub loading: bool,
 }
 
-impl PaneState {
+/// Compatibility alias for the pre-phase-6 public file-manager path.
+pub use FilePaneState as PaneState;
+
+impl FilePaneState {
     pub fn new_local(start: PathBuf) -> Self {
         Self {
             cwd: start,
@@ -150,8 +153,8 @@ pub struct FileManagerSession {
     pub mode: FileManagerMode,
     pub remote: Option<RemotePane>,
     /// Left pane when `mode == LocalDual`.
-    pub left_local: Option<PaneState>,
-    pub right: PaneState,
+    pub left_local: Option<FilePaneState>,
+    pub right: FilePaneState,
     pub clipboard: Option<FileClipboard>,
     pub status: Option<String>,
     pub rename_dialog: RenameDialog,
@@ -212,7 +215,7 @@ impl FileManagerSession {
                 loading: true,
             }),
             left_local: None,
-            right: PaneState::new_local(home_dir()),
+            right: FilePaneState::new_local(home_dir()),
             clipboard: None,
             status: None,
             rename_dialog: RenameDialog::default(),
@@ -233,8 +236,8 @@ impl FileManagerSession {
             saved_conn_id: None,
             mode: FileManagerMode::LocalDual,
             remote: None,
-            left_local: Some(PaneState::new_local(home.clone())),
-            right: PaneState::new_local(home),
+            left_local: Some(FilePaneState::new_local(home.clone())),
+            right: FilePaneState::new_local(home),
             clipboard: None,
             status: None,
             rename_dialog: RenameDialog::default(),
