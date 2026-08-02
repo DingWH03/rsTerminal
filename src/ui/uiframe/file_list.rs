@@ -2,6 +2,7 @@
 
 use crate::fs::FileEntry;
 use crate::ui::uiframe::style;
+use crate::ui::uiframe::tokens;
 
 #[derive(Debug, Default)]
 pub struct FileListAction {
@@ -27,63 +28,73 @@ impl FileListView {
     ) -> FileListAction {
         let mut action = FileListAction::default();
 
-        // Path + up button
         ui.horizontal(|ui| {
+            ui.style_mut().spacing.item_spacing.x = tokens::space::SM;
             let up = ui
                 .add(
-                    egui::Button::new("⬆")
+                    egui::Button::new("↑")
                         .frame(false)
-                        .corner_radius(style::CORNER_RADIUS_XS),
+                        .corner_radius(style::CORNER_RADIUS_XS)
+                        .min_size(egui::vec2(
+                            tokens::size::TOOLBAR_WIDTH,
+                            tokens::size::TOOLBAR_HEIGHT,
+                        )),
                 )
-                .on_hover_text("..");
+                .on_hover_text(rust_i18n::t!("parent_folder"));
             if up.clicked() {
                 action.go_up = true;
             }
-            ui.label(egui::RichText::new(cwd).small().weak());
+            ui.label(egui::RichText::new(cwd).size(tokens::text::SMALL).weak());
         });
-        ui.add_space(2.0);
-        ui.separator();
-        ui.add_space(2.0);
+        ui.add_space(tokens::space::XS);
+        ui.add(egui::Separator::default().spacing(tokens::space::XS));
 
         if let Some(err) = error {
             ui.colored_label(style::RED, err);
         }
         if loading {
-            ui.label(egui::RichText::new("…").weak());
+            ui.label(
+                egui::RichText::new(rust_i18n::t!("loading"))
+                    .size(tokens::text::SMALL)
+                    .weak(),
+            );
         }
 
         let list_resp = egui::ScrollArea::vertical()
             .id_salt(id_salt)
             .auto_shrink([false; 2])
             .show(ui, |ui| {
+                ui.style_mut().spacing.scroll.bar_width = 6.0;
                 ui.set_min_width(ui.available_width());
+                if !loading && entries.is_empty() && error.is_none() {
+                    ui.label(
+                        egui::RichText::new(rust_i18n::t!("empty_folder"))
+                            .size(tokens::text::SMALL)
+                            .weak(),
+                    );
+                    return;
+                }
                 for (idx, ent) in entries.iter().enumerate() {
                     let label = entry_label(ent);
                     let resp = ui.add(
-                        egui::Button::new(egui::RichText::new(label).size(13.0))
+                        egui::Button::new(egui::RichText::new(label).size(tokens::text::BODY))
                             .frame(false)
                             .corner_radius(style::CORNER_RADIUS_XS)
-                            .min_size(egui::vec2(ui.available_width(), 26.0)),
+                            .min_size(egui::vec2(ui.available_width(), tokens::size::NAV_ROW)),
                     );
 
                     if resp.double_clicked() || (resp.clicked() && ent.is_dir) {
                         if ent.is_dir {
                             action.open_index = Some(idx);
                         }
-                    } else if resp.clicked() && !ent.is_dir {
-                        // single click on file — no-op for sidebar (preview only)
                     }
 
-                    // Outbound drag: start when the row is dragged.
-                    if resp.dragged() && !ent.is_dir {
-                        if !action.drag_indices.contains(&idx) {
-                            action.drag_indices.push(idx);
-                        }
+                    if resp.dragged() && !ent.is_dir && !action.drag_indices.contains(&idx) {
+                        action.drag_indices.push(idx);
                     }
                 }
             });
 
-        // Inbound external drops over the scroll area (desktop only).
         #[cfg(any(target_os = "linux", target_os = "windows"))]
         {
             let rect = list_resp.inner_rect;
@@ -94,7 +105,7 @@ impl FileListView {
                     ui.painter().rect_stroke(
                         rect,
                         style::CORNER_RADIUS_XS,
-                        egui::Stroke::new(1.5, style::ACCENT),
+                        egui::Stroke::new(tokens::stroke::EMPHASIS, style::ACCENT),
                         egui::StrokeKind::Inside,
                     );
                 }
@@ -120,6 +131,6 @@ impl FileListView {
 }
 
 fn entry_label(ent: &FileEntry) -> String {
-    let icon = if ent.is_dir { "📁" } else { "📄" };
-    format!("{icon} {}", ent.name)
+    let marker = if ent.is_dir { "▸" } else { " " };
+    format!("{marker} {}", ent.name)
 }

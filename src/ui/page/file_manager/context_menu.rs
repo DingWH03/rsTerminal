@@ -33,12 +33,12 @@ pub(super) fn install_context_menu(
 pub(super) fn paint_blank_context_menu(ui: &mut egui::Ui, has_clipboard: bool, ops: &mut PaneOps) {
     paint_horizontal_context_menu(ui, |ui| {
         if has_clipboard {
-            if ui.button("Paste").clicked() {
+            if ui.button(rust_i18n::t!("paste")).clicked() {
                 ops.paste = true;
                 ui.close();
             }
         } else {
-            ui.label(egui::RichText::new("Clipboard empty").weak());
+            ui.label(egui::RichText::new(rust_i18n::t!("clipboard_empty")).weak());
         }
     });
 }
@@ -68,7 +68,7 @@ pub(super) fn row_context_menu_local(
 ) {
     let in_multiselect = pane.select_mode;
     paint_horizontal_context_menu(ui, |ui| {
-        if ent.is_dir && ui.button("Open").clicked() {
+        if ent.is_dir && ui.button(rust_i18n::t!("open")).clicked() {
             ops.open_index = Some(idx);
             if in_multiselect {
                 ops.dismiss_multiselect = true;
@@ -76,14 +76,14 @@ pub(super) fn row_context_menu_local(
             ui.close();
             return;
         }
-        if ui.button("Copy").clicked() {
+        if ui.button(rust_i18n::t!("copy")).clicked() {
             ops.bulk_copy = Some(indices_for_context_action(&pane.selected, idx));
             if in_multiselect {
                 ops.dismiss_multiselect = true;
             }
             ui.close();
         }
-        if ui.button("Cut").clicked() {
+        if ui.button(rust_i18n::t!("cut")).clicked() {
             ops.bulk_cut = Some(indices_for_context_action(&pane.selected, idx));
             if in_multiselect {
                 ops.dismiss_multiselect = true;
@@ -97,11 +97,11 @@ pub(super) fn row_context_menu_local(
             }
             ui.close();
         }
-        if ui.button("Rename").clicked() {
+        if ui.button(rust_i18n::t!("rename")).clicked() {
             ops.rename_index = Some(idx);
             ui.close();
         }
-        if ui.button("Info").clicked() {
+        if ui.button(rust_i18n::t!("file_info")).clicked() {
             ops.info_index = Some(idx);
             ui.close();
         }
@@ -117,7 +117,7 @@ pub(super) fn row_context_menu_remote(
 ) {
     let in_multiselect = remote.select_mode;
     paint_horizontal_context_menu(ui, |ui| {
-        if ent.is_dir && ui.button("Open").clicked() {
+        if ent.is_dir && ui.button(rust_i18n::t!("open")).clicked() {
             ops.open_index = Some(idx);
             if in_multiselect {
                 ops.dismiss_multiselect = true;
@@ -125,14 +125,14 @@ pub(super) fn row_context_menu_remote(
             ui.close();
             return;
         }
-        if ui.button("Copy").clicked() {
+        if ui.button(rust_i18n::t!("copy")).clicked() {
             ops.bulk_copy = Some(indices_for_context_action(&remote.selected, idx));
             if in_multiselect {
                 ops.dismiss_multiselect = true;
             }
             ui.close();
         }
-        if ui.button("Cut").clicked() {
+        if ui.button(rust_i18n::t!("cut")).clicked() {
             ops.bulk_cut = Some(indices_for_context_action(&remote.selected, idx));
             if in_multiselect {
                 ops.dismiss_multiselect = true;
@@ -146,11 +146,11 @@ pub(super) fn row_context_menu_remote(
             }
             ui.close();
         }
-        if ui.button("Rename").clicked() {
+        if ui.button(rust_i18n::t!("rename")).clicked() {
             ops.rename_index = Some(idx);
             ui.close();
         }
-        if ui.button("Info").clicked() {
+        if ui.button(rust_i18n::t!("file_info")).clicked() {
             ops.info_index = Some(idx);
             ui.close();
         }

@@ -8,18 +8,18 @@ mod list;
 pub use fields::*;
 pub use list::*;
 
-use super::style;
+use super::{interactive, style, tokens};
 
 /// Fixed label column width (left side of labeled rows).
 pub const LABEL_WIDTH: f32 = 108.0;
 /// Vertical gap between consecutive fields.
-pub const FIELD_GAP: f32 = 6.0;
+pub const FIELD_GAP: f32 = tokens::space::MD;
 /// Gap before/after section separators.
-pub const SECTION_GAP: f32 = 8.0;
+pub const SECTION_GAP: f32 = tokens::space::LG;
 /// Space above dialog Cancel/Save row.
-pub const FOOTER_GAP: f32 = 12.0;
+pub const FOOTER_GAP: f32 = tokens::space::XL;
 /// Dialog action button height.
-pub const BTN_H: f32 = 32.0;
+pub const BTN_H: f32 = tokens::size::BUTTON;
 /// Cancel button min width.
 pub const BTN_W_CANCEL: f32 = 88.0;
 /// Primary/save button min width.
@@ -126,8 +126,14 @@ pub fn text_tab_bar<T: Copy + PartialEq>(
         ui.spacing_mut().item_spacing.x = gap;
         for &tab in tabs {
             let is_sel = selected == tab;
+            let state = if is_sel {
+                interactive::RowState::Selected
+            } else {
+                interactive::RowState::Default
+            };
+            let chrome = interactive::row_chrome(ui, state);
             let fill = if is_sel {
-                ui.visuals().selection.bg_fill
+                chrome.fill
             } else {
                 ui.visuals().widgets.inactive.bg_fill
             };
@@ -144,7 +150,7 @@ pub fn text_tab_bar<T: Copy + PartialEq>(
             )
             .fill(fill)
             .stroke(if is_sel {
-                egui::Stroke::new(1.0, ui.visuals().selection.stroke.color)
+                chrome.stroke
             } else {
                 ui.visuals().widgets.noninteractive.bg_stroke
             })

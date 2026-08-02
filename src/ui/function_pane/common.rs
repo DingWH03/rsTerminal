@@ -1,7 +1,9 @@
 //! Shared function pane UI elements.
 
 use crate::ui::function_pane::FunctionPane;
+use crate::ui::uiframe::interactive;
 use crate::ui::uiframe::style;
+use crate::ui::uiframe::tokens;
 use crate::ui::uiframe::vector_icons::{self, Icon};
 
 pub fn nav_button(
@@ -10,20 +12,15 @@ pub fn nav_button(
     label: &str,
     selected: bool,
 ) -> egui::Response {
-    let height = 30.0;
+    let height = tokens::size::NAV_ROW;
     let width = ui.available_width();
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::click());
 
     if ui.is_rect_visible(rect) {
-        let bg = if selected {
-            ui.visuals().selection.bg_fill.gamma_multiply(0.35)
-        } else if resp.hovered() {
-            ui.visuals().widgets.hovered.bg_fill
-        } else {
-            egui::Color32::TRANSPARENT
-        };
-        if bg != egui::Color32::TRANSPARENT {
-            ui.painter().rect_filled(rect, style::CORNER_RADIUS_XS, bg);
+        let chrome = interactive::row_chrome(ui, interactive::state(selected, resp.hovered()));
+        if chrome.fill != egui::Color32::TRANSPARENT {
+            ui.painter()
+                .rect_filled(rect, style::CORNER_RADIUS_XS, chrome.fill);
         }
 
         let color = if selected {

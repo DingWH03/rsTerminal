@@ -1,5 +1,7 @@
 use crate::connection::ConnectionState;
 use crate::session::{ActiveSession, ConnectionViewAction};
+use crate::ui::uiframe::style;
+use crate::ui::uiframe::tokens;
 
 /// Draws a blocking connection-state overlay.
 ///
@@ -13,15 +15,18 @@ pub(super) fn render(
         return Some(render_disconnected(ui, session, area_size, msg));
     }
     if matches!(session.core.handle.state, ConnectionState::Connecting) {
-        egui::Frame::new()
-            .fill(egui::Color32::from_rgba_unmultiplied(20, 20, 20, 200))
-            .show(ui, |ui| {
-                ui.set_min_size(area_size);
-                ui.vertical_centered(|ui| {
-                    ui.add_space(area_size.y * 0.35);
-                    ui.label(egui::RichText::new("Connecting…").size(16.0).weak());
-                });
+        let scrim = overlay_scrim(ui, 180);
+        egui::Frame::new().fill(scrim).show(ui, |ui| {
+            ui.set_min_size(area_size);
+            ui.vertical_centered(|ui| {
+                ui.add_space(area_size.y * 0.35);
+                ui.label(
+                    egui::RichText::new(rust_i18n::t!("connecting"))
+                        .size(tokens::text::EMPHASIS)
+                        .color(ui.visuals().weak_text_color()),
+                );
             });
+        });
         return Some(ConnectionViewAction::None);
     }
     None
@@ -35,7 +40,7 @@ fn render_disconnected(
 ) -> ConnectionViewAction {
     let lost = matches!(session.core.handle.state, ConnectionState::Lost(_));
     let title: String = if lost {
-        "Disconnected".to_string()
+        rust_i18n::t!("disconnected").into_owned()
     } else {
         rust_i18n::t!("connection_failed").into_owned()
     };
@@ -43,32 +48,41 @@ fn render_disconnected(
     let mut reconnect = false;
     let mut close = false;
 
-    egui::Frame::new()
-        .fill(egui::Color32::from_rgba_unmultiplied(20, 20, 20, 240))
-        .show(ui, |ui| {
-            ui.set_min_size(area_size);
-            ui.vertical_centered(|ui| {
-                ui.add_space(area_size.y * 0.25);
-                ui.label(
-                    egui::RichText::new(title)
-                        .size(18.0)
-                        .strong()
-                        .color(egui::Color32::from_rgb(255, 120, 120)),
-                );
-                ui.add_space(8.0);
-                ui.label(egui::RichText::new(message).size(14.0));
-                ui.add_space(16.0);
-                if can_reconnect {
-                    if ui.button(rust_i18n::t!("reconnect")).clicked() {
-                        reconnect = true;
-                    }
-                    ui.add_space(8.0);
+    let scrim = overlay_scrim(ui, 220);
+    egui::Frame::new().fill(scrim).show(ui, |ui| {
+        ui.set_min_size(area_size);
+        ui.vertical_centered(|ui| {
+            ui.add_space(area_size.y * 0.25);
+            ui.label(
+                egui::RichText::new(title)
+                    .size(tokens::text::HEADING)
+                    .strong()
+                    .color(style::RED),
+            );
+            ui.add_space(tokens::space::LG);
+            ui.label(
+                egui::RichText::new(message)
+                    .size(tokens::text::EMPHASIS)
+                    .color(ui.visuals().text_color()),
+            );
+            ui.add_space(tokens::space::XL);
+            if can_reconnect {
+                let reconnect_label = rust_i18n::t!("reconnect");
+                let btn = style::primary_button(&reconnect_label)
+                    .min_size(egui::vec2(120.0, tokens::size::BUTTON));
+                if ui.add(btn).clicked() {
+                    reconnect = true;
                 }
-                if ui.button(rust_i18n::t!("close")).clicked() {
-                    close = true;
-                }
-            });
+                ui.add_space(tokens::space::LG);
+            }
+            let close_btn = egui::Button::new(rust_i18n::t!("close"))
+                .corner_radius(style::CORNER_RADIUS_SM)
+                .min_size(egui::vec2(100.0, tokens::size::BUTTON));
+            if ui.add(close_btn).clicked() {
+                close = true;
+            }
         });
+    });
 
     if reconnect {
         if let Some(id) = session.core.saved_conn_id.as_ref() {
@@ -79,4 +93,12 @@ fn render_disconnected(
         return ConnectionViewAction::CloseSession;
     }
     ConnectionViewAction::None
+}
+
+fn overlay_scrim(ui: &egui::Ui, alpha: u8) -> egui::Color32 {
+    if ui.visuals().dark_mode {
+        egui::Color32::from_rgba_unmultiplied(13, 13, 15, alpha)
+    } else {
+        egui::Color32::from_rgba_unmultiplied(246, 247, 249, alpha)
+    }
 }

@@ -3,10 +3,12 @@
 use egui::{Id, Response, Sense, Ui, Vec2, WidgetText};
 
 use crate::ui::uiframe::style;
+use crate::ui::uiframe::tokens;
 use crate::ui::uiframe::vector_icons::{self, Icon};
 
 /// Uniform toolbar control size (width × height).
-pub const TOOLBAR_BTN_SIZE: Vec2 = Vec2::new(24.0, 22.0);
+pub const TOOLBAR_BTN_SIZE: Vec2 =
+    Vec2::new(tokens::size::TOOLBAR_WIDTH, tokens::size::TOOLBAR_HEIGHT);
 
 const ICON_STROKE: f32 = 1.4;
 

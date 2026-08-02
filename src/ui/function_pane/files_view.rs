@@ -8,6 +8,7 @@ use crate::session::{WorkspaceSession, tick_session_files};
 use crate::ui::shell::messages::FunctionAction;
 use crate::ui::uiframe::components::empty_state::{EmptyStateConfig, paint_empty_state};
 use crate::ui::uiframe::file_list::FileListView;
+use crate::ui::uiframe::vector_icons::Icon;
 
 pub fn render(
     ui: &mut egui::Ui,
@@ -21,7 +22,7 @@ pub fn render(
     let Some(sid) = focused_session_id else {
         paint_empty(
             ui,
-            "📂",
+            Icon::Folder,
             &rust_i18n::t!("sidebar_files_no_terminal"),
             Some(&rust_i18n::t!("sidebar_files_no_terminal_hint")),
         );
@@ -31,7 +32,7 @@ pub fn render(
     let Some(idx) = sessions.iter().position(|s| s.id() == sid) else {
         paint_empty(
             ui,
-            "📂",
+            Icon::Folder,
             &rust_i18n::t!("sidebar_files_no_terminal"),
             Some(&rust_i18n::t!("sidebar_files_no_terminal_hint")),
         );
@@ -41,7 +42,7 @@ pub fn render(
     let WorkspaceSession::Terminal(term) = &mut sessions[idx] else {
         paint_empty(
             ui,
-            "📂",
+            Icon::Folder,
             &rust_i18n::t!("sidebar_files_no_terminal"),
             Some(&rust_i18n::t!("sidebar_files_no_terminal_hint")),
         );
@@ -52,7 +53,7 @@ pub fn render(
         ConnectionType::Serial | ConnectionType::Ble => {
             paint_empty(
                 ui,
-                "🚫",
+                Icon::Close,
                 &rust_i18n::t!("sidebar_files_unsupported"),
                 Some(&rust_i18n::t!("sidebar_files_unsupported_hint")),
             );
@@ -72,7 +73,7 @@ pub fn render(
         {
             paint_empty(
                 ui,
-                "⚠",
+                Icon::Close,
                 &rust_i18n::t!("sidebar_files_sftp_failed"),
                 Some(&err),
             );
@@ -86,7 +87,7 @@ pub fn render(
         {
             paint_empty(
                 ui,
-                "⏳",
+                Icon::Folder,
                 &rust_i18n::t!("sidebar_files_sftp_connecting"),
                 Some(&rust_i18n::t!("sidebar_files_sftp_connecting_hint")),
             );
@@ -96,7 +97,7 @@ pub fn render(
         if term.core.session_sftp.is_none() && term.core.files.error().is_some() {
             paint_empty(
                 ui,
-                "⚠",
+                Icon::Close,
                 &rust_i18n::t!("sidebar_files_sftp_failed"),
                 term.core.files.error(),
             );
@@ -114,7 +115,7 @@ pub fn render(
         if waiting {
             paint_empty(
                 ui,
-                "⏳",
+                Icon::Folder,
                 &rust_i18n::t!("sidebar_files_sftp_connecting"),
                 Some(&rust_i18n::t!("sidebar_files_sftp_connecting_hint")),
             );
@@ -122,7 +123,7 @@ pub fn render(
         } else {
             paint_empty(
                 ui,
-                "⏳",
+                Icon::Folder,
                 &rust_i18n::t!("sidebar_files_waiting_cwd"),
                 Some(&rust_i18n::t!("sidebar_files_waiting_cwd_hint")),
             );
@@ -180,14 +181,6 @@ pub fn render(
     action
 }
 
-fn paint_empty(ui: &mut egui::Ui, icon: &str, title: &str, subtitle: Option<&str>) {
-    paint_empty_state(
-        ui,
-        EmptyStateConfig {
-            icon,
-            title,
-            subtitle,
-            ..Default::default()
-        },
-    );
+fn paint_empty(ui: &mut egui::Ui, icon: Icon, title: &str, subtitle: Option<&str>) {
+    paint_empty_state(ui, EmptyStateConfig::compact(icon, title, subtitle));
 }

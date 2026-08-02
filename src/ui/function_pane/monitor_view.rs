@@ -5,7 +5,10 @@ use crate::remote::{METRICS_HISTORY_LEN, MetricsSample};
 use crate::session::WorkspaceSession;
 use crate::ui::shell::messages::FunctionAction;
 use crate::ui::uiframe::components::empty_state::{EmptyStateConfig, paint_empty_state};
+use crate::ui::uiframe::interactive;
 use crate::ui::uiframe::style;
+use crate::ui::uiframe::tokens;
+use crate::ui::uiframe::vector_icons::Icon;
 
 const CHART_H: f32 = 72.0;
 const CHART_PAD: f32 = 4.0;
@@ -18,7 +21,7 @@ pub fn render(
     let Some(id) = focused_session_id else {
         paint_empty(
             ui,
-            "\u{1F4CA}",
+            Icon::Chart,
             &rust_i18n::t!("sidebar_monitor_no_terminal"),
             Some(&rust_i18n::t!("sidebar_monitor_no_terminal_hint")),
         );
@@ -28,7 +31,7 @@ pub fn render(
     let Some(WorkspaceSession::Terminal(term)) = sessions.iter().find(|s| s.id() == id) else {
         paint_empty(
             ui,
-            "\u{1F4CA}",
+            Icon::Chart,
             &rust_i18n::t!("sidebar_monitor_no_terminal"),
             Some(&rust_i18n::t!("sidebar_monitor_no_terminal_hint")),
         );
@@ -38,7 +41,7 @@ pub fn render(
     if term.core.conn_type != ConnectionType::Ssh {
         paint_empty(
             ui,
-            "\u{1F4CA}",
+            Icon::Chart,
             &rust_i18n::t!("sidebar_monitor_ssh_only"),
             Some(&rust_i18n::t!("sidebar_monitor_ssh_only_hint")),
         );
@@ -51,7 +54,7 @@ pub fn render(
     if history.is_empty() {
         paint_empty(
             ui,
-            "\u{23F3}",
+            Icon::Chart,
             &rust_i18n::t!("sidebar_monitor_waiting"),
             Some(&rust_i18n::t!("sidebar_monitor_waiting_hint")),
         );
@@ -86,12 +89,21 @@ pub fn render(
                 .unwrap_or_else(|| rust_i18n::t!("sidebar_monitor_uptime_unknown").to_string());
 
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(host).strong().color(text).size(13.0));
+                ui.label(
+                    egui::RichText::new(host)
+                        .strong()
+                        .color(text)
+                        .size(tokens::text::BODY),
+                );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(egui::RichText::new(uptime_label).color(muted).size(11.0));
+                    ui.label(
+                        egui::RichText::new(uptime_label)
+                            .color(muted)
+                            .size(tokens::text::SMALL),
+                    );
                 });
             });
-            ui.add_space(2.0);
+            ui.add_space(tokens::space::XS);
 
             let last = history.last().copied().unwrap_or_default();
             let cpu_title = rust_i18n::t!("sidebar_monitor_cpu");
@@ -106,7 +118,7 @@ pub fn render(
                 &history,
                 SeriesKind::Load,
             );
-            ui.add_space(4.0);
+            ui.add_space(tokens::space::SM);
             paint_series_card(
                 ui,
                 mem_title.as_ref(),
@@ -119,7 +131,7 @@ pub fn render(
                 &history,
                 SeriesKind::Mem,
             );
-            ui.add_space(4.0);
+            ui.add_space(tokens::space::SM);
             paint_series_card(
                 ui,
                 disk_title.as_ref(),
@@ -137,16 +149,8 @@ pub fn render(
     FunctionAction::empty()
 }
 
-fn paint_empty(ui: &mut egui::Ui, icon: &str, title: &str, subtitle: Option<&str>) {
-    paint_empty_state(
-        ui,
-        EmptyStateConfig {
-            icon,
-            title,
-            subtitle,
-            ..Default::default()
-        },
-    );
+fn paint_empty(ui: &mut egui::Ui, icon: Icon, title: &str, subtitle: Option<&str>) {
+    paint_empty_state(ui, EmptyStateConfig::compact(icon, title, subtitle));
 }
 
 #[derive(Clone, Copy)]
@@ -158,29 +162,11 @@ enum SeriesKind {
 
 /// Series colors that stay readable on both light and dark themes.
 fn accent_for(ui: &egui::Ui, kind: SeriesKind) -> egui::Color32 {
-    let dark = ui.visuals().dark_mode;
+    let palette = tokens::SemanticPalette::for_dark_mode(ui.visuals().dark_mode);
     match kind {
-        SeriesKind::Load => {
-            if dark {
-                style::ACCENT
-            } else {
-                egui::Color32::from_rgb(30, 110, 210)
-            }
-        }
-        SeriesKind::Mem => {
-            if dark {
-                style::GREEN
-            } else {
-                egui::Color32::from_rgb(20, 140, 80)
-            }
-        }
-        SeriesKind::Disk => {
-            if dark {
-                style::AMBER
-            } else {
-                egui::Color32::from_rgb(180, 110, 10)
-            }
-        }
+        SeriesKind::Load => palette.accent,
+        SeriesKind::Mem => style::GREEN,
+        SeriesKind::Disk => style::AMBER,
     }
 }
 
@@ -192,38 +178,37 @@ fn paint_series_card(
     samples: &[MetricsSample],
     kind: SeriesKind,
 ) {
-    let text = ui.visuals().text_color();
     let muted = ui.visuals().weak_text_color();
-    let fill = if ui.visuals().dark_mode {
-        ui.visuals().extreme_bg_color.gamma_multiply(0.55)
-    } else {
-        ui.visuals().widgets.noninteractive.bg_fill
-    };
-    let border = if ui.visuals().dark_mode {
-        style::BORDER_SUBTLE
-    } else {
-        ui.visuals().widgets.noninteractive.bg_stroke.color
-    };
+    let chrome = interactive::card_chrome(ui, interactive::RowState::Default);
 
     egui::Frame::new()
-        .fill(fill)
-        .stroke(egui::Stroke::new(1.0, border))
+        .fill(chrome.fill)
+        .stroke(chrome.stroke)
         .corner_radius(style::CORNER_RADIUS_SM)
         .inner_margin(egui::Margin::symmetric(4, 4))
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(title).color(muted).size(11.0));
+                ui.label(
+                    egui::RichText::new(title)
+                        .color(muted)
+                        .size(tokens::text::SMALL),
+                );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(egui::RichText::new(value).color(color).strong().size(12.0));
+                    ui.label(
+                        egui::RichText::new(value)
+                            .color(color)
+                            .strong()
+                            .size(tokens::text::COMPACT),
+                    );
                 });
             });
-            ui.add_space(4.0);
+            ui.add_space(tokens::space::SM);
             let (rect, _) = ui.allocate_exact_size(
                 egui::vec2(ui.available_width(), CHART_H),
                 egui::Sense::hover(),
             );
             if ui.is_rect_visible(rect) {
-                paint_sparkline(ui, rect, samples, kind, color, text);
+                paint_sparkline(ui, rect, samples, kind, color, ui.visuals().text_color());
             }
         });
 }

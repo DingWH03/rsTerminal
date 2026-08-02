@@ -1,7 +1,7 @@
 //! Compact square icon tab strip for sidebar navigation.
 
-use crate::ui::uiframe::style;
 use crate::ui::uiframe::vector_icons::{self, Icon};
+use crate::ui::uiframe::{interactive, style};
 
 #[derive(Clone, Copy)]
 pub struct TabBarItem<'a> {
@@ -59,21 +59,17 @@ impl TabBar {
 
             if ui.is_rect_visible(rect) {
                 let selected_here = *selected == item.id;
-                let bg = if selected_here {
-                    ui.visuals().selection.bg_fill.gamma_multiply(0.45)
-                } else if resp.hovered() {
-                    ui.visuals().widgets.hovered.bg_fill
-                } else {
-                    egui::Color32::TRANSPARENT
-                };
-                if bg != egui::Color32::TRANSPARENT {
-                    ui.painter().rect_filled(rect, style::CORNER_RADIUS_XS, bg);
+                let chrome =
+                    interactive::row_chrome(ui, interactive::state(selected_here, resp.hovered()));
+                if chrome.fill != egui::Color32::TRANSPARENT {
+                    ui.painter()
+                        .rect_filled(rect, style::CORNER_RADIUS_XS, chrome.fill);
                 }
                 if selected_here {
                     ui.painter().rect_stroke(
                         rect.shrink(0.5),
                         style::CORNER_RADIUS_XS,
-                        egui::Stroke::new(1.0, style::ACCENT),
+                        chrome.stroke,
                         egui::StrokeKind::Inside,
                     );
                 }

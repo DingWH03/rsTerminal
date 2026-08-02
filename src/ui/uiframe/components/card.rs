@@ -5,29 +5,19 @@
 
 use egui::{Color32, CornerRadius, Rect, Stroke, Ui};
 
+use crate::ui::uiframe::{interactive, tokens};
+
 /// 卡片圆角大小
-pub const CARD_CORNER_RADIUS: CornerRadius = CornerRadius::same(6);
+pub const CARD_CORNER_RADIUS: CornerRadius = tokens::radius::SM;
 
 /// 获取动态卡片背景色 — 同时适配浅色和深色主题。
 pub fn card_fill(ui: &Ui, selected: bool, hovered: bool) -> Color32 {
-    if selected {
-        ui.visuals().selection.bg_fill.gamma_multiply(0.35)
-    } else if hovered {
-        ui.visuals().widgets.hovered.bg_fill
-    } else {
-        ui.visuals().extreme_bg_color
-    }
+    interactive::card_chrome(ui, interactive::state(selected, hovered)).fill
 }
 
 /// 获取动态卡片边框色 — 同时适配浅色和深色主题。
 pub fn card_stroke(ui: &Ui, selected: bool, hovered: bool) -> Stroke {
-    if selected {
-        Stroke::new(1.5, ui.visuals().selection.stroke.color)
-    } else if hovered {
-        Stroke::new(1.0, ui.visuals().widgets.hovered.bg_stroke.color)
-    } else {
-        ui.visuals().widgets.noninteractive.bg_stroke
-    }
+    interactive::card_chrome(ui, interactive::state(selected, hovered)).stroke
 }
 
 /// 绘制卡片的基础外观（填充背景 + 边框描边）。

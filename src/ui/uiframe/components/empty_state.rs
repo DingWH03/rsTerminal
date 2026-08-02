@@ -3,6 +3,7 @@
 //! 提供一个可配置的空状态视图，包含图标、主标题和副标题。
 //! 用于首页无连接、侧边栏无会话、文件管理器空目录等场景。
 
+use crate::ui::uiframe::tokens;
 use crate::ui::uiframe::vector_icons::{self, Icon};
 
 /// 空状态视图的配置。
@@ -28,15 +29,38 @@ pub struct EmptyStateConfig<'a> {
 impl<'a> Default for EmptyStateConfig<'a> {
     fn default() -> Self {
         Self {
-            icon: "\u{1F4CB}",
+            icon: "",
             vector_icon: None,
             vector_icon_size: 40.0,
             title: "",
             subtitle: None,
             icon_size: 36.0,
-            title_size: 15.0,
-            subtitle_size: 12.0,
+            title_size: tokens::text::BODY,
+            subtitle_size: tokens::text::SMALL,
         }
+    }
+}
+
+impl<'a> EmptyStateConfig<'a> {
+    /// Standard compact empty state used across shell/sidebar/pages.
+    pub fn compact(vector_icon: Icon, title: &'a str, subtitle: Option<&'a str>) -> Self {
+        Self {
+            vector_icon: Some(vector_icon),
+            vector_icon_size: 40.0,
+            title,
+            subtitle,
+            title_size: tokens::text::BODY,
+            subtitle_size: tokens::text::SMALL,
+            ..Default::default()
+        }
+    }
+
+    pub fn loading(title: &'a str, subtitle: Option<&'a str>) -> Self {
+        Self::compact(Icon::Chart, title, subtitle)
+    }
+
+    pub fn error(title: &'a str, subtitle: Option<&'a str>) -> Self {
+        Self::compact(Icon::Close, title, subtitle)
     }
 }
 
@@ -47,8 +71,10 @@ pub fn paint_empty_state(ui: &mut egui::Ui, config: EmptyStateConfig) {
 
     let icon_block = if config.vector_icon.is_some() {
         config.vector_icon_size * 1.56
-    } else {
+    } else if !config.icon.is_empty() {
         config.icon_size + 4.0
+    } else {
+        0.0
     };
     let title_block = config.title_size + 4.0;
     let sub_block = if config.subtitle.is_some() {
@@ -81,7 +107,7 @@ pub fn paint_empty_state(ui: &mut egui::Ui, config: EmptyStateConfig) {
                     .circle_filled(badge.center(), badge.width() * 0.5, badge_fill);
                 let stroke = (config.vector_icon_size / 22.0).clamp(1.4, 2.2);
                 vector_icons::paint(ui, icon_rect, icon, ui.visuals().weak_text_color(), stroke);
-            } else {
+            } else if !config.icon.is_empty() {
                 ui.label(egui::RichText::new(config.icon).size(config.icon_size));
             }
             ui.add_space(10.0);

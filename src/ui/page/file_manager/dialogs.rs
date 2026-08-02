@@ -3,6 +3,8 @@ use egui::Key;
 use crate::fs::local;
 use crate::fs::sftp::join_remote;
 use crate::session::{FileActivePane, FileManagerSession};
+use crate::ui::uiframe::style;
+use crate::ui::uiframe::tokens;
 
 pub(super) fn show_info_dialog(ctx: &egui::Context, session: &mut FileManagerSession) {
     if !session.info_dialog.open {
@@ -12,11 +14,11 @@ pub(super) fn show_info_dialog(ctx: &egui::Context, session: &mut FileManagerSes
     use crate::ui::uiframe::{DialogFrame, DialogOutcome};
 
     let mut close = false;
-    let frame = DialogFrame::new("Info").size(420.0, 360.0);
+    let frame = DialogFrame::new(rust_i18n::t!("file_info").to_string()).size(420.0, 360.0);
     if frame.show(ctx, "file_info_dialog", |ui| {
         egui::Grid::new("file_info_grid")
             .num_columns(2)
-            .spacing([12.0, 6.0])
+            .spacing([tokens::space::XL, tokens::space::MD])
             .show(ui, |ui| {
                 for crate::session::InfoLine(key, value) in &session.info_dialog.lines {
                     ui.label(egui::RichText::new(key).strong());
@@ -24,8 +26,11 @@ pub(super) fn show_info_dialog(ctx: &egui::Context, session: &mut FileManagerSes
                     ui.end_row();
                 }
             });
-        ui.add_space(12.0);
-        if ui.button(rust_i18n::t!("close")).clicked() {
+        ui.add_space(tokens::space::XL);
+        let close_btn = egui::Button::new(rust_i18n::t!("close"))
+            .corner_radius(style::CORNER_RADIUS_SM)
+            .min_size(egui::vec2(80.0, tokens::size::BUTTON));
+        if ui.add(close_btn).clicked() {
             close = true;
         }
         if ui.input(|i| i.key_pressed(Key::Escape)) {
@@ -51,19 +56,29 @@ pub(super) fn show_rename_dialog(ctx: &egui::Context, session: &mut FileManagerS
     let mut close = false;
     let mut confirm = false;
 
-    let frame = DialogFrame::alert("Rename").size(360.0, 220.0);
+    let frame = DialogFrame::alert(rust_i18n::t!("rename").to_string()).size(360.0, 220.0);
     if frame.show(ctx, "file_rename_dialog", |ui| {
-        ui.label(format!("Original: {}", session.rename_dialog.old_name()));
-        ui.add_space(6.0);
-        ui.label("New name:");
+        ui.label(format!(
+            "{} {}",
+            rust_i18n::t!("original_name"),
+            session.rename_dialog.old_name()
+        ));
+        ui.add_space(tokens::space::MD);
+        ui.label(rust_i18n::t!("new_name"));
         let name_edit = ui.text_edit_singleline(&mut session.rename_dialog.new_name);
         name_edit.request_focus();
-        ui.add_space(12.0);
+        ui.add_space(tokens::space::XL);
         ui.horizontal(|ui| {
-            if ui.button(rust_i18n::t!("cancel")).clicked() {
+            let cancel_btn = egui::Button::new(rust_i18n::t!("cancel"))
+                .corner_radius(style::CORNER_RADIUS_SM)
+                .min_size(egui::vec2(80.0, tokens::size::BUTTON));
+            if ui.add(cancel_btn).clicked() {
                 close = true;
             }
-            if ui.button("Confirm").clicked() {
+            let confirm_label = rust_i18n::t!("confirm");
+            let confirm_btn = style::primary_button(&confirm_label)
+                .min_size(egui::vec2(90.0, tokens::size::BUTTON));
+            if ui.add(confirm_btn).clicked() {
                 confirm = true;
             }
         });

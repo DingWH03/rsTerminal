@@ -1,4 +1,4 @@
-use crate::ui::uiframe::style;
+use crate::ui::uiframe::{interactive, style, tokens};
 
 /// Accent primary button used as a list-page toolbar action (New profile / New user).
 pub fn accent_toolbar_button(ui: &mut egui::Ui, label: impl Into<String>) -> bool {
@@ -6,7 +6,7 @@ pub fn accent_toolbar_button(ui: &mut egui::Ui, label: impl Into<String>) -> boo
     let btn = egui::Button::new(egui::RichText::new(label).color(egui::Color32::WHITE))
         .fill(style::ACCENT)
         .corner_radius(style::CORNER_RADIUS_SM)
-        .min_size(egui::vec2(0.0, 28.0));
+        .min_size(egui::vec2(0.0, tokens::size::BUTTON));
     ui.add(btn).clicked()
 }
 
@@ -16,15 +16,15 @@ pub fn manage_list_item_frame(
     highlighted: bool,
     add_contents: impl FnOnce(&mut egui::Ui),
 ) {
-    let fill = if highlighted {
-        ui.visuals().selection.bg_fill.gamma_multiply(0.35)
+    let state = if highlighted {
+        interactive::RowState::Selected
     } else {
-        ui.visuals().extreme_bg_color
+        interactive::RowState::Default
     };
-    let stroke = ui.visuals().widgets.noninteractive.bg_stroke;
+    let chrome = interactive::card_chrome(ui, state);
     egui::Frame::new()
-        .fill(fill)
-        .stroke(stroke)
+        .fill(chrome.fill)
+        .stroke(chrome.stroke)
         .corner_radius(style::CORNER_RADIUS_XS)
         .inner_margin(egui::Margin::symmetric(10, 8))
         .show(ui, |ui| {

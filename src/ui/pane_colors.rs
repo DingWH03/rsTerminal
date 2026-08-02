@@ -5,10 +5,12 @@ use std::collections::HashMap;
 use crate::data::prefs::Prefs;
 use crate::ui::layout::{PaneId, WorkspaceLayout};
 use crate::ui::uiframe::style;
+use crate::ui::uiframe::tokens;
 
 pub fn default_palette() -> Vec<[u8; 3]> {
+    let accent = tokens::SemanticPalette::DARK.accent;
     vec![
-        [74, 158, 255],
+        [accent.r(), accent.g(), accent.b()],
         [255, 149, 64],
         [88, 214, 141],
         [255, 107, 129],
@@ -19,14 +21,17 @@ pub fn default_palette() -> Vec<[u8; 3]> {
 
 pub fn palette_for_theme(ui_theme: crate::i18n::UiTheme) -> Vec<[u8; 3]> {
     match ui_theme {
-        crate::i18n::UiTheme::Light => vec![
-            [36, 114, 200],
-            [220, 120, 20],
-            [40, 160, 90],
-            [210, 60, 90],
-            [120, 90, 200],
-            [180, 140, 20],
-        ],
+        crate::i18n::UiTheme::Light => {
+            let accent = tokens::SemanticPalette::LIGHT.accent;
+            vec![
+                [accent.r(), accent.g(), accent.b()],
+                [220, 120, 20],
+                [40, 160, 90],
+                [210, 60, 90],
+                [120, 90, 200],
+                [180, 140, 20],
+            ]
+        }
         _ => default_palette(),
     }
 }

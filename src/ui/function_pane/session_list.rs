@@ -5,7 +5,9 @@ use std::collections::{HashMap, HashSet};
 use crate::session::WorkspaceSession;
 use crate::ui::connection_display::workspace_session_icon;
 use crate::ui::uiframe::components::empty_state::{EmptyStateConfig, paint_empty_state};
+use crate::ui::uiframe::interactive::{self, AccentTone, RowState};
 use crate::ui::uiframe::style;
+use crate::ui::uiframe::tokens;
 use crate::ui::uiframe::vector_icons::{self, Icon};
 
 pub struct SessionListContext<'a> {
@@ -38,13 +40,7 @@ pub fn paint_session_rows(
     if sessions.is_empty() {
         paint_empty_state(
             ui,
-            EmptyStateConfig {
-                vector_icon: Some(Icon::Sessions),
-                vector_icon_size: 44.0,
-                title: &rust_i18n::t!("sidebar_no_sessions"),
-                title_size: 13.0,
-                ..Default::default()
-            },
+            EmptyStateConfig::compact(Icon::Sessions, &rust_i18n::t!("sidebar_no_sessions"), None),
         );
         return action;
     }
@@ -64,7 +60,7 @@ pub fn paint_session_rows(
 }
 
 const SESSION_ACTIONS_WIDTH: f32 = 52.0;
-const SESSION_ROW_H: f32 = 28.0;
+const SESSION_ROW_H: f32 = tokens::size::NAV_ROW;
 
 fn paint_session_row(
     ui: &mut egui::Ui,
@@ -181,11 +177,11 @@ fn paint_label_in_rect(
     let font_id = egui::FontId::proportional(13.0);
     let text_color = if let Some(accent) = pane_accent {
         if in_background {
-            accent.gamma_multiply(0.45)
+            interactive::accent_tone(accent, AccentTone::Dimmed)
         } else if active {
             accent
         } else {
-            accent.gamma_multiply(0.85)
+            interactive::accent_tone(accent, AccentTone::Secondary)
         }
     } else if active {
         ui.visuals().selection.stroke.color
@@ -194,8 +190,6 @@ fn paint_label_in_rect(
     } else {
         ui.visuals().text_color()
     };
-    let sel_fill = ui.visuals().selection.bg_fill.gamma_multiply(0.4);
-    let hover_fill = ui.visuals().widgets.hovered.bg_fill;
     let corner = style::CORNER_RADIUS_XS;
 
     let painter = ui.painter_at(rect);
@@ -205,19 +199,21 @@ fn paint_label_in_rect(
         painter.rect_filled(stripe, 1.0, accent);
     }
 
-    let bg = if active {
-        sel_fill
+    let hovered = if active {
+        false
     } else {
-        let hovered =
-            rect.contains(ui.input(|i| i.pointer.interact_pos().unwrap_or(egui::Pos2::ZERO)));
-        if hovered {
-            hover_fill
-        } else {
-            egui::Color32::TRANSPARENT
-        }
+        rect.contains(ui.input(|i| i.pointer.interact_pos().unwrap_or(egui::Pos2::ZERO)))
     };
-    if bg != egui::Color32::TRANSPARENT {
-        painter.rect_filled(rect, corner, bg);
+    let state = if active {
+        RowState::Selected
+    } else if hovered {
+        RowState::Hovered
+    } else {
+        RowState::Default
+    };
+    let chrome = interactive::row_chrome(ui, state);
+    if chrome.fill != egui::Color32::TRANSPARENT {
+        painter.rect_filled(rect, corner, chrome.fill);
     }
 
     let clip = rect.shrink2(egui::vec2(4.0, 0.0));

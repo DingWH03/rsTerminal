@@ -45,38 +45,46 @@ impl MenuBar {
     pub fn show(ui: &mut egui::Ui, spec: MenuBarSpec<'_>) -> Option<MenuEntryId> {
         let mut activated = None;
 
-        egui::MenuBar::new().ui(ui, |ui| {
-            for group in spec.groups {
-                ui.menu_button(group.title, |ui| {
-                    for entry in group.entries {
-                        match *entry {
-                            MenuEntry::Separator => {
-                                ui.separator();
-                            }
-                            MenuEntry::Button { id, label } => {
-                                if ui.button(label).clicked() {
-                                    activated = Some(id);
-                                    ui.close();
+        // egui::MenuBar sizes itself to `interact_size.y`; lock it to our
+        // fixed chrome height so it never overflows the top panel.
+        ui.scope(|ui| {
+            ui.style_mut().spacing.interact_size.y = Self::HEIGHT;
+            ui.style_mut().spacing.button_padding = egui::vec2(6.0, 2.0);
+            egui::MenuBar::new().ui(ui, |ui| {
+                for group in spec.groups {
+                    ui.menu_button(group.title, |ui| {
+                        for entry in group.entries {
+                            match *entry {
+                                MenuEntry::Separator => {
+                                    ui.separator();
                                 }
-                            }
-                            MenuEntry::Checkbox {
-                                id,
-                                label,
-                                checked,
-                                enabled,
-                            } => {
-                                let mut checked = checked;
-                                let resp = ui
-                                    .add_enabled(enabled, egui::Checkbox::new(&mut checked, label));
-                                if enabled && resp.changed() {
-                                    activated = Some(id);
-                                    ui.close();
+                                MenuEntry::Button { id, label } => {
+                                    if ui.button(label).clicked() {
+                                        activated = Some(id);
+                                        ui.close();
+                                    }
+                                }
+                                MenuEntry::Checkbox {
+                                    id,
+                                    label,
+                                    checked,
+                                    enabled,
+                                } => {
+                                    let mut checked = checked;
+                                    let resp = ui.add_enabled(
+                                        enabled,
+                                        egui::Checkbox::new(&mut checked, label),
+                                    );
+                                    if enabled && resp.changed() {
+                                        activated = Some(id);
+                                        ui.close();
+                                    }
                                 }
                             }
                         }
-                    }
-                });
-            }
+                    });
+                }
+            });
         });
 
         activated

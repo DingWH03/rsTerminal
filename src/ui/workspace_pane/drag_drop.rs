@@ -4,7 +4,9 @@ use std::collections::HashMap;
 
 use crate::ui::layout::{DropEdge, DropZone, PaneId, WorkspaceLayout};
 use crate::ui::shell::layout_preview::PREVIEW_GHOST_PANE;
+use crate::ui::uiframe::interactive::{self, AccentTone};
 use crate::ui::uiframe::style;
+use crate::ui::uiframe::tokens;
 
 /// Ratio allocated to the incoming pane during live insert preview (visual only).
 pub const PREVIEW_INSERT_RATIO: f32 = 0.5;
@@ -141,15 +143,15 @@ pub fn paint_drag_overlay(
             egui::Id::new("drop_highlight"),
         ));
         let fill = if matches!(zone, DropZone::PaneCenter { .. }) {
-            style::ACCENT.gamma_multiply(0.15)
+            interactive::accent_tone(style::ACCENT, AccentTone::Faint)
         } else {
-            style::ACCENT.gamma_multiply(0.28)
+            interactive::accent_tone(style::ACCENT, AccentTone::Subtle)
         };
         painter.rect_filled(highlight, style::CORNER_RADIUS_XS, fill);
         painter.rect_stroke(
             highlight,
             style::CORNER_RADIUS_XS,
-            egui::Stroke::new(2.0, style::ACCENT),
+            egui::Stroke::new(tokens::stroke::STRONG, style::ACCENT),
             egui::StrokeKind::Inside,
         );
     }

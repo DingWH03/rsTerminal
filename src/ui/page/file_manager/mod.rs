@@ -25,6 +25,7 @@ use crate::session::{
 use crate::ui::function_pane::FunctionPane;
 use crate::ui::page::file_manager::transfer::apply_transfer_done;
 use crate::ui::uiframe::style;
+use crate::ui::uiframe::tokens;
 
 use self::context_menu::{
     install_context_menu, paint_blank_context_menu, row_context_menu_local, row_context_menu_remote,
@@ -64,7 +65,7 @@ pub(super) struct PaneOps {
 }
 
 /// 底部操作栏高度
-const BOTTOM_BAR_H: f32 = 40.0;
+const BOTTOM_BAR_H: f32 = tokens::size::BOTTOM_BAR;
 /// 文件管理器主视图渲染入口。
 ///
 /// 处理刷新、传输轮询、标题栏、双面板布局、键盘快捷键（F5 传输）等。
@@ -85,56 +86,69 @@ pub fn file_manager_view(
     let has_clipboard = session.clipboard.is_some();
     let transfer_ui = session.transfer.read_ui();
 
-    ui.horizontal(|ui| {
+    {
+        use crate::ui::uiframe::components::pane_header::PaneHeader;
         use crate::ui::uiframe::components::toolbar_button::icon_toolbar_danger;
         use crate::ui::uiframe::vector_icons::Icon;
 
-        if !in_split
-            && function_pane.show_content_hamburger()
-            && function_pane.hamburger(ui).clicked()
-        {
-            function_pane.hamburger_click();
-        }
-        ui.label(
-            egui::RichText::new(&session.title)
-                .size(14.0)
-                .strong()
-                .color(ui.visuals().text_color()),
-        );
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        let show_hamburger = !in_split && function_pane.show_content_hamburger();
+        let title = session.title.clone();
+        let mut center = |ui: &mut egui::Ui| {
+            ui.label(
+                egui::RichText::new(&title)
+                    .size(tokens::text::COMPACT)
+                    .strong()
+                    .color(ui.visuals().text_color()),
+            );
+            if transfer_ui.active {
+                ui.add_space(tokens::space::SM);
+                ui.add(
+                    egui::ProgressBar::new(transfer_ui.progress.clamp(0.0, 1.0))
+                        .desired_width(160.0)
+                        .show_percentage(),
+                );
+                ui.label(
+                    egui::RichText::new(&transfer_ui.label)
+                        .size(tokens::text::CAPTION)
+                        .color(ui.visuals().weak_text_color()),
+                );
+            } else if let Some(msg) = &session.status {
+                ui.add_space(tokens::space::SM);
+                ui.label(egui::RichText::new(msg).size(tokens::text::CAPTION).weak());
+            }
+        };
+        let mut trailing = |ui: &mut egui::Ui| {
+            // right_to_left: first widget is rightmost.
             if icon_toolbar_danger(ui, ui.id().with("fm_close"), Icon::Close)
                 .on_hover_text(rust_i18n::t!("close_pane"))
                 .clicked()
             {
                 action.close = true;
             }
-            if !transfer_ui.active {
-                if let Some(msg) = &session.status {
-                    ui.label(egui::RichText::new(msg).small().weak());
-                }
+            if transfer_ui.active
+                && ui
+                    .add(
+                        egui::Button::new(rust_i18n::t!("stop"))
+                            .corner_radius(style::CORNER_RADIUS_SM)
+                            .min_size(egui::vec2(64.0, tokens::size::TOOLBAR_HEIGHT)),
+                    )
+                    .clicked()
+            {
+                session.transfer.request_cancel();
             }
-            if transfer_ui.active {
-                if ui.button("Stop").clicked() {
-                    session.transfer.request_cancel();
-                }
-                ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
-                    ui.set_min_width(200.0);
-                    ui.set_max_width(320.0);
-                    ui.label(
-                        egui::RichText::new(&transfer_ui.label)
-                            .small()
-                            .color(ui.visuals().text_color()),
-                    );
-                    ui.add(
-                        egui::ProgressBar::new(transfer_ui.progress.clamp(0.0, 1.0))
-                            .show_percentage()
-                            .desired_width(ui.available_width()),
-                    );
-                });
-            }
-        });
-    });
-    ui.separator();
+        };
+        let header = PaneHeader {
+            show_hamburger,
+            hamburger_id: Some(ui.id().with("fm_menu")),
+            title: None,
+            center: Some(&mut center),
+            trailing: Some(&mut trailing),
+        }
+        .show(ui);
+        if header.hamburger_clicked {
+            function_pane.hamburger_click();
+        }
+    }
 
     let block_pane_keyboard = session.rename_dialog.open || session.info_dialog.open;
 
@@ -431,29 +445,67 @@ fn paint_bottom_action_bar(
     }
     ui.separator();
     ui.horizontal(|ui| {
+        ui.set_min_height(BOTTOM_BAR_H);
+        ui.style_mut().spacing.button_padding = egui::vec2(tokens::space::MD, tokens::space::SM);
         if select_mode {
             ui.add_enabled_ui(has_selection, |ui| {
-                if ui.button("Copy").clicked() {
+                if ui
+                    .add(
+                        egui::Button::new(rust_i18n::t!("copy"))
+                            .min_size(egui::vec2(0.0, tokens::size::BUTTON)),
+                    )
+                    .clicked()
+                {
                     ops.bulk_copy = Some(selected.iter().copied().collect());
                     ops.dismiss_multiselect = true;
                 }
-                if ui.button("Cut").clicked() {
+                if ui
+                    .add(
+                        egui::Button::new(rust_i18n::t!("cut"))
+                            .min_size(egui::vec2(0.0, tokens::size::BUTTON)),
+                    )
+                    .clicked()
+                {
                     ops.bulk_cut = Some(selected.iter().copied().collect());
                     ops.dismiss_multiselect = true;
                 }
-                if ui.button(rust_i18n::t!("delete")).clicked() {
+                if ui
+                    .add(
+                        egui::Button::new(rust_i18n::t!("delete"))
+                            .min_size(egui::vec2(0.0, tokens::size::BUTTON)),
+                    )
+                    .clicked()
+                {
                     ops.bulk_delete = Some(selected.iter().copied().collect());
                     ops.dismiss_multiselect = true;
                 }
             });
-            if ui.button(rust_i18n::t!("cancel")).clicked() {
+            if ui
+                .add(
+                    egui::Button::new(rust_i18n::t!("cancel"))
+                        .min_size(egui::vec2(0.0, tokens::size::BUTTON)),
+                )
+                .clicked()
+            {
                 ops.dismiss_multiselect = true;
             }
         } else if has_clipboard {
-            if ui.button("Paste").clicked() {
+            if ui
+                .add(
+                    egui::Button::new(rust_i18n::t!("paste"))
+                        .min_size(egui::vec2(0.0, tokens::size::BUTTON)),
+                )
+                .clicked()
+            {
                 ops.paste = true;
             }
-            if ui.button(rust_i18n::t!("cancel")).clicked() {
+            if ui
+                .add(
+                    egui::Button::new(rust_i18n::t!("cancel"))
+                        .min_size(egui::vec2(0.0, tokens::size::BUTTON)),
+                )
+                .clicked()
+            {
                 *clipboard = None;
             }
         }
@@ -541,11 +593,19 @@ fn paint_remote_list(
         .auto_shrink([false, false])
         .show(ui, |ui| {
             if remote.loading {
-                ui.label(egui::RichText::new("Loading…").weak());
+                ui.label(
+                    egui::RichText::new(rust_i18n::t!("loading"))
+                        .size(tokens::text::SMALL)
+                        .weak(),
+                );
                 return;
             }
             if entries.is_empty() {
-                ui.label(egui::RichText::new("(empty folder)").weak());
+                ui.label(
+                    egui::RichText::new(rust_i18n::t!("empty_folder"))
+                        .size(tokens::text::SMALL)
+                        .weak(),
+                );
                 return;
             }
             for (i, ent) in entries.iter().enumerate() {
@@ -615,11 +675,19 @@ fn paint_local_list(
         .auto_shrink([false, false])
         .show(ui, |ui| {
             if pane.loading {
-                ui.label(egui::RichText::new("Loading…").weak());
+                ui.label(
+                    egui::RichText::new(rust_i18n::t!("loading"))
+                        .size(tokens::text::SMALL)
+                        .weak(),
+                );
                 return;
             }
             if entries.is_empty() {
-                ui.label(egui::RichText::new("(empty folder)").weak());
+                ui.label(
+                    egui::RichText::new(rust_i18n::t!("empty_folder"))
+                        .size(tokens::text::SMALL)
+                        .weak(),
+                );
                 return;
             }
             for (i, ent) in entries.iter().enumerate() {
@@ -681,16 +749,29 @@ fn paint_pane_toolbar(
 ) -> bool {
     let mut go_up = false;
     ui.horizontal(|ui| {
+        ui.style_mut().spacing.item_spacing.x = tokens::space::SM;
         if ui
-            .small_button("↑")
-            .on_hover_text("Parent folder")
+            .add(
+                egui::Button::new("↑")
+                    .frame(false)
+                    .corner_radius(style::CORNER_RADIUS_XS)
+                    .min_size(egui::vec2(
+                        tokens::size::TOOLBAR_WIDTH,
+                        tokens::size::TOOLBAR_HEIGHT,
+                    )),
+            )
+            .on_hover_text(rust_i18n::t!("parent_folder"))
             .clicked()
         {
             go_up = true;
         }
-        ui.label(egui::RichText::new(cwd).small().weak());
+        ui.label(egui::RichText::new(cwd).size(tokens::text::SMALL).weak());
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.checkbox(select_mode, "Multi-select").changed() && !*select_mode {
+            if ui
+                .checkbox(select_mode, rust_i18n::t!("multi_select"))
+                .changed()
+                && !*select_mode
+            {
                 selected.clear();
             }
         });
@@ -699,11 +780,10 @@ fn paint_pane_toolbar(
 }
 
 fn entry_label(ent: &FileEntry, focused: bool) -> String {
-    let icon = if ent.is_dir { "📁" } else { "📄" };
-    let name = if focused {
-        format!("▸ {icon} {}", ent.name)
+    let marker = if ent.is_dir { "▸" } else { " " };
+    if focused {
+        format!("● {marker} {}", ent.name)
     } else {
-        format!("{icon} {}", ent.name)
-    };
-    name
+        format!("  {marker} {}", ent.name)
+    }
 }

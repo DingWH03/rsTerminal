@@ -80,72 +80,108 @@ impl UiTheme {
 
     /// Apply this theme to the egui context.
     pub fn apply(self, ctx: &egui::Context) {
-        let mut theme = match self {
+        let dark_mode = match self {
             Self::System => {
-                let dark = std::env::var("COLORFGBG")
+                std::env::var("COLORFGBG")
                     .ok()
                     .and_then(|v| v.split(';').last().map(|s| s.trim() == "0"))
                     .unwrap_or(false)
                     || std::env::var("GTK_THEME")
                         .ok()
                         .map(|t| t.contains("dark") || t.contains("Dark"))
-                        .unwrap_or(false);
-                if dark {
-                    egui::Visuals::dark()
-                } else {
-                    egui::Visuals::light()
-                }
+                        .unwrap_or(false)
             }
-            Self::Light => egui::Visuals::light(),
-            Self::Dark => egui::Visuals::dark(),
+            Self::Light => false,
+            Self::Dark => true,
         };
 
-        // ── Modern dark-theme refinements ────────────────────────────────────
-        // Only customise when the user is on a dark theme (light theme is fine as-is).
-        if theme.dark_mode {
-            use crate::ui::uiframe::style;
+        use crate::ui::uiframe::tokens;
 
-            // Window / panel backgrounds
-            theme.window_fill = style::SURFACE_0;
-            theme.panel_fill = style::SURFACE_1;
+        let palette = tokens::SemanticPalette::for_dark_mode(dark_mode);
+        let mut visuals = if dark_mode {
+            egui::Visuals::dark()
+        } else {
+            egui::Visuals::light()
+        };
 
-            // Widget styling
-            theme.widgets.noninteractive.bg_fill = style::SURFACE_2;
-            theme.widgets.noninteractive.weak_bg_fill = style::SURFACE_1;
-            theme.widgets.noninteractive.bg_stroke = egui::Stroke::new(1.0, style::BORDER_SUBTLE);
-            theme.widgets.noninteractive.corner_radius = style::CORNER_RADIUS_XS;
+        visuals.window_fill = palette.surface_0;
+        visuals.panel_fill = palette.surface_1;
+        visuals.extreme_bg_color = palette.surface_0;
+        visuals.faint_bg_color = palette.surface_2;
 
-            theme.widgets.inactive.bg_fill = style::SURFACE_2;
-            theme.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, style::TEXT_PRIMARY);
-            theme.widgets.inactive.bg_stroke = egui::Stroke::new(1.0, style::BORDER_SUBTLE);
-            theme.widgets.inactive.corner_radius = style::CORNER_RADIUS_XS;
+        visuals.widgets.noninteractive.bg_fill = palette.surface_2;
+        visuals.widgets.noninteractive.weak_bg_fill = palette.surface_1;
+        visuals.widgets.noninteractive.fg_stroke =
+            egui::Stroke::new(tokens::stroke::HAIRLINE, palette.text_primary);
+        visuals.widgets.noninteractive.bg_stroke =
+            egui::Stroke::new(tokens::stroke::HAIRLINE, palette.border_subtle);
 
-            theme.widgets.hovered.bg_fill = style::SURFACE_3;
-            theme.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, style::BORDER);
-            theme.widgets.hovered.corner_radius = style::CORNER_RADIUS_XS;
+        visuals.widgets.inactive.bg_fill = palette.surface_2;
+        visuals.widgets.inactive.weak_bg_fill = palette.surface_1;
+        visuals.widgets.inactive.fg_stroke =
+            egui::Stroke::new(tokens::stroke::HAIRLINE, palette.text_primary);
+        visuals.widgets.inactive.bg_stroke =
+            egui::Stroke::new(tokens::stroke::HAIRLINE, palette.border_subtle);
 
-            theme.widgets.active.bg_fill = style::SURFACE_4;
-            theme.widgets.active.bg_stroke = egui::Stroke::new(1.0, style::BORDER_ACCENT);
-            theme.widgets.active.corner_radius = style::CORNER_RADIUS_XS;
+        visuals.widgets.hovered.bg_fill = palette.surface_3;
+        visuals.widgets.hovered.weak_bg_fill = palette.surface_3;
+        visuals.widgets.hovered.fg_stroke =
+            egui::Stroke::new(tokens::stroke::EMPHASIS, palette.text_primary);
+        visuals.widgets.hovered.bg_stroke =
+            egui::Stroke::new(tokens::stroke::HAIRLINE, palette.border);
 
-            theme.widgets.open.bg_fill = style::SURFACE_4;
+        visuals.widgets.active.bg_fill = palette.surface_4;
+        visuals.widgets.active.weak_bg_fill = palette.surface_4;
+        visuals.widgets.active.fg_stroke =
+            egui::Stroke::new(tokens::stroke::EMPHASIS, palette.text_primary);
+        visuals.widgets.active.bg_stroke =
+            egui::Stroke::new(tokens::stroke::HAIRLINE, palette.border_accent);
 
-            // Selection
-            theme.selection.bg_fill = style::ACCENT_BG;
-            theme.selection.stroke = egui::Stroke::new(1.0, style::ACCENT);
-
-            // Hyperlink
-            theme.hyperlink_color = style::ACCENT;
-
-            // Text
-            theme.override_text_color = Some(style::TEXT_PRIMARY);
-
-            // Window rounding
-            theme.window_corner_radius = style::CORNER_RADIUS_SM;
-            theme.window_stroke = egui::Stroke::new(1.0, style::BORDER_SUBTLE);
+        visuals.widgets.open = visuals.widgets.active;
+        for widget in [
+            &mut visuals.widgets.noninteractive,
+            &mut visuals.widgets.inactive,
+            &mut visuals.widgets.hovered,
+            &mut visuals.widgets.active,
+            &mut visuals.widgets.open,
+        ] {
+            widget.corner_radius = tokens::radius::XS;
         }
 
-        ctx.set_visuals(theme);
+        visuals.selection.bg_fill = palette.selection;
+        visuals.selection.stroke = egui::Stroke::new(tokens::stroke::HAIRLINE, palette.accent);
+        visuals.hyperlink_color = palette.accent;
+        visuals.override_text_color = Some(palette.text_primary);
+        visuals.window_corner_radius = tokens::radius::SM;
+        visuals.window_stroke = egui::Stroke::new(tokens::stroke::HAIRLINE, palette.border_subtle);
+
+        // Clone the current style so custom font definitions/families survive the
+        // per-frame theme application; only standard UI sizes and spacing change.
+        let mut style = (*ctx.global_style()).clone();
+        style.visuals = visuals;
+        style.spacing.item_spacing = egui::vec2(tokens::space::MD, tokens::space::SM);
+        style.spacing.button_padding = egui::vec2(tokens::space::LG, tokens::space::SM);
+        // Keep default control height at the nav/menu row (28px). Primary
+        // action buttons opt into 30px via `style::primary_button` min_size —
+        // using BUTTON here overflows the fixed top menu panel and leaves a
+        // dark seam under the menubar.
+        style.spacing.interact_size =
+            egui::vec2(tokens::size::TOOLBAR_WIDTH, tokens::size::NAV_ROW);
+        style.spacing.window_margin = egui::Margin::same(tokens::space::XL as i8);
+
+        for (text_style, size) in [
+            (egui::TextStyle::Small, tokens::text::SMALL),
+            (egui::TextStyle::Body, tokens::text::BODY),
+            (egui::TextStyle::Button, tokens::text::BODY),
+            (egui::TextStyle::Heading, tokens::text::HEADING),
+            (egui::TextStyle::Monospace, tokens::text::BODY),
+        ] {
+            if let Some(font_id) = style.text_styles.get_mut(&text_style) {
+                font_id.size = size;
+            }
+        }
+
+        ctx.set_global_style(style);
     }
 }
 

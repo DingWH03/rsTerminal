@@ -161,8 +161,15 @@ impl AppShell {
         ui.add_space(top_inset);
 
         // Top menu bar (wide and narrow).
+        // Tight vertical margins so the 28px chrome fits without clipping a
+        // dark seam under the separator line.
         egui::Panel::top("app_top_bar")
             .exact_size(menu::HEIGHT)
+            .frame(
+                egui::Frame::NONE
+                    .fill(ui.visuals().panel_fill)
+                    .inner_margin(egui::Margin::symmetric(6, 0)),
+            )
             .show_inside(ui, |ui| {
                 let app_fullscreen = ui.ctx().input(|i| i.viewport().fullscreen.unwrap_or(false));
                 menu::show_and_apply(
@@ -378,17 +385,30 @@ impl AppShell {
         // Help / About placeholder
         if self.layout.ui.help_dialog_open {
             let frame = DialogFrame::alert(rust_i18n::t!("menu_about").to_string());
+            let mut dismiss = false;
             if frame.show(ui.ctx(), "about_dialog", |ui| {
-                ui.label(egui::RichText::new("rsTerminal").size(18.0).strong());
-                ui.add_space(6.0);
+                ui.label(
+                    egui::RichText::new("rsTerminal")
+                        .size(crate::ui::uiframe::tokens::text::HEADING)
+                        .strong(),
+                );
+                ui.add_space(crate::ui::uiframe::tokens::space::MD);
                 ui.label(format!(
                     "{} {}",
                     rust_i18n::t!("about_version"),
                     env!("CARGO_PKG_VERSION")
                 ));
-                ui.add_space(8.0);
+                ui.add_space(crate::ui::uiframe::tokens::space::LG);
                 ui.label(rust_i18n::t!("about_placeholder"));
+                ui.add_space(crate::ui::uiframe::tokens::space::XL);
+                let ok_label = rust_i18n::t!("ok");
+                let close_btn = crate::ui::uiframe::style::primary_button(&ok_label)
+                    .min_size(egui::vec2(80.0, crate::ui::uiframe::tokens::size::BUTTON));
+                if ui.add(close_btn).clicked() {
+                    dismiss = true;
+                }
             }) == DialogOutcome::Closed
+                || dismiss
             {
                 self.layout.ui.help_dialog_open = false;
             }

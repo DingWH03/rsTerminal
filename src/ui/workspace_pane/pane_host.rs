@@ -10,7 +10,9 @@ use crate::ui::page::terminal::connection_view;
 use crate::ui::pane_colors::pane_color;
 use crate::ui::shell::layout_preview::PREVIEW_GHOST_PANE;
 use crate::ui::shell::messages::{EmptyPaneConnect, WorkspaceAction};
+use crate::ui::uiframe::interactive::{self, AccentTone};
 use crate::ui::uiframe::style;
+use crate::ui::uiframe::tokens;
 
 use super::WorkspacePaneContext;
 
@@ -175,7 +177,7 @@ fn paint_pane_border(ui: &mut egui::Ui, in_split: bool, is_focused: bool, accent
     let color = if is_focused {
         accent
     } else {
-        accent.gamma_multiply(0.55)
+        interactive::accent_tone(accent, AccentTone::Muted)
     };
     ui.painter().rect_stroke(
         rect,
@@ -191,12 +193,15 @@ fn paint_ghost_pane(ui: &mut egui::Ui) {
     painter.rect_filled(
         rect,
         style::CORNER_RADIUS_SM,
-        style::ACCENT.gamma_multiply(0.12),
+        interactive::accent_tone(style::ACCENT, AccentTone::Faint),
     );
     painter.rect_stroke(
         rect,
         style::CORNER_RADIUS_SM,
-        egui::Stroke::new(1.5, style::ACCENT.gamma_multiply(0.5)),
+        egui::Stroke::new(
+            tokens::stroke::EMPHASIS,
+            interactive::accent_tone(style::ACCENT, AccentTone::Soft),
+        ),
         egui::StrokeKind::Inside,
     );
 }
