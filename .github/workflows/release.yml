@@ -1,0 +1,82 @@
+# Formal release CD: only runs on v* tags from a verified master.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  version-check:
+    name: Version check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag must match Cargo.toml version
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          expected="${tag#v}"
+          actual="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          echo "tag=$tag expected=$expected cargo=$actual"
+          if [[ "$expected" != "$actual" ]]; then
+            echo "Tag version '$expected' does not match Cargo.toml version '$actual'"
+            exit 1
+          fi
+
+  build:
+    needs: [version-check]
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      build_linux: true
+      build_windows: true
+      build_android: true
+      build_deb: true
+      upload_artifacts: true
+      run_tests: true
+
+  publish:
+    name: Checksums, sign, GitHub Release
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: rsTerminal-*
+          merge-multiple: true
+
+      - name: Generate SHA256SUMS
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          find . -type f ! -name 'SHA256SUMS' ! -name '*.sha256' ! -name '*.asc' -print0 \
+            | sort -z \
+            | xargs -0 sha256sum > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Optional GPG sign SHA256SUMS
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${GPG_PRIVATE_KEY:-}" ]]; then
+            echo "GPG_PRIVATE_KEY not configured; skipping signature"
+            exit 0
+          fi
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          gpg --batch --yes --pinentry-mode loopback \
+            --passphrase "${GPG_PASSPHRASE:-}" \
+            --detach-sign --armor \
+            --output dist/SHA256SUMS.asc \
+            dist/SHA256SUMS
+          echo "Signed dist/SHA256SUMS -> dist/SHA256SUMS.asc"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**
+          generate_release_notes: true
