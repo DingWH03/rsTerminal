@@ -1,0 +1,74 @@
+# Final master merge gate: full matrix + packaging smoke checks.
+# Configure this workflow's `gate` job as a Required Status Check on master.
+name: Master CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  quality:
+    uses: ./.github/workflows/reusable-quality.yml
+
+  build:
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      build_linux: true
+      build_windows: true
+      build_android: true
+      build_deb: true
+      upload_artifacts: true
+      run_tests: true
+
+  verify-packages:
+    name: Verify packages
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: rsTerminal-*
+          merge-multiple: true
+
+      - name: List artifacts
+        run: find dist -type f | sort
+
+      - name: Check non-empty artifacts
+        run: |
+          set -euo pipefail
+          required=(
+            dist/rsTerminal
+            dist/rsTerminal.exe
+            dist/rsTerminal-android-arm64-release.apk
+          )
+          for f in "${required[@]}"; do
+            test -s "$f" || { echo "missing or empty: $f"; exit 1; }
+          done
+          shopt -s nullglob
+          debs=(dist/*.deb)
+          if [[ ${#debs[@]} -lt 4 ]]; then
+            echo "expected at least 4 .deb files, found ${#debs[@]}"
+            ls -la dist || true
+            exit 1
+          fi
+          for deb in "${debs[@]}"; do
+            test -s "$deb"
+          done
+
+      - name: Inspect amd64 .deb
+        run: |
+          set -euo pipefail
+          amd64="$(ls dist/*_amd64.deb | head -1)"
+          file "$amd64"
+          dpkg-deb -I "$amd64"
+
+  gate:
+    name: gate
+    needs: [quality, build, verify-packages]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Master CI gate passed"
