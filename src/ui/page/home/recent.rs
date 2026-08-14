@@ -37,7 +37,7 @@ pub fn recent_connections_view(
         b.last_connected
             .as_deref()
             .unwrap_or("")
-            .cmp(&a.last_connected.as_deref().unwrap_or(""))
+            .cmp(a.last_connected.as_deref().unwrap_or(""))
             .then_with(|| a.name.cmp(&b.name))
     });
 
@@ -51,21 +51,19 @@ pub fn recent_connections_view(
         None => (None, None),
     };
     let mut trailing = |ui: &mut egui::Ui| {
-        if let Some(close) = close_pane.as_deref_mut() {
-            if icon_toolbar_danger(ui, ui.id().with("recent_close"), Icon::Close)
+        if let Some(close) = close_pane.as_deref_mut()
+            && icon_toolbar_danger(ui, ui.id().with("recent_close"), Icon::Close)
                 .on_hover_text(rust_i18n::t!("close_pane"))
                 .clicked()
-            {
-                *close = true;
-            }
+        {
+            *close = true;
         }
-        if let Some(hide) = hide_pane.as_deref_mut() {
-            if icon_toolbar_button(ui, ui.id().with("recent_hide"), Icon::Minimize)
+        if let Some(hide) = hide_pane.as_deref_mut()
+            && icon_toolbar_button(ui, ui.id().with("recent_hide"), Icon::Minimize)
                 .on_hover_text(rust_i18n::t!("minimize_pane"))
                 .clicked()
-            {
-                *hide = true;
-            }
+        {
+            *hide = true;
         }
     };
     let header = PaneHeader {

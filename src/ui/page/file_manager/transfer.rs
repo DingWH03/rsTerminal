@@ -371,17 +371,17 @@ pub fn apply_transfer_done(session: &mut crate::session::FileManagerSession, don
     if done.clear_clipboard {
         session.clipboard = None;
     }
-    if done.refresh_remote {
-        if let Some(remote) = session.remote.as_mut() {
-            remote.loading = true;
-        }
+    if done.refresh_remote
+        && let Some(remote) = session.remote.as_mut()
+    {
+        remote.loading = true;
     }
     if done.refresh_local_right {
         session.right.loading = true;
     }
-    if done.refresh_local_left {
-        if let Some(left) = session.left_local.as_mut() {
-            left.loading = true;
-        }
+    if done.refresh_local_left
+        && let Some(left) = session.left_local.as_mut()
+    {
+        left.loading = true;
     }
 }

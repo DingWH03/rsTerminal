@@ -72,26 +72,26 @@ pub(super) fn render(
             );
         }
 
-        if let Some(session) = session.as_ref() {
-            if session.core.ports.len() > 1 {
-                ui.separator();
-                for p in &session.core.ports {
-                    let selected = p.port == session.core.active_port;
-                    let unread = *session.core.port_unread.get(&p.port).unwrap_or(&0);
-                    let text = if unread > 0 && !selected {
-                        format!("{} •", p.name)
-                    } else {
-                        p.name.clone()
-                    };
-                    if ui
-                        .selectable_label(
-                            selected,
-                            egui::RichText::new(text).size(tokens::text::SMALL),
-                        )
-                        .clicked()
-                    {
-                        switch_port = Some(p.port);
-                    }
+        if let Some(session) = session.as_ref()
+            && session.core.ports.len() > 1
+        {
+            ui.separator();
+            for p in &session.core.ports {
+                let selected = p.port == session.core.active_port;
+                let unread = *session.core.port_unread.get(&p.port).unwrap_or(&0);
+                let text = if unread > 0 && !selected {
+                    format!("{} •", p.name)
+                } else {
+                    p.name.clone()
+                };
+                if ui
+                    .selectable_label(
+                        selected,
+                        egui::RichText::new(text).size(tokens::text::SMALL),
+                    )
+                    .clicked()
+                {
+                    switch_port = Some(p.port);
                 }
             }
         }
@@ -156,33 +156,28 @@ pub(super) fn render(
         function_pane.hamburger_click();
     }
 
-    if let Some(port) = switch_port {
-        if let Some(session) = session.as_mut() {
-            session.switch_to_port(port);
-            ctx.request_repaint();
-        }
+    if let Some(port) = switch_port
+        && let Some(session) = session.as_mut()
+    {
+        session.switch_to_port(port);
+        ctx.request_repaint();
     }
-    if copy {
-        if let Some(session) = session.as_mut() {
-            copy_selection_to_clipboard(session, ctx);
-            ctx.request_repaint();
-        }
+    if copy && let Some(session) = session.as_mut() {
+        copy_selection_to_clipboard(session, ctx);
+        ctx.request_repaint();
     }
-    if paste {
-        if let Some(session) = session.as_mut() {
-            if let Some(text) = read_text() {
-                paste_to_session(session, &text, ctx, action);
-            }
-        }
+    if paste
+        && let Some(session) = session.as_mut()
+        && let Some(text) = read_text()
+    {
+        paste_to_session(session, &text, ctx, action);
     }
-    if cancel_sel {
-        if let Some(session) = session.as_mut() {
-            session.view.touch_state.show_handles = false;
-            session.view.touch_state.touch_select_mode = false;
-            session.view.selection = None;
-            session.view.selection_pointer = None;
-            ctx.request_repaint();
-        }
+    if cancel_sel && let Some(session) = session.as_mut() {
+        session.view.touch_state.show_handles = false;
+        session.view.touch_state.touch_select_mode = false;
+        session.view.selection = None;
+        session.view.selection_pointer = None;
+        ctx.request_repaint();
     }
     if close {
         *action = ConnectionViewAction::CloseSession;

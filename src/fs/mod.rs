@@ -48,6 +48,5 @@ fn android_external_home() -> PathBuf {
 }
 
 pub fn normalize_local_path(path: &Path) -> PathBuf {
-    let p = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    p
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }

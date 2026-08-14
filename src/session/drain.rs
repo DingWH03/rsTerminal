@@ -26,9 +26,10 @@ fn collect_terminal_data(events: Vec<ConnIn>, active_port: u8) -> (Vec<u8>, Vec<
 }
 
 /// Outcomes from draining / viewing a terminal connection (handled by the app/UI).
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub enum ConnectionViewAction {
     /// 无操作
+    #[default]
     None,
     /// 关闭当前显示的终端会话
     CloseSession,
@@ -36,12 +37,6 @@ pub enum ConnectionViewAction {
     MinimizePane,
     /// 使用给定的已保存连接 ID 重新连接 SSH 会话
     Reconnect(String),
-}
-
-impl Default for ConnectionViewAction {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 /// 从连接中读取待处理的字节并应用到终端仿真器。
@@ -91,10 +86,10 @@ pub fn drain_connection(session: &mut ActiveSession, action: &mut ConnectionView
             TermEvent::PtyResize { rows: _, cols: _ } => {}
         }
     }
-    if let Some(cwd) = session.core.terminal.screen.cwd.as_deref() {
-        if !cwd.is_empty() {
-            session.core.metrics.note_osc_cwd(Some(cwd));
-        }
+    if let Some(cwd) = session.core.terminal.screen.cwd.as_deref()
+        && !cwd.is_empty()
+    {
+        session.core.metrics.note_osc_cwd(Some(cwd));
     }
     for ev in session.core.metrics.drain_events() {
         let line = crate::remote::format_metrics_event(&ev);

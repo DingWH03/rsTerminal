@@ -83,10 +83,8 @@ impl FileListView {
                             .min_size(egui::vec2(ui.available_width(), tokens::size::NAV_ROW)),
                     );
 
-                    if resp.double_clicked() || (resp.clicked() && ent.is_dir) {
-                        if ent.is_dir {
-                            action.open_index = Some(idx);
-                        }
+                    if (resp.clicked() || resp.double_clicked()) && ent.is_dir {
+                        action.open_index = Some(idx);
                     }
 
                     if resp.dragged() && !ent.is_dir && !action.drag_indices.contains(&idx) {

@@ -283,9 +283,8 @@ impl ConnectionHandle {
     pub fn drain(&mut self) -> Vec<ConnIn> {
         let mut events = Vec::new();
         while let Ok(event) = self.receiver.try_recv() {
-            match &event {
-                ConnIn::StateChanged(s) => self.state = s.clone(),
-                _ => {}
+            if let ConnIn::StateChanged(s) = &event {
+                self.state = s.clone()
             }
             events.push(event);
         }

@@ -27,6 +27,7 @@ fn env_rows_to_map(rows: &[(String, String)]) -> HashMap<String, String> {
 }
 
 /// Outcome of painting the connection form for one frame.
+#[allow(clippy::large_enum_variant)] // Saved carries full connection draft; rare short-lived dialog outcome.
 pub enum ConnectionFormOutcome {
     None,
     Cancelled,
@@ -564,10 +565,10 @@ impl NewConnectionDialog {
             .into_iter()
             .map(|d| (d.path, d.label))
             .collect();
-        if self.serial_port.is_empty() {
-            if let Some((path, _)) = self.serial_devices.first() {
-                self.serial_port = path.clone();
-            }
+        if self.serial_port.is_empty()
+            && let Some((path, _)) = self.serial_devices.first()
+        {
+            self.serial_port = path.clone();
         }
     }
 
@@ -637,10 +638,10 @@ impl NewConnectionDialog {
                 self.ble_scanning = false;
                 self.ble_devices = devices;
                 self.ble_scan_error = None;
-                if self.ble_device.is_empty() {
-                    if let Some(first) = self.ble_devices.first() {
-                        self.ble_device = first.clone();
-                    }
+                if self.ble_device.is_empty()
+                    && let Some(first) = self.ble_devices.first()
+                {
+                    self.ble_device = first.clone();
                 }
             }
             Ok(Err(e)) => {

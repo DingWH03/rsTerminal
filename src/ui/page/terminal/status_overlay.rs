@@ -84,10 +84,8 @@ fn render_disconnected(
         });
     });
 
-    if reconnect {
-        if let Some(id) = session.core.saved_conn_id.as_ref() {
-            return ConnectionViewAction::Reconnect(id.clone());
-        }
+    if reconnect && let Some(id) = session.core.saved_conn_id.as_ref() {
+        return ConnectionViewAction::Reconnect(id.clone());
     }
     if close {
         return ConnectionViewAction::CloseSession;

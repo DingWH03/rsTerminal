@@ -167,15 +167,14 @@ pub fn connection_view(
     }
 
     // 3b. Connection status / error (blocks interaction with the terminal grid)
-    if let Some(session) = session.as_mut() {
-        if let Some(status_action) = status_overlay::render(ui, session, egui::vec2(area_w, area_h))
-        {
-            if !matches!(status_action, ConnectionViewAction::None) {
-                action = status_action;
-            }
-            session.view.live_font_size = font_size;
-            return action;
+    if let Some(session) = session.as_mut()
+        && let Some(status_action) = status_overlay::render(ui, session, egui::vec2(area_w, area_h))
+    {
+        if !matches!(status_action, ConnectionViewAction::None) {
+            action = status_action;
         }
+        session.view.live_font_size = font_size;
+        return action;
     }
 
     // 4. Terminal surface (keyboard focus target; stable id for focus-lock filter)
@@ -313,10 +312,11 @@ pub fn connection_view(
         apply_terminal_menu_action(session, &ctx, &mut action, terminal_menu_action);
     }
 
-    if let Some(session) = session.as_mut() {
-        if session.view.want_terminal_focus && term_resp.has_focus() {
-            session.view.want_terminal_focus = false;
-        }
+    if let Some(session) = session.as_mut()
+        && session.view.want_terminal_focus
+        && term_resp.has_focus()
+    {
+        session.view.want_terminal_focus = false;
     }
 
     // Drain all pending PTY chunks before painting (avoids half-colored history frames).
@@ -467,22 +467,23 @@ pub fn connection_view(
             // Cursor is painted only on the live tail.  Its screen row may differ
             // from screen.cursor_y when the live viewport pulls scrollback rows into
             // view above a shorter active grid after resize growth.
-            if let Some(cursor_viewport_row) = screen.cursor_viewport_row(grid_rows, offset) {
-                if screen.cursor_visible && screen.cursor_x < grid_cols {
-                    // Schedule repaint for cursor blink.
-                    ctx.request_repaint_after(std::time::Duration::from_millis(530));
-                    paint_cursor(
-                        &painter,
-                        screen,
-                        theme,
-                        grid_rect,
-                        cell_w,
-                        cell_h,
-                        cursor_style,
-                        Some(std::time::Instant::now()),
-                        Some(cursor_viewport_row),
-                    );
-                }
+            if let Some(cursor_viewport_row) = screen.cursor_viewport_row(grid_rows, offset)
+                && screen.cursor_visible
+                && screen.cursor_x < grid_cols
+            {
+                // Schedule repaint for cursor blink.
+                ctx.request_repaint_after(std::time::Duration::from_millis(530));
+                paint_cursor(
+                    &painter,
+                    screen,
+                    theme,
+                    grid_rect,
+                    cell_w,
+                    cell_h,
+                    cursor_style,
+                    Some(std::time::Instant::now()),
+                    Some(cursor_viewport_row),
+                );
             }
 
             // Selection highlight
@@ -539,10 +540,9 @@ pub fn connection_view(
                         .selection
                         .as_ref()
                         .is_some_and(|s| s.anchor == s.cursor)
+                    && let Some(prev) = prev_selection
                 {
-                    if let Some(prev) = prev_selection {
-                        session.view.selection = Some(prev);
-                    }
+                    session.view.selection = Some(prev);
                 }
             }
 

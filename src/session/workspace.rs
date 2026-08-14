@@ -5,6 +5,7 @@ use crate::session::file_manager::FileManagerSession;
 use crate::session::terminal::ActiveSession;
 
 /// 工作区标签页：可以是终端仿真器或文件管理器。
+#[allow(clippy::large_enum_variant)] // Terminal/FileManager payloads are large by design; boxing would churn call sites.
 pub enum WorkspaceSession {
     /// 终端仿真会话
     Terminal(ActiveSession),

@@ -122,7 +122,7 @@ pub fn encode_legacy_mouse(button: u8, col: usize, row: usize, release: bool) ->
     if release {
         b = b.saturating_add(3);
     }
-    let cb = (b + 32) as u8;
+    let cb = b + 32;
     let cx = (col.saturating_add(1) + 32) as u8;
     let cy = (row.saturating_add(1) + 32) as u8;
     vec![0x1b, b'M', cb, cx, cy]
