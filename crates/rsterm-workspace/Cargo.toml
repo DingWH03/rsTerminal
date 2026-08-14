@@ -1,0 +1,11 @@
+[package]
+name = "rsterm-workspace"
+version.workspace = true
+edition.workspace = true
+description = "Workspace layout model and content trait for rsTerminal"
+license.workspace = true
+
+[dependencies]
+egui = { version = "0.34", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+rsterm-uiframe = { workspace = true }

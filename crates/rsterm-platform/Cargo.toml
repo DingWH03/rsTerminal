@@ -1,0 +1,32 @@
+[package]
+name = "rsterm-platform"
+version.workspace = true
+edition.workspace = true
+description = "Cross-platform helpers for rsTerminal (serial, BLE, PTY host, Android)"
+license.workspace = true
+
+[dependencies]
+egui = { version = "0.34", features = ["serde"] }
+log = "0.4"
+serialport = "4"
+btleplug = "0.12"
+tokio = { version = "1", features = ["rt", "time", "macros"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(all(not(target_os = "android"), not(windows)))'.dependencies]
+arboard = "3"
+
+[target.'cfg(windows)'.dependencies]
+arboard = "3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+arboard = { version = "3", features = ["wayland-data-control"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_clipboard = "0.1"
+winit = { version = "0.30", features = ["android-native-activity"] }
+jni = "0.22"
+# btleplug depends on jni 0.19 – renamed crate avoids type conflicts with jni 0.22.
+jni_0_19 = { version = "0.19", package = "jni" }

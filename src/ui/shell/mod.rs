@@ -66,7 +66,7 @@ impl AppShell {
         let focused_sid = self.focused_session_id().map(str::to_string);
         for session in sessions {
             let sid = session.id().to_string();
-            if let WorkspaceSession::Terminal(t) = session {
+            if let Some(t) = session.as_terminal_mut() {
                 let active = focused_sid.as_deref() == Some(sid.as_str());
                 t.view.want_terminal_focus = active;
                 if !active {
