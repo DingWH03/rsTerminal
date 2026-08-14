@@ -86,7 +86,7 @@ pub const CARD_SPACING: f32 = tokens::space::LG;
 pub fn card_frame() -> Frame {
     Frame::new()
         .fill(SURFACE_2)
-        .stroke(Stroke::new(1.0, BORDER_SUBTLE))
+        .stroke(Stroke::new(1.0_f32, BORDER_SUBTLE))
         .corner_radius(CORNER_RADIUS_SM)
         .inner_margin(Margin::symmetric(14, 12))
 }
@@ -100,7 +100,7 @@ pub fn card_frame() -> Frame {
 pub fn section_frame() -> Frame {
     Frame::new()
         .fill(SURFACE_2)
-        .stroke(Stroke::new(1.0, BORDER_SUBTLE))
+        .stroke(Stroke::new(1.0_f32, BORDER_SUBTLE))
         .corner_radius(CORNER_RADIUS_SM)
         .inner_margin(Margin::symmetric(16, 14))
 }
@@ -110,7 +110,7 @@ pub fn section_frame() -> Frame {
 pub fn list_item_frame(fill: Color32) -> Frame {
     Frame::new()
         .fill(fill)
-        .stroke(Stroke::new(1.0, BORDER_SUBTLE))
+        .stroke(Stroke::new(1.0_f32, BORDER_SUBTLE))
         .corner_radius(CORNER_RADIUS_XS)
         .inner_margin(Margin::symmetric(10, 8))
 }
@@ -133,7 +133,7 @@ pub fn pill_button(label: &str) -> egui::Button<'_> {
 pub fn primary_button(label: &str) -> egui::Button<'_> {
     egui::Button::new(label)
         .fill(ACCENT)
-        .stroke(Stroke::new(0.0, Color32::TRANSPARENT))
+        .stroke(Stroke::new(0.0_f32, Color32::TRANSPARENT))
         .corner_radius(CORNER_RADIUS_SM)
         .min_size(Vec2::new(0.0, tokens::size::BUTTON))
 }

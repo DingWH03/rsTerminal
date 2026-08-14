@@ -587,7 +587,7 @@ pub fn paint_selection_handles(
         painter.circle_stroke(
             egui::pos2(cx, cy),
             handle_radius,
-            egui::Stroke::new(1.5, handle_outline),
+            egui::Stroke::new(1.5_f32, handle_outline),
         );
     }
 
@@ -613,7 +613,7 @@ pub fn paint_selection_handles(
         painter.circle_stroke(
             egui::pos2(cx, cy),
             handle_radius,
-            egui::Stroke::new(1.5, handle_outline),
+            egui::Stroke::new(1.5_f32, handle_outline),
         );
     }
 }

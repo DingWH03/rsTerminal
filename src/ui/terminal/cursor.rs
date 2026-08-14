@@ -62,7 +62,7 @@ pub fn paint_cursor(
             painter.rect_stroke(
                 cell_rect,
                 egui::CornerRadius::ZERO,
-                egui::Stroke::new(1.0, egui_color(theme.cursor)),
+                egui::Stroke::new(1.0_f32, egui_color(theme.cursor)),
                 egui::StrokeKind::Inside,
             );
         }
