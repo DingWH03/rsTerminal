@@ -23,11 +23,14 @@ pub fn connection_type_icon(conn_type: ConnectionType) -> &'static str {
 }
 
 pub fn workspace_session_icon(session: &WorkspaceSession) -> &str {
-    match session {
-        WorkspaceSession::Terminal(s) => connection_type_icon(s.core.conn_type),
-        WorkspaceSession::FileManager(s) => match s.mode {
+    if let Some(s) = session.as_terminal() {
+        return connection_type_icon(s.core.conn_type);
+    }
+    if let Some(s) = session.as_file_manager() {
+        return match s.mode {
             FileManagerMode::SshSftp => "📁",
             FileManagerMode::LocalDual => "📂",
-        },
+        };
     }
+    "💻"
 }

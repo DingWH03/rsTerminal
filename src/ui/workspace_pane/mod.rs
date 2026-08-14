@@ -19,6 +19,60 @@ use crate::ui::uiframe::keyboard::VirtualKeyboard;
 use drag_drop::{commit_drop, hit_test_drop_zone, paint_drag_overlay};
 use split_widget::render_split_tree;
 
+/// Host extras for [`rsterm_workspace::ContentUiCtx::extras`].
+///
+/// Uses raw pointers so the type is `'static` and can be downcast via [`std::any::Any`].
+/// Pointers are only valid for the duration of a single `render_pane` call.
+pub struct PaneRenderExtras {
+    profiles: *const [TerminalProfile],
+    virtual_keyboard: *mut VirtualKeyboard,
+    function_pane: *mut FunctionPane,
+    pub pane_focus_click: bool,
+}
+
+impl PaneRenderExtras {
+    /// Build extras from live host borrows for one `render_pane` call.
+    ///
+    /// The returned value (and any `Any` downcast of it) must not outlive those borrows.
+    pub fn new(
+        profiles: &[TerminalProfile],
+        virtual_keyboard: &mut VirtualKeyboard,
+        function_pane: &mut FunctionPane,
+    ) -> Self {
+        Self {
+            profiles: profiles as *const [TerminalProfile],
+            virtual_keyboard: virtual_keyboard as *mut VirtualKeyboard,
+            function_pane: function_pane as *mut FunctionPane,
+            pane_focus_click: false,
+        }
+    }
+
+    pub fn profiles(&self) -> &[TerminalProfile] {
+        // SAFETY: constructed from a live borrow in `render_pane`.
+        unsafe { &*self.profiles }
+    }
+
+    /// Borrow all host handles for one content `ui` call.
+    pub fn split_mut(
+        &mut self,
+    ) -> (
+        &[TerminalProfile],
+        &mut VirtualKeyboard,
+        &mut FunctionPane,
+        &mut bool,
+    ) {
+        // SAFETY: three distinct pointers + a field; all valid for this render.
+        unsafe {
+            (
+                &*self.profiles,
+                &mut *self.virtual_keyboard,
+                &mut *self.function_pane,
+                &mut self.pane_focus_click,
+            )
+        }
+    }
+}
+
 pub struct WorkspacePaneContext<'a> {
     pub sessions: &'a mut [WorkspaceSession],
     pub prefs: &'a mut Prefs,

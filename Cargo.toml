@@ -1,9 +1,37 @@
-[package]
-name = "rsTerminal"
+[workspace]
+resolver = "2"
+members = [
+    ".",
+    "crates/rsterm-terminal",
+    "crates/rsterm-platform",
+    "crates/rsterm-remote",
+    "crates/rsterm-connection",
+    "crates/rsterm-fs",
+    "crates/rsterm-uiframe",
+    "crates/rsterm-workspace",
+]
+
+[workspace.package]
 version = "0.7.2"
 edition = "2024"
-description = "Multi terminal emulator with SSH, serial, BLE, and dual-pane file manager"
 license = "MIT"
+
+[workspace.dependencies]
+unicode-width = "0.2"
+rsterm-terminal = { path = "crates/rsterm-terminal" }
+rsterm-platform = { path = "crates/rsterm-platform" }
+rsterm-remote = { path = "crates/rsterm-remote" }
+rsterm-connection = { path = "crates/rsterm-connection" }
+rsterm-fs = { path = "crates/rsterm-fs" }
+rsterm-uiframe = { path = "crates/rsterm-uiframe" }
+rsterm-workspace = { path = "crates/rsterm-workspace" }
+
+[package]
+name = "rsTerminal"
+version.workspace = true
+edition.workspace = true
+description = "Multi terminal emulator with SSH, serial, BLE, and dual-pane file manager"
+license.workspace = true
 readme = "README.md"
 
 [lib]
@@ -41,18 +69,20 @@ serde_json = "1"
 directories = "6"
 log = "0.4"
 env_logger = "0.11"
-russh = "0.60"
-russh-sftp = "2.1"
-serialport = "4"
 tokio = { version = "1", features = ["full"] }
-btleplug = "0.12"
-futures = "0.3"
 uuid = { version = "1", features = ["v4"] }
-unicode-width = "0.2"
+unicode-width = { workspace = true }
 rust-i18n = "3"
 once_cell = "1"
 sys-locale = "0.3"
 rusqlite = { version = "0.32", features = ["bundled"] }
+rsterm-terminal = { workspace = true }
+rsterm-platform = { workspace = true }
+rsterm-remote = { workspace = true }
+rsterm-connection = { workspace = true }
+rsterm-fs = { workspace = true }
+rsterm-uiframe = { workspace = true }
+rsterm-workspace = { workspace = true }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 fontdb = "0.23"
@@ -67,7 +97,6 @@ eframe = { version = "0.34", default-features = false, features = [
     "wayland",
     "x11",
 ] }
-portable-pty = "0.9"
 arboard = "3"
 
 [target.'cfg(windows)'.dependencies]
@@ -76,7 +105,6 @@ eframe = { version = "0.34", default-features = false, features = [
     "glow",
     "accesskit",
 ] }
-portable-pty = "0.9"
 arboard = "3"
 
 [target.'cfg(unix)'.dependencies]
@@ -90,8 +118,3 @@ eframe = { version = "0.34", default-features = false, features = ["default_font
 android_logger = "0.15"
 android_clipboard = "0.1"
 winit = { version = "0.30", features = ["android-native-activity"] }
-jni = "0.22"
-# btleplug (used for BLE) depends on jni 0.19 – the renamed crate lets us
-# call btleplug::platform::init() without type conflicts.
-jni_0_19 = { version = "0.19", package = "jni" }
-

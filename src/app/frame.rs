@@ -1,7 +1,6 @@
 //! Per-frame orchestration: tick → shell.render → dispatch actions → dialogs.
 
 use super::RsTerminalApp;
-use crate::session::WorkspaceSession;
 use crate::ui::page::dialogs::{FavoriteCommandOutcome, ProfileDialogOutcome};
 
 impl RsTerminalApp {
@@ -74,7 +73,7 @@ impl RsTerminalApp {
         );
 
         if let Some(idx) = self.focused_session_index()
-            && let WorkspaceSession::Terminal(term) = &mut self.sessions[idx]
+            && let Some(term) = self.sessions[idx].as_terminal_mut()
         {
             let ctx = ctx.clone();
             term.core
