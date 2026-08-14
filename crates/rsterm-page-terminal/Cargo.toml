@@ -1,0 +1,17 @@
+[package]
+name = "rsterm-page-terminal"
+version.workspace = true
+edition.workspace = true
+description = "Terminal pane UI for rsTerminal"
+license.workspace = true
+
+[dependencies]
+egui = { version = "0.34", features = ["serde"] }
+rsterm-config = { workspace = true }
+rsterm-connection = { workspace = true }
+rsterm-data = { workspace = true }
+rsterm-platform = { workspace = true }
+rsterm-session-core = { workspace = true }
+rsterm-terminal = { workspace = true }
+rsterm-uiframe = { workspace = true }
+rsterm-workspace = { workspace = true }

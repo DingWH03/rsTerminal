@@ -1,0 +1,25 @@
+[package]
+name = "rsterm-shell"
+version.workspace = true
+edition.workspace = true
+description = "Application shell UI for rsTerminal"
+license.workspace = true
+
+[dependencies]
+egui = { version = "0.34", features = ["serde"] }
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+uuid = { version = "1", features = ["v4"] }
+rsterm-config = { workspace = true }
+rsterm-connection = { workspace = true }
+rsterm-data = { workspace = true }
+rsterm-page-file-manager = { workspace = true }
+rsterm-page-terminal = { workspace = true }
+rsterm-platform = { workspace = true }
+rsterm-remote = { workspace = true }
+rsterm-session-core = { workspace = true }
+rsterm-uiframe = { workspace = true }
+rsterm-workspace = { workspace = true }
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+rfd = "0.15"

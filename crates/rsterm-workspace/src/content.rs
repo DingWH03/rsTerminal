@@ -11,7 +11,7 @@ pub struct ContentUiCtx<'a> {
     pub is_focused: bool,
     pub in_split: bool,
     pub suppress_terminal_input: bool,
-    /// Host-provided extras (profiles, keyboard, function_pane, …). Adapters downcast.
+    /// Host-provided extras ([`crate::PaneHostExtras`], …). Adapters downcast.
     pub extras: &'a mut dyn Any,
 }
 

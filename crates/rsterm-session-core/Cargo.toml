@@ -1,0 +1,17 @@
+[package]
+name = "rsterm-session-core"
+version.workspace = true
+edition.workspace = true
+description = "Terminal and file-manager session runtime for rsTerminal"
+license.workspace = true
+
+[dependencies]
+egui = { version = "0.34", features = ["serde"] }
+log = "0.4"
+uuid = { version = "1", features = ["v4"] }
+rsterm-connection = { workspace = true }
+rsterm-fs = { workspace = true }
+rsterm-terminal = { workspace = true }
+rsterm-remote = { workspace = true }
+rsterm-data = { workspace = true }
+rsterm-platform = { workspace = true }
