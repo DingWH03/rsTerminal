@@ -1,0 +1,17 @@
+//! Terminal pane page — grid paint, input, and `WorkspaceContent` adapter.
+//!
+//! Host (root) registers [`fonts::FontHooks`] and [`labels::TerminalLabels`] at startup.
+
+pub mod fonts;
+pub mod labels;
+pub mod page;
+pub mod paint_helpers;
+pub mod theme_color;
+
+mod content;
+
+pub use content::{ActiveSessionContent, wrap_terminal};
+pub use labels::{TerminalLabels, install_labels, labels, set_labels};
+pub use page::connection_view;
+pub use paint_helpers::{paint_cursor, measure_cell};
+pub use theme_color::{from_egui, to_egui};

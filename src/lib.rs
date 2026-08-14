@@ -11,14 +11,14 @@
 rust_i18n::i18n!("locales", fallback = "en");
 
 pub mod app;
-pub mod config;
-pub mod data;
 pub mod fonts;
 pub mod i18n;
 pub mod session;
 pub mod ui;
 
+pub use rsterm_config as config;
 pub use rsterm_connection as connection;
+pub use rsterm_data as data;
 pub use rsterm_fs as fs;
 pub use rsterm_platform as platform;
 pub use rsterm_remote as remote;
@@ -28,6 +28,33 @@ pub use rsterm_workspace as workspace;
 
 use app::RsTerminalApp;
 use log::info;
+
+fn install_shell_host_hooks() {
+    use std::sync::Arc;
+
+    rsterm_shell::install_host_hooks(rsterm_shell::HostHooks {
+        monospace_catalog_status: || match fonts::monospace_catalog_status() {
+            fonts::MonospaceCatalogStatus::Loading => rsterm_shell::FontCatalogStatus::Loading,
+            fonts::MonospaceCatalogStatus::Ready(entries) => {
+                rsterm_shell::FontCatalogStatus::Ready(Arc::new(
+                    entries
+                        .iter()
+                        .map(|e| rsterm_shell::FontEntry {
+                            path: e.path.clone(),
+                            label: e.label.clone(),
+                        })
+                        .collect(),
+                ))
+            }
+        },
+        apply_terminal_fonts: fonts::apply_terminal_fonts,
+        apply_language: i18n::apply_language,
+        apply_ui_theme: i18n::apply_ui_theme,
+        language_label: i18n::language_label,
+        ui_theme_label: i18n::ui_theme_label,
+        cursor_style_label: i18n::cursor_style_label,
+    });
+}
 
 pub fn run_app(native_options: eframe::NativeOptions) {
     if let Err(e) = eframe::run_native(
@@ -39,6 +66,10 @@ pub fn run_app(native_options: eframe::NativeOptions) {
             fonts::setup_fonts(&cc.egui_ctx, app.default_terminal_font());
             fonts::preload_monospace_catalog();
             fonts::tune_android_display(&cc.egui_ctx);
+            rsterm_page_terminal::fonts::install_font_hooks(rsterm_page_terminal::fonts::FontHooks {
+                font_generation: fonts::font_generation,
+            });
+            install_shell_host_hooks();
             // Desktop: real OS child windows for DialogFrame.
             // Android keeps embedding (single Activity window).
             #[cfg(not(target_os = "android"))]
