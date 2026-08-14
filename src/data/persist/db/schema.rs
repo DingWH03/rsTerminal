@@ -370,8 +370,10 @@ mod tests {
     #[test]
     fn delete_profile_blocked_when_connection_references_it() {
         let conn = open_migrated();
-        let mut profile = TerminalProfile::default();
-        profile.is_default = true;
+        let profile = TerminalProfile {
+            is_default: true,
+            ..Default::default()
+        };
         profiles::upsert(&conn, &profile).unwrap();
         let mut c = SavedConnection::new_local("t", None);
         c.profile_id = Some(profile.id.clone());

@@ -4,6 +4,7 @@ use crate::data::persist::types::{ConnectionType, SavedConnection};
 use crate::ui::uiframe::form::{self, FooterAction};
 
 /// Runtime settings for an active local terminal (shell, cwd, saved profile).
+#[derive(Default)]
 pub struct LocalTerminalSettingsDialog {
     pub open: bool,
     session_id: Option<String>,
@@ -17,18 +18,6 @@ pub struct LocalTerminalSettingsApply {
     /// When set, reconnect this workspace session after saving.
     pub session_id: Option<String>,
     pub config: SavedConnection,
-}
-
-impl Default for LocalTerminalSettingsDialog {
-    fn default() -> Self {
-        Self {
-            open: false,
-            session_id: None,
-            connection_id: None,
-            shell: String::new(),
-            working_dir: String::new(),
-        }
-    }
 }
 
 impl LocalTerminalSettingsDialog {
@@ -75,12 +64,12 @@ impl LocalTerminalSettingsDialog {
         connections: &[SavedConnection],
     ) {
         self.connection_id = saved_conn_id.map(|s| s.to_string());
-        if let Some(id) = saved_conn_id {
-            if let Some(c) = connections.iter().find(|c| c.id == id) {
-                self.shell = c.shell.clone().unwrap_or_default();
-                self.working_dir = c.working_dir.clone().unwrap_or_default();
-                return;
-            }
+        if let Some(id) = saved_conn_id
+            && let Some(c) = connections.iter().find(|c| c.id == id)
+        {
+            self.shell = c.shell.clone().unwrap_or_default();
+            self.working_dir = c.working_dir.clone().unwrap_or_default();
+            return;
         }
         self.shell = shell
             .map(|s| s.to_string())

@@ -144,12 +144,11 @@ pub fn render(
     if list_action.go_up {
         term.core.files.go_up(conn_type);
     }
-    if let Some(idx) = list_action.open_index {
-        if let Some(ent) = term.core.files.entries().get(idx).cloned() {
-            if ent.is_dir {
-                term.core.files.enter_dir(conn_type, &ent.name);
-            }
-        }
+    if let Some(idx) = list_action.open_index
+        && let Some(ent) = term.core.files.entries().get(idx).cloned()
+        && ent.is_dir
+    {
+        term.core.files.enter_dir(conn_type, &ent.name);
     }
 
     #[cfg(any(target_os = "linux", target_os = "windows"))]

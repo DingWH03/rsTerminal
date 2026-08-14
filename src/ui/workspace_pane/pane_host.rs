@@ -70,63 +70,62 @@ pub fn render_pane(
                     action.focus_pane = Some(pane_id);
                 }
 
-                if let Some(ref sid) = session_id {
-                    if let Some(idx) = ctx.sessions.iter().position(|s| s.id() == sid) {
-                        match &mut ctx.sessions[idx] {
-                            WorkspaceSession::Terminal(term) => {
-                                let profile_id = term.view.profile_id.clone();
-                                let (theme, cursor_style, cell_width_scale) = {
-                                    let profile = crate::data::persist::types::resolve_profile(
-                                        ctx.profiles,
-                                        Some(profile_id.as_str()),
-                                    );
-                                    (
-                                        profile.theme.clone(),
-                                        profile.cursor_style,
-                                        profile.cell_width_scale,
-                                    )
-                                };
-                                let mut pane_focus_click = false;
-                                let view_action = connection_view(
-                                    ui,
-                                    Some(term),
-                                    ctx.virtual_keyboard,
-                                    &theme,
-                                    cursor_style,
-                                    cell_width_scale,
-                                    ctx.function_pane,
-                                    pane_id.0,
-                                    is_focused,
-                                    &mut pane_focus_click,
-                                    in_split,
-                                    ctx.suppress_terminal_input,
+                if let Some(ref sid) = session_id
+                    && let Some(idx) = ctx.sessions.iter().position(|s| s.id() == sid)
+                {
+                    match &mut ctx.sessions[idx] {
+                        WorkspaceSession::Terminal(term) => {
+                            let profile_id = term.view.profile_id.clone();
+                            let (theme, cursor_style, cell_width_scale) = {
+                                let profile = crate::data::persist::types::resolve_profile(
+                                    ctx.profiles,
+                                    Some(profile_id.as_str()),
                                 );
-                                if pane_focus_click {
-                                    action.focus_pane = Some(pane_id);
-                                }
-                                match view_action {
-                                    ConnectionViewAction::None => {}
-                                    ConnectionViewAction::MinimizePane => {
-                                        action.minimize_pane = Some(pane_id);
-                                    }
-                                    other => {
-                                        action.terminal = other;
-                                        action.terminal_pane = Some(pane_id);
-                                    }
-                                }
+                                (
+                                    profile.theme.clone(),
+                                    profile.cursor_style,
+                                    profile.cell_width_scale,
+                                )
+                            };
+                            let mut pane_focus_click = false;
+                            let view_action = connection_view(
+                                ui,
+                                Some(term),
+                                ctx.virtual_keyboard,
+                                &theme,
+                                cursor_style,
+                                cell_width_scale,
+                                ctx.function_pane,
+                                pane_id.0,
+                                is_focused,
+                                &mut pane_focus_click,
+                                in_split,
+                                ctx.suppress_terminal_input,
+                            );
+                            if pane_focus_click {
+                                action.focus_pane = Some(pane_id);
                             }
-                            WorkspaceSession::FileManager(fm) => {
-                                let fm_action =
-                                    file_manager_view(ui, fm, ctx.function_pane, in_split);
-                                if fm_action.close {
-                                    action.file_manager = fm_action;
+                            match view_action {
+                                ConnectionViewAction::None => {}
+                                ConnectionViewAction::MinimizePane => {
+                                    action.minimize_pane = Some(pane_id);
+                                }
+                                other => {
+                                    action.terminal = other;
                                     action.terminal_pane = Some(pane_id);
                                 }
                             }
                         }
-                        paint_pane_border(ui, in_split, is_focused, accent);
-                        return;
+                        WorkspaceSession::FileManager(fm) => {
+                            let fm_action = file_manager_view(ui, fm, ctx.function_pane, in_split);
+                            if fm_action.close {
+                                action.file_manager = fm_action;
+                                action.terminal_pane = Some(pane_id);
+                            }
+                        }
                     }
+                    paint_pane_border(ui, in_split, is_focused, accent);
+                    return;
                 }
 
                 let mut connect = None;

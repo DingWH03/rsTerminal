@@ -247,10 +247,10 @@ pub fn process_keyboard_input(
         // 未聚焦时，只检查复制事件（跨窗口复制）
         ctx.input(|i| {
             for event in &i.events {
-                if let Event::Copy = event {
-                    if has_selection {
-                        *copy_requested = true;
-                    }
+                if let Event::Copy = event
+                    && has_selection
+                {
+                    *copy_requested = true;
                 }
             }
         });

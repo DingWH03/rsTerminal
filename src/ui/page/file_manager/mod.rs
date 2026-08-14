@@ -700,10 +700,8 @@ fn paint_local_list(
                     row_context_menu_local(ui, pane, i, ent, ops);
                 });
                 #[cfg(any(target_os = "linux", target_os = "windows"))]
-                if resp.dragged() && !ent.is_dir {
-                    if !ops.drag_out_indices.contains(&i) {
-                        ops.drag_out_indices.push(i);
-                    }
+                if resp.dragged() && !ent.is_dir && !ops.drag_out_indices.contains(&i) {
+                    ops.drag_out_indices.push(i);
                 }
                 if resp.double_clicked() && ent.is_dir {
                     ops.open_index = Some(i);

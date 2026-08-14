@@ -1,4 +1,3 @@
-use std::future::Future;
 use std::path::Path;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -36,11 +35,11 @@ struct SftpSshClient;
 impl client::Handler for SftpSshClient {
     type Error = russh::Error;
 
-    fn check_server_key(
+    async fn check_server_key(
         &mut self,
         _server_public_key: &russh::keys::PublicKey,
-    ) -> impl Future<Output = Result<bool, Self::Error>> + Send {
-        async { Ok(true) }
+    ) -> Result<bool, Self::Error> {
+        Ok(true)
     }
 }
 

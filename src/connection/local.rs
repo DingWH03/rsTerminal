@@ -43,15 +43,15 @@ fn apply_pty_resize(master: &dyn MasterPty, rows: u16, cols: u16, shell_pid: Opt
         let shell = shell_pid;
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(200));
-            if let Some(fd) = master_fd {
-                if fd >= 0 {
-                    unsafe {
-                        let pgid = libc::tcgetpgrp(fd);
-                        if pgid > 0 {
-                            libc::kill(-pgid, libc::SIGWINCH);
-                        } else if let Some(pid) = shell {
-                            libc::kill(pid as i32, libc::SIGWINCH);
-                        }
+            if let Some(fd) = master_fd
+                && fd >= 0
+            {
+                unsafe {
+                    let pgid = libc::tcgetpgrp(fd);
+                    if pgid > 0 {
+                        libc::kill(-pgid, libc::SIGWINCH);
+                    } else if let Some(pid) = shell {
+                        libc::kill(pid as i32, libc::SIGWINCH);
                     }
                 }
             }

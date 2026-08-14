@@ -272,10 +272,10 @@ pub fn resolve_profile<'a>(
     profiles: &'a [TerminalProfile],
     id: Option<&str>,
 ) -> &'a TerminalProfile {
-    if let Some(id) = id {
-        if let Some(p) = profiles.iter().find(|p| p.id == id) {
-            return p;
-        }
+    if let Some(id) = id
+        && let Some(p) = profiles.iter().find(|p| p.id == id)
+    {
+        return p;
     }
     profiles
         .iter()

@@ -5,6 +5,7 @@ use crate::data::persist::types::TerminalProfile;
 use crate::fonts;
 use crate::ui::uiframe::form::{self, FooterAction};
 
+#[allow(clippy::large_enum_variant)] // Saved carries a full profile draft; rare short-lived dialog outcome.
 pub enum ProfileDialogOutcome {
     None,
     Saved(TerminalProfile),
@@ -21,8 +22,10 @@ pub struct ProfileDialog {
 
 impl ProfileDialog {
     pub fn open_new(&mut self) {
-        let mut draft = TerminalProfile::default();
-        draft.is_default = false;
+        let mut draft = TerminalProfile {
+            is_default: false,
+            ..Default::default()
+        };
         draft.name.clear();
         *self = Self {
             open: true,

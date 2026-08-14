@@ -172,7 +172,7 @@ impl RsTerminalApp {
             .push(WorkspaceSession::Terminal(ActiveSession::new(
                 TerminalSessionCore {
                     id: id.clone(),
-                    conn_type: config.conn_type.clone(),
+                    conn_type: config.conn_type,
                     disconnect_message: None,
                     saved_conn_id: Some(config.id.clone()),
                     name: config.name.clone(),

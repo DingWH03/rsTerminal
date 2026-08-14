@@ -38,10 +38,10 @@ pub fn copy_file_with_progress(
     progress: Option<&Arc<ByteProgress>>,
     label: &str,
 ) -> Result<(), String> {
-    if let Some(p) = progress {
-        if p.is_cancelled() {
-            return Err("Transfer stopped".into());
-        }
+    if let Some(p) = progress
+        && p.is_cancelled()
+    {
+        return Err("Transfer stopped".into());
     }
     if src.is_dir() {
         copy_dir_recursive_progress(src, dst, progress)?;

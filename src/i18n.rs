@@ -13,8 +13,10 @@ use serde::{Deserialize, Serialize};
 /// Supported languages for the UI.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum Language {
     /// Follow the system locale (auto-detect).
+    #[default]
     System,
     /// Simplified Chinese.
     ZhCN,
@@ -50,18 +52,14 @@ impl Language {
     }
 }
 
-impl Default for Language {
-    fn default() -> Self {
-        Self::System
-    }
-}
-
 // ─── UI Theme ─────────────────────────────────────────────────────────────────
 
 /// UI appearance theme (separate from terminal themes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum UiTheme {
+    #[default]
     System,
     Light,
     Dark,
@@ -84,7 +82,7 @@ impl UiTheme {
             Self::System => {
                 std::env::var("COLORFGBG")
                     .ok()
-                    .and_then(|v| v.split(';').last().map(|s| s.trim() == "0"))
+                    .and_then(|v| v.split(';').next_back().map(|s| s.trim() == "0"))
                     .unwrap_or(false)
                     || std::env::var("GTK_THEME")
                         .ok()
@@ -182,12 +180,6 @@ impl UiTheme {
         }
 
         ctx.set_global_style(style);
-    }
-}
-
-impl Default for UiTheme {
-    fn default() -> Self {
-        Self::System
     }
 }
 

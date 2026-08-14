@@ -37,6 +37,12 @@ pub struct Parser {
     utf8_pending: Vec<u8>,
 }
 
+impl Default for Parser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Parser {
     pub fn new() -> Self {
         Self {
@@ -359,7 +365,7 @@ impl Parser {
     }
 
     fn osc_esc(&mut self, byte: u8, handler: &mut dyn TermHandler) {
-        if byte == b'\\' || byte == 0x5C {
+        if byte == b'\\' {
             let s = String::from_utf8_lossy(&self.osc_buf).to_string();
             handler.osc_dispatch(&s);
             self.osc_buf.clear();
@@ -464,7 +470,7 @@ impl Parser {
     }
 
     fn dcs_esc(&mut self, byte: u8, handler: &mut dyn TermHandler) {
-        if byte == b'\\' || byte == 0x5C {
+        if byte == b'\\' {
             self.finish_dcs(handler);
         } else {
             self.dcs_buf.push(0x1B);

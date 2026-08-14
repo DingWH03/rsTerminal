@@ -1,0 +1,4 @@
+# Clippy knobs for rsTerminal.
+# egui UI helpers often take many explicit parameters; keep a higher threshold
+# instead of sprinkling #[allow] on every render function.
+too-many-arguments-threshold = 15
