@@ -234,7 +234,7 @@ fn paint_sparkline(
     };
     painter.line_segment(
         [plot.left_bottom(), plot.right_bottom()],
-        egui::Stroke::new(1.0, grid),
+        egui::Stroke::new(1.0_f32, grid),
     );
     let mid_y = plot.center().y;
     painter.line_segment(
@@ -242,7 +242,7 @@ fn paint_sparkline(
             egui::pos2(plot.left(), mid_y),
             egui::pos2(plot.right(), mid_y),
         ],
-        egui::Stroke::new(1.0, grid.gamma_multiply(0.85)),
+        egui::Stroke::new(1.0_f32, grid.gamma_multiply(0.85)),
     );
 
     let n = samples.len();
@@ -296,11 +296,11 @@ fn paint_sparkline(
         }
         painter.add(egui::Shape::line(
             points.clone(),
-            egui::Stroke::new(1.8, color),
+            egui::Stroke::new(1.8_f32, color),
         ));
         if let Some(&p) = points.last() {
             painter.circle_filled(p, 2.6, color);
-            painter.circle_stroke(p, 2.6, egui::Stroke::new(1.0, ui.visuals().panel_fill));
+            painter.circle_stroke(p, 2.6, egui::Stroke::new(1.0_f32, ui.visuals().panel_fill));
         }
     } else if let Some(&p) = points.first() {
         painter.circle_filled(p, 2.6, color);
