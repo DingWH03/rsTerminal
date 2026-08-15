@@ -1,12 +1,12 @@
 //! Connect / save-connection CRUD / local terminal settings apply.
 
 use super::RsTerminalApp;
-use crate::session::connect_params;
 #[cfg(not(target_os = "android"))]
 use crate::connection::local;
 use crate::connection::{ble, serial, ssh};
 use crate::data::persist::types::ConnectionType;
 use crate::data::prefs::save_prefs;
+use crate::session::connect_params;
 use crate::ui::function_pane::pages::FunctionPage;
 
 impl RsTerminalApp {

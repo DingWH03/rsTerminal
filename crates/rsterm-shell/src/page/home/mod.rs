@@ -5,8 +5,8 @@
 
 pub mod recent;
 
-use rsterm_data::persist::types::{ConnectionType, SavedConnection};
 use crate::connection_display::connection_type_label;
+use rsterm_data::persist::types::{ConnectionType, SavedConnection};
 
 /// 构建连接副标题，组合连接类型和关键详细信息。
 ///

@@ -9,13 +9,13 @@ pub mod pages;
 pub mod session_list;
 pub mod workspace_view;
 
-use rsterm_data::persist::types::{ConnectionType, FavoriteCommand, SavedConnection};
-use rsterm_data::prefs::Prefs;
-use crate::session_host::WorkspaceSession;
 use crate::function_pane::pages::FunctionPage;
 use crate::layout::WorkspaceLayout;
+use crate::session_host::WorkspaceSession;
 use crate::shell::messages::FunctionAction;
 use crate::uiframe::{TabBar, TabBarItem};
+use rsterm_data::persist::types::{ConnectionType, FavoriteCommand, SavedConnection};
+use rsterm_data::prefs::Prefs;
 
 /// 宽屏/窄屏切换阈值（像素）
 pub const WIDE_THRESHOLD: f32 = 720.0;

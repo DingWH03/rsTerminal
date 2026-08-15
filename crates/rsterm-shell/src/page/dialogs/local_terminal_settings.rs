@@ -1,7 +1,7 @@
 //! 本地终端运行时设置对话框。
 
-use rsterm_data::persist::types::{ConnectionType, SavedConnection};
 use crate::uiframe::form::{self, FooterAction};
+use rsterm_data::persist::types::{ConnectionType, SavedConnection};
 
 /// Runtime settings for an active local terminal (shell, cwd, saved profile).
 #[derive(Default)]

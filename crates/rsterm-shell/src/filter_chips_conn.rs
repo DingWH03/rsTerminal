@@ -1,7 +1,7 @@
 //! Connection-type filter chips (labels via shell i18n bridge).
 
-use rsterm_data::persist::types::ConnectionType;
 use crate::uiframe::components::filter_chips::FilterChipItem;
+use rsterm_data::persist::types::ConnectionType;
 
 /// 连接类型筛选标签（文案随当前 locale）。
 pub fn connection_type_filters() -> Vec<FilterChipItem<ConnectionType>> {

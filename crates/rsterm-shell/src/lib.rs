@@ -15,9 +15,7 @@ pub mod session_host;
 pub mod shell;
 pub mod workspace_pane;
 
-pub use host_hooks::{
-    FontCatalogStatus, FontEntry, HostHooks, install_host_hooks,
-};
+pub use host_hooks::{FontCatalogStatus, FontEntry, HostHooks, install_host_hooks};
 pub use i18n_bridge::{T as I18nT, set_i18n, tr, tr_args};
 pub use rsterm_uiframe::PaneChrome;
 pub use session_host::{WorkspaceSession, terminal_conn_type, tick_all_session_files};

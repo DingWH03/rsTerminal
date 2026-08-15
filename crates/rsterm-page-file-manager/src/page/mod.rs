@@ -769,11 +769,7 @@ fn paint_pane_toolbar(
         }
         ui.label(egui::RichText::new(cwd).size(tokens::text::SMALL).weak());
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui
-                .checkbox(select_mode, &labels.multi_select)
-                .changed()
-                && !*select_mode
-            {
+            if ui.checkbox(select_mode, &labels.multi_select).changed() && !*select_mode {
                 selected.clear();
             }
         });

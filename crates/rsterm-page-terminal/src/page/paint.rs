@@ -12,10 +12,10 @@ use std::sync::Arc;
 use egui::text::{LayoutJob, TextFormat};
 use egui::{Align, FontId, Galley, Painter, Stroke, Ui};
 
-use rsterm_config::TerminalTheme;
 use crate::fonts::terminal_font_id_for_char;
-use rsterm_terminal::screen::{Cell, Color, cell_display_width};
 use crate::theme_color::to_egui;
+use rsterm_config::TerminalTheme;
+use rsterm_terminal::screen::{Cell, Color, cell_display_width};
 
 pub use rsterm_session_core::RowGalleyCache;
 

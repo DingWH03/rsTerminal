@@ -1,7 +1,7 @@
 //! UI-facing labels/icons for persist connection types.
 
-use rsterm_data::persist::types::ConnectionType;
 use crate::session_host::WorkspaceSession;
+use rsterm_data::persist::types::ConnectionType;
 use rsterm_session_core::file_manager::FileManagerMode;
 
 pub fn connection_type_label(conn_type: ConnectionType) -> &'static str {

@@ -261,11 +261,7 @@ fn tick_local(session: &mut ActiveSession) {
     }
 }
 
-fn tick_ssh(
-    session: &mut ActiveSession,
-    connections: &[SavedConnection],
-    auth_users: &[AuthUser],
-) {
+fn tick_ssh(session: &mut ActiveSession, connections: &[SavedConnection], auth_users: &[AuthUser]) {
     if let Some(cwd) = session.core.terminal.screen.cwd.as_deref()
         && !cwd.is_empty()
     {

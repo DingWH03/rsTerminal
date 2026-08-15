@@ -9,10 +9,10 @@
 
 use egui::{CornerRadius, CursorIcon, PointerButton, Pos2, Rect, Response, Sense, TouchPhase, Ui};
 
-use rsterm_config::TerminalTheme;
-use rsterm_terminal::screen::Screen;
 use crate::page::selection::TerminalTouchState;
 use crate::theme_color::to_egui;
+use rsterm_config::TerminalTheme;
+use rsterm_terminal::screen::Screen;
 
 /// 回滚滚动条的点击目标宽度（位于面板右侧边距中）。
 pub const SCROLLBAR_HIT_WIDTH: f32 = 4.0;

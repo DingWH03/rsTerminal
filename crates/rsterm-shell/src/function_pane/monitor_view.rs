@@ -1,7 +1,5 @@
 //! Sidebar Monitor tab — one-minute (60 sample) performance charts for SSH sessions.
 
-use rsterm_data::persist::types::ConnectionType;
-use rsterm_remote::{METRICS_HISTORY_LEN, MetricsSample};
 use crate::session_host::WorkspaceSession;
 use crate::shell::messages::FunctionAction;
 use crate::uiframe::components::empty_state::{EmptyStateConfig, paint_empty_state};
@@ -9,6 +7,8 @@ use crate::uiframe::interactive;
 use crate::uiframe::style;
 use crate::uiframe::tokens;
 use crate::uiframe::vector_icons::Icon;
+use rsterm_data::persist::types::ConnectionType;
+use rsterm_remote::{METRICS_HISTORY_LEN, MetricsSample};
 
 const CHART_H: f32 = 72.0;
 const CHART_PAD: f32 = 4.0;
