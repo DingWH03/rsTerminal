@@ -7,21 +7,21 @@ pub mod layout_state;
 pub mod menu;
 pub mod messages;
 
-use rsterm_data::persist::types::SavedConnection;
-use rsterm_data::persist::types::TerminalProfile;
-use rsterm_data::prefs::Prefs;
-use crate::session_host::WorkspaceSession;
 use crate::actions::UiAction;
 use crate::function_pane::{self, FunctionPane, drag_split_enabled, split_enabled};
 use crate::layout::{DropZone, FUNCTION_MAX_WIDTH, FUNCTION_MIN_WIDTH, PaneId};
 use crate::page::dialogs::ManageAuthUsersAction;
 use crate::page::settings::{SettingsUiAction, settings_dialog, settings_page_dialog};
+use crate::session_host::WorkspaceSession;
 use crate::uiframe::keyboard::VirtualKeyboard;
 use crate::uiframe::{DialogFrame, DialogOutcome};
 use crate::workspace_pane::{
     self, WorkspacePaneContext,
     drag_drop::{ActiveDrag, commit_drop},
 };
+use rsterm_data::persist::types::SavedConnection;
+use rsterm_data::persist::types::TerminalProfile;
+use rsterm_data::prefs::Prefs;
 
 use animations::ShellAnimations;
 

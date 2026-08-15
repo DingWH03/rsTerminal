@@ -66,9 +66,11 @@ pub fn run_app(native_options: eframe::NativeOptions) {
             fonts::setup_fonts(&cc.egui_ctx, app.default_terminal_font());
             fonts::preload_monospace_catalog();
             fonts::tune_android_display(&cc.egui_ctx);
-            rsterm_page_terminal::fonts::install_font_hooks(rsterm_page_terminal::fonts::FontHooks {
-                font_generation: fonts::font_generation,
-            });
+            rsterm_page_terminal::fonts::install_font_hooks(
+                rsterm_page_terminal::fonts::FontHooks {
+                    font_generation: fonts::font_generation,
+                },
+            );
             install_shell_host_hooks();
             // Desktop: real OS child windows for DialogFrame.
             // Android keeps embedding (single Activity window).

@@ -20,10 +20,7 @@ pub fn install_font_hooks(hooks: FontHooks) {
 }
 
 pub fn font_generation() -> u32 {
-    FONT_HOOKS
-        .get()
-        .map(|h| (h.font_generation)())
-        .unwrap_or(0)
+    FONT_HOOKS.get().map(|h| (h.font_generation)()).unwrap_or(0)
 }
 
 pub fn needs_braille_font(ch: char) -> bool {

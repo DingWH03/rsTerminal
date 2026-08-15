@@ -2,9 +2,9 @@
 
 use egui::{Context, Painter, Pos2, Rect, Response, TouchPhase, Ui};
 
+use crate::theme_color::to_egui;
 use rsterm_config::TerminalTheme;
 use rsterm_terminal::screen::{Screen, cell_display_width};
-use crate::theme_color::to_egui;
 
 pub use rsterm_session_core::{CellPos, TerminalSelection, TerminalTouchState, extract_range_text};
 

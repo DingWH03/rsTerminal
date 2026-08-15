@@ -1,8 +1,8 @@
 //! Shell message bus — actions from function pane and workspace pane.
 
-use rsterm_session_core::ConnectionViewAction;
 use crate::layout::PaneId;
 use rsterm_page_file_manager::FileManagerAction;
+use rsterm_session_core::ConnectionViewAction;
 
 /// Actions emitted by the left function pane.
 #[derive(Debug, Default)]

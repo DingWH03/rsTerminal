@@ -2,13 +2,13 @@
 
 use std::collections::HashSet;
 
-use rsterm_data::prefs::Prefs;
-use crate::session_host::WorkspaceSession;
 use crate::function_pane::session_list::{SessionListContext, paint_session_rows};
 use crate::function_pane::{FunctionPane, drag_split_enabled};
 use crate::layout::WorkspaceLayout;
 use crate::pane_colors::session_accent_map;
+use crate::session_host::WorkspaceSession;
 use crate::shell::messages::FunctionAction;
+use rsterm_data::prefs::Prefs;
 
 pub fn render(
     ui: &mut egui::Ui,

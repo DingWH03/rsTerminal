@@ -147,8 +147,7 @@ pub fn apply_ui_theme(theme: UiTheme, ctx: &egui::Context) {
     visuals.widgets.hovered.weak_bg_fill = palette.surface_3;
     visuals.widgets.hovered.fg_stroke =
         egui::Stroke::new(tokens::stroke::EMPHASIS, palette.text_primary);
-    visuals.widgets.hovered.bg_stroke =
-        egui::Stroke::new(tokens::stroke::HAIRLINE, palette.border);
+    visuals.widgets.hovered.bg_stroke = egui::Stroke::new(tokens::stroke::HAIRLINE, palette.border);
 
     visuals.widgets.active.bg_fill = palette.surface_4;
     visuals.widgets.active.weak_bg_fill = palette.surface_4;

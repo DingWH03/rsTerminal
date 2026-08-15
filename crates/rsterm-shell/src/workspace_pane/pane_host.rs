@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 
-use rsterm_session_core::ConnectionViewAction;
 use crate::PaneChrome;
 use crate::layout::{PaneId, PaneState};
 use crate::page::home::recent::{SplitPaneChrome, recent_connections_view};
@@ -13,6 +12,7 @@ use crate::uiframe::interactive::{self, AccentTone};
 use crate::uiframe::style;
 use crate::uiframe::tokens;
 use crate::workspace_pane::PaneHostExtras;
+use rsterm_session_core::ConnectionViewAction;
 use rsterm_workspace::{ContentAction, ContentUiCtx};
 
 use super::WorkspacePaneContext;
@@ -74,8 +74,7 @@ pub fn render_pane(
                 if let Some(ref sid) = session_id
                     && let Some(idx) = ctx.sessions.iter().position(|s| s.id() == sid)
                 {
-                    let show_hamburger =
-                        !in_split && ctx.function_pane.show_content_hamburger();
+                    let show_hamburger = !in_split && ctx.function_pane.show_content_hamburger();
                     let mut hamburger_pending = false;
                     let mut extras = PaneHostExtras::new(
                         ctx.profiles,
