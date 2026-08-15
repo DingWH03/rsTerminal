@@ -11,7 +11,7 @@ use crate::shell::messages::{EmptyPaneConnect, WorkspaceAction};
 use crate::uiframe::interactive::{self, AccentTone};
 use crate::uiframe::style;
 use crate::uiframe::tokens;
-use crate::workspace_pane::PaneHostExtras;
+use rsterm_page_terminal::{ActiveSessionContent, TerminalHostExtras};
 use rsterm_session_core::ConnectionViewAction;
 use rsterm_workspace::{ContentAction, ContentUiCtx};
 
@@ -76,24 +76,23 @@ pub fn render_pane(
                 {
                     let show_hamburger = !in_split && ctx.function_pane.show_content_hamburger();
                     let mut hamburger_pending = false;
-                    let mut extras = PaneHostExtras::new(
-                        ctx.profiles,
-                        ctx.virtual_keyboard,
-                        show_hamburger,
-                        &mut hamburger_pending,
-                    );
+                    let mut pane_focus_click = false;
+                    let mut extras = TerminalHostExtras::new(ctx.profiles, ctx.virtual_keyboard);
                     let mut content_ctx = ContentUiCtx {
                         pane_id: pane_id.0,
                         is_focused,
                         in_split,
                         suppress_terminal_input: ctx.suppress_terminal_input,
+                        show_hamburger,
+                        hamburger_pending: &mut hamburger_pending,
+                        pane_focus_click: &mut pane_focus_click,
                         extras: &mut extras,
                     };
                     let content_action = ctx.sessions[idx].content_mut().ui(ui, &mut content_ctx);
                     if hamburger_pending {
                         ctx.function_pane.hamburger_click();
                     }
-                    if extras.pane_focus_click {
+                    if pane_focus_click {
                         action.focus_pane = Some(pane_id);
                     }
                     match content_action {
@@ -106,10 +105,15 @@ pub fn render_pane(
                             action.file_manager.close = true;
                             action.terminal_pane = Some(pane_id);
                         }
-                        ContentAction::Reconnect(id) => {
-                            action.terminal = ConnectionViewAction::Reconnect(id);
-                            action.terminal_pane = Some(pane_id);
-                        }
+                    }
+                    if let Some(term) = ctx.sessions[idx]
+                        .content_mut()
+                        .as_any_mut()
+                        .downcast_mut::<ActiveSessionContent>()
+                        && let Some(id) = term.pending_reconnect.take()
+                    {
+                        action.terminal = ConnectionViewAction::Reconnect(id);
+                        action.terminal_pane = Some(pane_id);
                     }
                     paint_pane_border(ui, in_split, is_focused, accent);
                     return;

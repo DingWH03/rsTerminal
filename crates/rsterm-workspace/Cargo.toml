@@ -8,5 +8,3 @@ license.workspace = true
 [dependencies]
 egui = { version = "0.34", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
-rsterm-data = { workspace = true }
-rsterm-uiframe = { workspace = true }
