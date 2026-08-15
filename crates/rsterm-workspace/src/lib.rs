@@ -2,12 +2,10 @@
 
 pub mod content;
 pub mod layout;
-pub mod pane_host_extras;
 pub mod split_handle;
 
 pub use content::{ContentAction, ContentTickCtx, ContentUiCtx, WorkspaceContent, WorkspaceHost};
 pub use layout::{
-    DropEdge, DropZone, FUNCTION_DEFAULT_WIDTH, FUNCTION_MAX_WIDTH, FUNCTION_MIN_WIDTH,
-    MIN_PANE_HEIGHT, MIN_PANE_WIDTH, PaneId, PaneState, SplitAxis, SplitNode, WorkspaceLayout,
+    DropEdge, DropZone, MIN_PANE_HEIGHT, MIN_PANE_WIDTH, PaneId, PaneState, SplitAxis, SplitNode,
+    WorkspaceLayout,
 };
-pub use pane_host_extras::PaneHostExtras;

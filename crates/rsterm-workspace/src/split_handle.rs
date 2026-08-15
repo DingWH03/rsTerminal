@@ -1,8 +1,9 @@
 //! Draggable split handle for multi-pane layouts.
 
-use rsterm_uiframe::style::PANE_GAP;
-
 use crate::layout::{MIN_PANE_WIDTH, SplitAxis};
+
+/// Matches `rsterm_uiframe::tokens::space::SM` / `style::PANE_GAP` without depending on uiframe.
+const PANE_GAP: f32 = 4.0;
 
 /// Gap between split panes (also the splitter hit strip width).
 pub const SPLITTER_SIZE: f32 = PANE_GAP;
