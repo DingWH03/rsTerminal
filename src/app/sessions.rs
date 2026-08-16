@@ -38,7 +38,10 @@ impl RsTerminalApp {
         let port = config.ssh_port.unwrap_or(22);
         match FileManagerSession::open_ssh(host, port, auth, config.id.clone()) {
             Ok(fm) => self.push_session(WorkspaceSession::file_manager(fm)),
-            Err(e) => info!("SFTP failed: {e}"),
+            Err(e) => {
+                info!("SFTP failed: {e}");
+                self.connection_notice = Some(format!("SFTP failed: {e}"));
+            }
         }
     }
 

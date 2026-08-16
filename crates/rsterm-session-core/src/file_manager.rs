@@ -1,6 +1,6 @@
 //! File-manager workspace session state.
 
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
@@ -8,6 +8,19 @@ use std::thread::JoinHandle;
 
 use rsterm_fs::sftp::SftpClient;
 use rsterm_fs::{FileEntry, home_dir};
+
+use crate::listing::{FileSortKey, recompute_entries};
+
+/// 粘贴目标面板。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PasteTarget {
+    /// 右侧本地面板
+    LocalRight,
+    /// 左侧本地面板
+    LocalLeft,
+    /// 远程 SFTP 面板
+    Remote,
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PaneSide {
@@ -46,12 +59,19 @@ pub enum FileActivePane {
 
 pub struct FilePaneState {
     pub cwd: PathBuf,
+    /// Last `list_dir` result (unfiltered).
+    pub all_entries: Vec<FileEntry>,
+    /// Derived display list (filter + sort).
     pub entries: Vec<FileEntry>,
     pub selected: HashSet<usize>,
     pub select_mode: bool,
     pub focus_index: Option<usize>,
     pub error: Option<String>,
     pub loading: bool,
+    pub sort_key: FileSortKey,
+    pub sort_asc: bool,
+    pub filter: String,
+    pub show_hidden: bool,
 }
 
 /// Compatibility alias for the pre-phase-6 public file-manager path.
@@ -61,22 +81,60 @@ impl FilePaneState {
     pub fn new_local(start: PathBuf) -> Self {
         Self {
             cwd: start,
+            all_entries: Vec::new(),
             entries: Vec::new(),
             selected: HashSet::new(),
             select_mode: false,
             focus_index: None,
             error: None,
             loading: true,
+            sort_key: FileSortKey::Name,
+            sort_asc: true,
+            filter: String::new(),
+            show_hidden: false,
         }
+    }
+
+    pub fn apply_listing(&mut self, entries: Vec<FileEntry>) {
+        self.all_entries = entries;
+        self.recompute();
+    }
+
+    pub fn recompute(&mut self) {
+        self.entries = recompute_entries(
+            &self.all_entries,
+            &self.filter,
+            self.show_hidden,
+            self.sort_key,
+            self.sort_asc,
+        );
+        self.selected.clear();
+        self.focus_index = None;
     }
 }
 
 pub use rsterm_fs::TransferSnapshot;
 
+/// Queued or in-flight paste/transfer job.
+#[derive(Clone)]
+pub struct TransferJob {
+    pub id: u64,
+    pub label: String,
+    pub target: PasteTarget,
+    pub clip: FileClipboard,
+    pub dest_local: Option<PathBuf>,
+    pub remote_cwd: Option<String>,
+    pub remote_client: Option<Arc<SftpClient>>,
+}
+
 pub struct FileTransferState {
     pub cancel: Arc<AtomicBool>,
     pub snapshot: Arc<Mutex<TransferSnapshot>>,
     pub join: Option<JoinHandle<()>>,
+    pub queue: VecDeque<TransferJob>,
+    pub current: Option<TransferJob>,
+    pub last_failed: Option<TransferJob>,
+    pub(crate) next_id: u64,
 }
 
 impl Default for FileTransferState {
@@ -85,6 +143,10 @@ impl Default for FileTransferState {
             cancel: Arc::new(AtomicBool::new(false)),
             snapshot: Arc::new(Mutex::new(TransferSnapshot::default())),
             join: None,
+            queue: VecDeque::new(),
+            current: None,
+            last_failed: None,
+            next_id: 1,
         }
     }
 }
@@ -92,12 +154,36 @@ impl Default for FileTransferState {
 pub struct RemotePane {
     pub client: Arc<SftpClient>,
     pub cwd: String,
+    pub all_entries: Vec<FileEntry>,
     pub entries: Vec<FileEntry>,
     pub selected: HashSet<usize>,
     pub select_mode: bool,
     pub focus_index: Option<usize>,
     pub error: Option<String>,
     pub loading: bool,
+    pub sort_key: FileSortKey,
+    pub sort_asc: bool,
+    pub filter: String,
+    pub show_hidden: bool,
+}
+
+impl RemotePane {
+    pub fn apply_listing(&mut self, entries: Vec<FileEntry>) {
+        self.all_entries = entries;
+        self.recompute();
+    }
+
+    pub fn recompute(&mut self) {
+        self.entries = recompute_entries(
+            &self.all_entries,
+            &self.filter,
+            self.show_hidden,
+            self.sort_key,
+            self.sort_asc,
+        );
+        self.selected.clear();
+        self.focus_index = None;
+    }
 }
 
 #[derive(Default)]
@@ -204,15 +290,18 @@ impl FileManagerSession {
             mode: FileManagerMode::SshSftp,
             remote: Some(RemotePane {
                 client: Arc::new(client),
-                // Start at "/"; the first refresh will load it. The real home
-                // will be resolved once the SFTP connection is ready.
                 cwd: "/".to_string(),
+                all_entries: Vec::new(),
                 entries: Vec::new(),
                 selected: HashSet::new(),
                 select_mode: false,
                 focus_index: None,
                 error: None,
                 loading: true,
+                sort_key: FileSortKey::Name,
+                sort_asc: true,
+                filter: String::new(),
+                show_hidden: false,
             }),
             left_local: None,
             right: FilePaneState::new_local(home_dir()),

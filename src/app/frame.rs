@@ -105,6 +105,12 @@ impl RsTerminalApp {
         }
 
         self.dispatch_ui_actions(render.actions, &ctx);
+        if let Some(fm_prefs) = render.workspace_action.file_manager.prefs {
+            self.prefs.file_manager = fm_prefs;
+        }
+        if let Some(ui_state) = render.workspace_action.file_manager.ui_state {
+            self.prefs.ui_state.file_manager = ui_state;
+        }
 
         if let Some(apply) = self.dialogs.local_term.show(&ctx, &self.saved_connections) {
             self.apply_local_terminal_settings(apply);

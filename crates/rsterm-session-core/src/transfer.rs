@@ -15,19 +15,9 @@ use rsterm_fs::sftp::{SftpClient, join_remote};
 use rsterm_fs::transfer_progress::ByteProgress;
 
 use crate::file_manager::{
-    FileClipboard, FileClipboardMode, FileManagerSession, FileTransferState,
+    FileClipboard, FileClipboardMode, FileManagerSession, FileTransferState, PasteTarget,
+    TransferJob,
 };
-
-/// 粘贴目标面板。
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PasteTarget {
-    /// 右侧本地面板
-    LocalRight,
-    /// 左侧本地面板
-    LocalLeft,
-    /// 远程 SFTP 面板
-    Remote,
-}
 
 impl FileTransferState {
     pub fn is_active(&self) -> bool {
@@ -42,6 +32,21 @@ impl FileTransferState {
         self.cancel.store(true, Ordering::Relaxed);
     }
 
+    pub fn clear_queue(&mut self) {
+        self.queue.clear();
+    }
+
+    pub fn remove_queued(&mut self, id: u64) {
+        self.queue.retain(|j| j.id != id);
+    }
+
+    pub fn retry_last_failed(&mut self) {
+        if let Some(job) = self.last_failed.take() {
+            self.enqueue_job(job);
+        }
+    }
+
+    /// Enqueue a paste; starts immediately if idle.
     pub fn start_paste(
         &mut self,
         target: PasteTarget,
@@ -50,22 +55,51 @@ impl FileTransferState {
         remote_cwd: Option<String>,
         remote_client: Option<Arc<SftpClient>>,
     ) {
-        if self.is_active() {
+        let label = job_label(&clip, target);
+        let id = self.next_id;
+        self.next_id = self.next_id.wrapping_add(1).max(1);
+        let job = TransferJob {
+            id,
+            label,
+            target,
+            clip,
+            dest_local,
+            remote_cwd,
+            remote_client,
+        };
+        self.enqueue_job(job);
+    }
+
+    fn enqueue_job(&mut self, job: TransferJob) {
+        if self.is_active() || self.join.is_some() {
+            self.queue.push_back(job);
             return;
         }
+        self.start_job(job);
+    }
+
+    fn start_job(&mut self, job: TransferJob) {
+        self.last_failed = None;
         self.cancel.store(false, Ordering::Relaxed);
         {
             let mut snap = self.snapshot.lock().expect("transfer snapshot");
             *snap = TransferSnapshot {
                 active: true,
                 progress: 0.0,
-                label: "Calculating size…".into(),
+                label: job.label.clone(),
                 ..Default::default()
             };
         }
 
         let cancel = Arc::clone(&self.cancel);
         let snapshot = Arc::clone(&self.snapshot);
+        let target = job.target;
+        let clip = job.clip.clone();
+        let dest_local = job.dest_local.clone();
+        let remote_cwd = job.remote_cwd.clone();
+        let remote_client = job.remote_client.clone();
+        self.current = Some(job);
+
         let handle = thread::spawn(move || {
             run_paste_job(
                 cancel,
@@ -80,10 +114,11 @@ impl FileTransferState {
         self.join = Some(handle);
     }
 
+    /// Poll finished job; auto-starts next queued job. Returns done for the finished job.
     pub fn poll(&mut self, ctx: &egui::Context) -> Option<TransferDone> {
         let finished = self.snapshot.lock().map(|s| s.finished).unwrap_or(false);
         if !finished {
-            if self.is_active() {
+            if self.is_active() || !self.queue.is_empty() {
                 ctx.request_repaint();
             }
             return None;
@@ -97,6 +132,8 @@ impl FileTransferState {
                 refresh_remote: snap.refresh_remote,
                 refresh_local_right: snap.refresh_local_right,
                 refresh_local_left: snap.refresh_local_left,
+                failed: snap.failed,
+                cancelled: snap.cancelled,
             };
             *snap = TransferSnapshot::default();
             result
@@ -106,7 +143,38 @@ impl FileTransferState {
             let _ = handle.join();
         }
 
+        let finished_job = self.current.take();
+        if done.failed {
+            self.last_failed = finished_job;
+        }
+
+        if let Some(next) = self.queue.pop_front() {
+            self.start_job(next);
+        }
+
         Some(done)
+    }
+}
+
+fn job_label(clip: &FileClipboard, target: PasteTarget) -> String {
+    let n = clip.paths.len();
+    let name = clip
+        .paths
+        .first()
+        .map(|p| file_name_from_path(p))
+        .unwrap_or_else(|| "files".into());
+    let verb = match target {
+        PasteTarget::Remote if !clip.from_remote => "Upload",
+        PasteTarget::LocalRight | PasteTarget::LocalLeft if clip.from_remote => "Download",
+        _ => match clip.mode {
+            FileClipboardMode::Copy => "Copy",
+            FileClipboardMode::Cut => "Move",
+        },
+    };
+    if n <= 1 {
+        format!("{verb} {name}")
+    } else {
+        format!("{verb} {name} (+{})", n - 1)
     }
 }
 
@@ -123,6 +191,8 @@ pub struct TransferDone {
     pub refresh_local_right: bool,
     /// 是否刷新左侧本地面板
     pub refresh_local_left: bool,
+    pub failed: bool,
+    pub cancelled: bool,
 }
 
 /// 在后台线程中执行粘贴作业（复制/移动/上传/下载）。
@@ -329,10 +399,10 @@ fn finish_ok(
     refresh_local_left: bool,
     refresh_remote: bool,
 ) {
-    let (msg, clear) = if errors.is_empty() {
-        ("Transfer complete".into(), clear_clipboard)
+    let (msg, clear, failed) = if errors.is_empty() {
+        ("Transfer complete".into(), clear_clipboard, false)
     } else {
-        (errors.join("; "), false)
+        (errors.join("; "), false, true)
     };
     if let Ok(mut s) = snapshot.lock() {
         s.active = false;
@@ -343,6 +413,8 @@ fn finish_ok(
         s.refresh_local_right = refresh_local_right;
         s.refresh_local_left = refresh_local_left;
         s.refresh_remote = refresh_remote;
+        s.failed = failed;
+        s.cancelled = false;
     }
 }
 
@@ -355,6 +427,8 @@ fn finish_cancelled(snapshot: &Arc<Mutex<TransferSnapshot>>, errors: Vec<String>
         s.active = false;
         s.finished = true;
         s.status_message = Some(msg);
+        s.failed = false;
+        s.cancelled = true;
     }
 }
 
@@ -363,6 +437,8 @@ fn finish_error(snapshot: &Arc<Mutex<TransferSnapshot>>, msg: String) {
         s.active = false;
         s.finished = true;
         s.status_message = Some(msg);
+        s.failed = true;
+        s.cancelled = false;
     }
 }
 

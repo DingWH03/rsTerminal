@@ -80,12 +80,6 @@ pub fn render_with_id(
     let menu_id_key = egui::Id::new(format!("{id_salt}_menu_id"));
     let mut menu_state = OverflowMenuState::load(ui, menu_id_key);
 
-    if menu_state.open_id.is_some()
-        && ui.input(|i| i.pointer.button_clicked(egui::PointerButton::Primary))
-    {
-        menu_state.close();
-    }
-
     egui::ScrollArea::vertical()
         .id_salt(format!("{id_salt}_list_scroll"))
         .auto_shrink([false; 2])
@@ -94,6 +88,15 @@ pub fn render_with_id(
                 paint_connection_row(ui, conn, &mut menu_state, &mut action);
             }
         });
+
+    // Dismiss overflow after a menu action (do not close on the click that selects the item).
+    if action.connect_connection.is_some()
+        || action.open_file_mgr.is_some()
+        || action.edit_connection.is_some()
+        || action.delete_connection.is_some()
+    {
+        menu_state.close();
+    }
 
     menu_state.store(ui, menu_id_key);
     action

@@ -5,7 +5,9 @@ use std::collections::HashMap;
 
 use crate::paths::config_dir;
 use crate::persist::types::LegacyProfileJson;
-use crate::prefs::{AppearancePrefs, ChromePrefs, GeneralPrefs, Prefs};
+use crate::prefs::{
+    AppearancePrefs, ChromePrefs, FileManagerPrefs, GeneralPrefs, Prefs, UiStatePrefs,
+};
 use rsterm_config::{Language, UiTheme};
 
 fn prefs_path() -> Option<std::path::PathBuf> {
@@ -59,6 +61,8 @@ pub(crate) fn load_prefs() -> Prefs {
                 function_pane_width: legacy.function_pane_width,
                 default_local_connection_id: legacy.default_local_connection_id,
             },
+            file_manager: FileManagerPrefs::default(),
+            ui_state: UiStatePrefs::default(),
         };
         save_prefs(&prefs);
         return prefs;
