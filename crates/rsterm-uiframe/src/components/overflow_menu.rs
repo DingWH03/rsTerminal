@@ -48,22 +48,29 @@ pub fn overflow_trigger(
 }
 
 /// Show popup content when this item's overflow menu is open.
+/// Returns whether the popup is still open after this frame.
 pub fn show_if_open(
     _ui: &mut Ui,
     dots_resp: &Response,
     dots_id: Id,
     item_id: &str,
-    state: &OverflowMenuState,
+    state: &mut OverflowMenuState,
     min_width: f32,
     add_contents: impl FnOnce(&mut Ui),
-) {
+) -> bool {
     if !state.is_open(item_id) {
-        return;
+        return false;
     }
-    egui::Popup::from_response(dots_resp)
+    let open = egui::Popup::from_response(dots_resp)
         .id(dots_id.with("overflow_popup"))
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
         .show(|ui| {
             ui.set_min_width(min_width);
             add_contents(ui);
-        });
+        })
+        .is_some();
+    if !open {
+        state.close();
+    }
+    open
 }

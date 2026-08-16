@@ -7,6 +7,7 @@ pub mod connect_params;
 pub mod drain;
 pub mod file_manager;
 pub mod files_cache;
+pub mod listing;
 pub mod terminal;
 pub mod transfer;
 pub mod view;
@@ -15,15 +16,16 @@ pub use connect_params::{ble_params, local_params, serial_params, ssh_auth, ssh_
 pub use drain::{ConnectionViewAction, drain_connection};
 pub use file_manager::{
     FileActivePane, FileClipboard, FileClipboardMode, FileManagerMode, FileManagerSession,
-    FilePaneState, FileTransferState, InfoDialog, InfoLine, PaneSide, PaneState, RemotePane,
-    RenameDialog,
+    FilePaneState, FileTransferState, InfoDialog, InfoLine, PaneSide, PaneState, PasteTarget,
+    RemotePane, RenameDialog, TransferJob,
 };
 pub use files_cache::{SessionFilesCache, tick_session_files};
+pub use listing::{FileSortKey, recompute_entries};
 pub use terminal::{
     ActiveSession, PortCoreState, PortUiState, TerminalSessionCore, normalize_paste_text,
     paste_payload,
 };
-pub use transfer::{PasteTarget, TransferDone, apply_transfer_done};
+pub use transfer::{TransferDone, apply_transfer_done};
 pub use view::{
     CellPos, PortViewState, RowGalleyCache, TerminalSelection, TerminalTouchState,
     TerminalViewState, extract_range_text,

@@ -4,12 +4,16 @@
 
 mod appearance;
 mod chrome;
+mod file_manager;
 mod general;
 pub(crate) mod io;
+mod ui_state;
 
 pub use appearance::AppearancePrefs;
 pub use chrome::ChromePrefs;
+pub use file_manager::{FileManagerPrefs, PrefsFilePaneLayout, PrefsFileViewMode};
 pub use general::GeneralPrefs;
+pub use ui_state::{FileManagerUiState, UiStatePrefs};
 
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -20,6 +24,9 @@ pub struct Prefs {
     pub general: GeneralPrefs,
     pub appearance: AppearancePrefs,
     pub chrome: ChromePrefs,
+    pub file_manager: FileManagerPrefs,
+    /// Silent persistence (no Settings UI): column widths, etc.
+    pub ui_state: UiStatePrefs,
 }
 
 impl Prefs {
@@ -42,10 +49,12 @@ impl Prefs {
 
 impl Serialize for Prefs {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut state = serializer.serialize_struct("Prefs", 3)?;
+        let mut state = serializer.serialize_struct("Prefs", 5)?;
         state.serialize_field("general", &self.general)?;
         state.serialize_field("appearance", &self.appearance)?;
         state.serialize_field("chrome", &self.chrome)?;
+        state.serialize_field("file_manager", &self.file_manager)?;
+        state.serialize_field("ui_state", &self.ui_state)?;
         state.end()
     }
 }
@@ -66,6 +75,10 @@ impl<'de> Deserialize<'de> for Prefs {
             function_pane_width: Option<f32>,
             #[serde(default)]
             default_local_connection_id: Option<String>,
+            #[serde(default)]
+            file_manager: FileManagerPrefs,
+            #[serde(default)]
+            ui_state: UiStatePrefs,
         }
 
         let raw = Raw::deserialize(deserializer)?;
@@ -80,6 +93,8 @@ impl<'de> Deserialize<'de> for Prefs {
             general,
             appearance: raw.appearance,
             chrome,
+            file_manager: raw.file_manager,
+            ui_state: raw.ui_state,
         })
     }
 }

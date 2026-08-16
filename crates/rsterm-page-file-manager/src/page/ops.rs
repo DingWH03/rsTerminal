@@ -69,10 +69,7 @@ pub(super) fn paste_into_pane(session: &mut FileManagerSession, pane: FileActive
         session.status = Some("Clipboard is empty".into());
         return;
     };
-    if session.transfer.is_active() {
-        session.status = Some("Transfer already in progress".into());
-        return;
-    }
+    let was_busy = session.transfer.is_active() || session.transfer.join.is_some();
     let remote_client = session.remote.as_ref().map(|r| Arc::clone(&r.client));
     match pane {
         FileActivePane::Remote => {
@@ -109,6 +106,9 @@ pub(super) fn paste_into_pane(session: &mut FileManagerSession, pane: FileActive
             );
         }
     }
+    if was_busy {
+        session.status = Some(crate::labels::labels().queued);
+    }
 }
 
 pub(super) fn refresh_if_needed(session: &mut FileManagerSession) {
@@ -122,7 +122,7 @@ pub(super) fn refresh_if_needed(session: &mut FileManagerSession) {
             remote.loading = false;
             match remote.client.list_dir(&remote.cwd) {
                 Ok(entries) => {
-                    remote.entries = entries;
+                    remote.apply_listing(entries);
                     remote.error = None;
                 }
                 Err(e) => remote.error = Some(e),
@@ -142,7 +142,7 @@ fn refresh_local_pane(pane: &mut FilePaneState) {
     pane.loading = false;
     match local::list_dir(&pane.cwd) {
         Ok(entries) => {
-            pane.entries = entries;
+            pane.apply_listing(entries);
             pane.error = None;
         }
         Err(e) => pane.error = Some(e),
@@ -260,7 +260,7 @@ fn open_remote_entry(remote: &mut RemotePane, idx: usize) {
     }
 }
 
-fn parent_local(pane: &mut FilePaneState) {
+pub(super) fn parent_local(pane: &mut FilePaneState) {
     if let Some(parent) = pane.cwd.parent() {
         pane.cwd = parent.to_path_buf();
         pane.selected.clear();
@@ -268,7 +268,7 @@ fn parent_local(pane: &mut FilePaneState) {
     }
 }
 
-fn parent_remote(remote: &mut RemotePane) {
+pub(super) fn parent_remote(remote: &mut RemotePane) {
     let p = Path::new(&remote.cwd);
     if let Some(parent) = p.parent() {
         remote.cwd = if parent.as_os_str().is_empty() {
@@ -278,6 +278,45 @@ fn parent_remote(remote: &mut RemotePane) {
         };
         remote.selected.clear();
         remote.focus_index = None;
+    }
+}
+
+/// Navigate active pane one level up and reload.
+pub(super) fn go_up_active_pane(session: &mut FileManagerSession) {
+    match session.active_pane {
+        FileActivePane::Remote => {
+            if let Some(remote) = session.remote.as_mut() {
+                parent_remote(remote);
+                remote.loading = true;
+            }
+        }
+        FileActivePane::LeftLocal => {
+            if let Some(left) = session.left_local.as_mut() {
+                parent_local(left);
+                left.loading = true;
+            }
+        }
+        FileActivePane::Right => {
+            parent_local(&mut session.right);
+            session.right.loading = true;
+        }
+    }
+}
+
+/// Recompute listing for the focused pane after filter/sort changes.
+pub(super) fn recompute_active_pane(session: &mut FileManagerSession) {
+    match session.active_pane {
+        FileActivePane::Remote => {
+            if let Some(remote) = session.remote.as_mut() {
+                remote.recompute();
+            }
+        }
+        FileActivePane::LeftLocal => {
+            if let Some(left) = session.left_local.as_mut() {
+                left.recompute();
+            }
+        }
+        FileActivePane::Right => session.right.recompute(),
     }
 }
 
