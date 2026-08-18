@@ -9,12 +9,6 @@ members = [
     "crates/rsterm-fs",
     "crates/rsterm-uiframe",
     "crates/rsterm-workspace",
-    "crates/rsterm-config",
-    "crates/rsterm-data",
-    "crates/rsterm-session-core",
-    "crates/rsterm-page-terminal",
-    "crates/rsterm-page-file-manager",
-    "crates/rsterm-shell",
 ]
 
 [workspace.package]
@@ -31,12 +25,6 @@ rsterm-connection = { path = "crates/rsterm-connection" }
 rsterm-fs = { path = "crates/rsterm-fs" }
 rsterm-uiframe = { path = "crates/rsterm-uiframe" }
 rsterm-workspace = { path = "crates/rsterm-workspace" }
-rsterm-config = { path = "crates/rsterm-config" }
-rsterm-data = { path = "crates/rsterm-data" }
-rsterm-session-core = { path = "crates/rsterm-session-core" }
-rsterm-page-terminal = { path = "crates/rsterm-page-terminal" }
-rsterm-page-file-manager = { path = "crates/rsterm-page-file-manager" }
-rsterm-shell = { path = "crates/rsterm-shell" }
 
 [package]
 name = "rsTerminal"
@@ -87,6 +75,7 @@ unicode-width = { workspace = true }
 rust-i18n = "3"
 once_cell = "1"
 sys-locale = "0.3"
+rusqlite = { version = "0.32", features = ["bundled"] }
 rsterm-terminal = { workspace = true }
 rsterm-platform = { workspace = true }
 rsterm-remote = { workspace = true }
@@ -94,12 +83,6 @@ rsterm-connection = { workspace = true }
 rsterm-fs = { workspace = true }
 rsterm-uiframe = { workspace = true }
 rsterm-workspace = { workspace = true }
-rsterm-config = { workspace = true }
-rsterm-data = { workspace = true }
-rsterm-session-core = { workspace = true }
-rsterm-page-terminal = { workspace = true }
-rsterm-page-file-manager = { workspace = true }
-rsterm-shell = { workspace = true }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 fontdb = "0.23"

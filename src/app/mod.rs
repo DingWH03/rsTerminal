@@ -2,6 +2,7 @@
 
 mod auth_users;
 mod commands;
+pub mod connect_params;
 mod connections;
 mod dialogs;
 mod dispatch;
@@ -42,7 +43,7 @@ pub struct RsTerminalApp {
 impl RsTerminalApp {
     pub fn new(persist: Persist) -> Self {
         let prefs = load_prefs();
-        crate::i18n::apply_language(prefs.general.language);
+        prefs.general.language.apply();
         let profiles = persist.list_profiles();
         let default_profile = resolve_profile(&profiles, None);
         let live_font_size = default_profile.font_size;

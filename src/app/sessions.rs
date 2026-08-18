@@ -14,7 +14,7 @@ use crate::session::{
 use crate::terminal::Terminal;
 use crate::terminal::{DEFAULT_GRID_COLS, DEFAULT_GRID_ROWS};
 use crate::ui::shell::coordinator::ShellCoordinator;
-use crate::session::TerminalViewState;
+use crate::ui::terminal::TerminalViewState;
 use crate::ui::uiframe::keyboard::VirtualKeyboard;
 
 impl RsTerminalApp {
@@ -33,7 +33,7 @@ impl RsTerminalApp {
             .auth_user_id
             .as_ref()
             .and_then(|id| self.auth_users.iter().find(|u| u.id == *id));
-        let auth = crate::session::connect_params::ssh_auth(&config, auth_user);
+        let auth = super::connect_params::ssh_auth(&config, auth_user);
         let host = config.ssh_host.as_deref().unwrap_or("host");
         let port = config.ssh_port.unwrap_or(22);
         match FileManagerSession::open_ssh(host, port, auth, config.id.clone()) {
@@ -63,7 +63,7 @@ impl RsTerminalApp {
         term.core.handle.close();
         let rows = term.view.last_pty_rows.max(1);
         let cols = term.view.last_pty_cols.max(1);
-        match local::connect_local(&crate::session::connect_params::local_params(config), rows, cols) {
+        match local::connect_local(&super::connect_params::local_params(config), rows, cols) {
             Ok(handle) => {
                 term.core.handle = handle;
                 term.core.saved_conn_id = Some(config.id.clone());
@@ -291,8 +291,8 @@ impl RsTerminalApp {
             .auth_user_id
             .as_ref()
             .and_then(|id| self.auth_users.iter().find(|u| u.id == *id));
-        let auth = crate::session::connect_params::ssh_auth(&config, auth_user);
-        let params = match crate::session::connect_params::ssh_params(&config) {
+        let auth = super::connect_params::ssh_auth(&config, auth_user);
+        let params = match super::connect_params::ssh_params(&config) {
             Ok(p) => p,
             Err(e) => {
                 self.connection_notice = Some(e);

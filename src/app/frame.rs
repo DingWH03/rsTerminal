@@ -43,7 +43,7 @@ impl RsTerminalApp {
             }
         }
 
-        crate::i18n::apply_ui_theme(self.prefs.ui_theme(), &ctx);
+        self.prefs.ui_theme().apply(&ctx);
         self.shell.sync_width(ctx.content_rect().width());
 
         // F11 toggles OS fullscreen (consume so the terminal does not receive it).

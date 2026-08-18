@@ -20,13 +20,10 @@ pub mod form;
 pub mod interactive;
 pub mod keyboard;
 pub mod menu_bar;
-pub mod pane_chrome;
 pub mod style;
 pub mod tab_bar;
 pub mod tokens;
 pub mod vector_icons;
-
-pub use pane_chrome::PaneChrome;
 
 pub use form::{COMBO_WIDTH, FIELD_GAP, FOOTER_GAP, FooterAction, LABEL_WIDTH, SECTION_GAP};
 

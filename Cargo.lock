@@ -4630,19 +4630,14 @@ dependencies = [
  "log",
  "once_cell",
  "rfd",
- "rsterm-config",
  "rsterm-connection",
- "rsterm-data",
  "rsterm-fs",
- "rsterm-page-file-manager",
- "rsterm-page-terminal",
  "rsterm-platform",
  "rsterm-remote",
- "rsterm-session-core",
- "rsterm-shell",
  "rsterm-terminal",
  "rsterm-uiframe",
  "rsterm-workspace",
+ "rusqlite",
  "rust-i18n",
  "serde",
  "serde_json",
@@ -4673,15 +4668,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rsterm-config"
-version = "0.7.2"
-dependencies = [
- "rsterm-connection",
- "rsterm-uiframe",
- "serde",
-]
-
-[[package]]
 name = "rsterm-connection"
 version = "0.7.2"
 dependencies = [
@@ -4701,19 +4687,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rsterm-data"
-version = "0.7.2"
-dependencies = [
- "directories",
- "log",
- "rsterm-config",
- "rusqlite",
- "serde",
- "serde_json",
- "uuid",
-]
-
-[[package]]
 name = "rsterm-fs"
 version = "0.7.2"
 dependencies = [
@@ -4723,34 +4696,6 @@ dependencies = [
  "russh",
  "russh-sftp",
  "tokio",
-]
-
-[[package]]
-name = "rsterm-page-file-manager"
-version = "0.7.2"
-dependencies = [
- "egui",
- "log",
- "rsterm-fs",
- "rsterm-platform",
- "rsterm-session-core",
- "rsterm-uiframe",
- "rsterm-workspace",
-]
-
-[[package]]
-name = "rsterm-page-terminal"
-version = "0.7.2"
-dependencies = [
- "egui",
- "rsterm-config",
- "rsterm-connection",
- "rsterm-data",
- "rsterm-platform",
- "rsterm-session-core",
- "rsterm-terminal",
- "rsterm-uiframe",
- "rsterm-workspace",
 ]
 
 [[package]]
@@ -4779,42 +4724,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rsterm-session-core"
-version = "0.7.2"
-dependencies = [
- "egui",
- "log",
- "rsterm-connection",
- "rsterm-data",
- "rsterm-fs",
- "rsterm-platform",
- "rsterm-remote",
- "rsterm-terminal",
- "uuid",
-]
-
-[[package]]
-name = "rsterm-shell"
-version = "0.7.2"
-dependencies = [
- "egui",
- "log",
- "rfd",
- "rsterm-config",
- "rsterm-connection",
- "rsterm-data",
- "rsterm-page-file-manager",
- "rsterm-page-terminal",
- "rsterm-platform",
- "rsterm-remote",
- "rsterm-session-core",
- "rsterm-uiframe",
- "rsterm-workspace",
- "serde",
- "uuid",
-]
-
-[[package]]
 name = "rsterm-terminal"
 version = "0.7.2"
 dependencies = [
@@ -4839,7 +4748,6 @@ name = "rsterm-workspace"
 version = "0.7.2"
 dependencies = [
  "egui",
- "rsterm-data",
  "rsterm-uiframe",
  "serde",
 ]
