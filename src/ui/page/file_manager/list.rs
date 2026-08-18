@@ -86,10 +86,10 @@ pub(super) fn handle_list_keyboard(
     }
 
     if input.key_pressed(Key::ArrowRight) || input.key_pressed(Key::Enter) {
-        if let Some(idx) = *focus_index
-            && entries.get(idx).is_some_and(|e| e.is_dir)
-        {
-            ops.open_index = Some(idx);
+        if let Some(idx) = *focus_index {
+            if entries.get(idx).is_some_and(|e| e.is_dir) {
+                ops.open_index = Some(idx);
+            }
         }
         return;
     }

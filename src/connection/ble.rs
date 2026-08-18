@@ -382,10 +382,10 @@ fn discover_uart(services: &BTreeSet<Service>) -> Option<BleDiscovery> {
             return Some(discovery);
         }
 
-        if profile.protocol == BleProtocol::MultiCharacteristic
-            && let Some(discovery) = build_from_properties(service, 8)
-        {
-            return Some(discovery);
+        if profile.protocol == BleProtocol::MultiCharacteristic {
+            if let Some(discovery) = build_from_properties(service, 8) {
+                return Some(discovery);
+            }
         }
     }
 
@@ -461,11 +461,12 @@ async fn find_peripheral_by_name(
     target_name: &str,
 ) -> Option<btleplug::platform::Peripheral> {
     for p in peripherals {
-        if let Ok(Some(props)) = p.properties().await
-            && let Some(ref name) = props.local_name
-            && (name == target_name || name.contains(target_name))
-        {
-            return Some(p.clone());
+        if let Ok(Some(props)) = p.properties().await {
+            if let Some(ref name) = props.local_name {
+                if name == target_name || name.contains(target_name) {
+                    return Some(p.clone());
+                }
+            }
         }
     }
     None

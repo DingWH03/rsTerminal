@@ -100,12 +100,15 @@ impl AuthUserDialog {
                             if ui
                                 .button(rust_i18n::t!("auth_user_pick_key_file"))
                                 .clicked()
-                                && let Some(path) = rfd::FileDialog::new()
+                            {
+                                if let Some(path) = rfd::FileDialog::new()
                                     .set_title(rust_i18n::t!("auth_user_pick_key_file"))
                                     .pick_file()
-                                && let Ok(data) = std::fs::read_to_string(&path)
-                            {
-                                self.private_key = data;
+                                {
+                                    if let Ok(data) = std::fs::read_to_string(&path) {
+                                        self.private_key = data;
+                                    }
+                                }
                             }
                         }
                     });

@@ -19,10 +19,8 @@ pub const SSH_OSC7_PROMPT_COMMAND: &str = r#"printf "\033]7;file://%s%s\033\\" "
 /// Terminal cursor appearance (configurable in settings).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[derive(Default)]
 pub enum CursorStyle {
     /// Thin vertical bar at the left of the cell.
-    #[default]
     Bar,
     /// Inverted full cell (classic block cursor).
     Block,
@@ -34,6 +32,12 @@ pub enum CursorStyle {
     BlockBlink,
     /// Blinking underline.
     UnderlineBlink,
+}
+
+impl Default for CursorStyle {
+    fn default() -> Self {
+        Self::Bar
+    }
 }
 
 impl CursorStyle {
@@ -61,17 +65,21 @@ impl CursorStyle {
 /// Terminal bell / alert behavior.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[derive(Default)]
 pub enum BellStyle {
     /// No bell.
     Off,
     /// Visual flash only.
-    #[default]
     Visual,
     /// System beep only.
     Audible,
     /// Both flash and beep.
     Both,
+}
+
+impl Default for BellStyle {
+    fn default() -> Self {
+        Self::Visual
+    }
 }
 
 impl BellStyle {
@@ -90,15 +98,19 @@ impl BellStyle {
 /// Terminal type reported via $TERM.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[derive(Default)]
 pub enum TerminalType {
-    #[default]
     Xterm256,
     Xterm,
     Screen256,
     Screen,
     Tmux256,
     Tmux,
+}
+
+impl Default for TerminalType {
+    fn default() -> Self {
+        Self::Xterm256
+    }
 }
 
 impl TerminalType {
@@ -438,7 +450,7 @@ impl TerminalTheme {
     }
 
     /// List of all built-in presets with their names.
-    pub fn presets() -> [ThemePreset; 7] {
+    pub fn presets() -> [(&'static str, fn() -> Self); 7] {
         [
             ("Default", Self::default),
             ("Dracula", Self::dracula),
@@ -450,6 +462,3 @@ impl TerminalTheme {
         ]
     }
 }
-
-/// Built-in theme preset: display name + constructor.
-pub type ThemePreset = (&'static str, fn() -> TerminalTheme);

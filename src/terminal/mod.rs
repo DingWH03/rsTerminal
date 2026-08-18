@@ -41,7 +41,7 @@ impl Terminal {
                     self.screen.backspace();
                 } else if byte == 0x09 {
                     self.screen.advance_tabs();
-                } else if (0x20..=0x7e).contains(&byte) {
+                } else if byte >= 0x20 && byte <= 0x7e {
                     self.screen.put_char(byte as char);
                 }
             }

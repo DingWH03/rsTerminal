@@ -82,7 +82,7 @@ pub struct EmptyPaneConnect {
 }
 
 /// Actions emitted by the right workspace pane.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct WorkspaceAction {
     pub focus_pane: Option<PaneId>,
     pub minimize_pane: Option<PaneId>,
@@ -99,5 +99,22 @@ pub struct WorkspaceAction {
 impl WorkspaceAction {
     pub fn empty() -> Self {
         Self::default()
+    }
+}
+
+impl Default for WorkspaceAction {
+    fn default() -> Self {
+        Self {
+            focus_pane: None,
+            minimize_pane: None,
+            close_pane_session: None,
+            start_pane_drag: None,
+            terminal: ConnectionViewAction::default(),
+            terminal_pane: None,
+            file_manager: FileManagerAction::default(),
+            connect_from_empty: None,
+            open_connections_from_empty: None,
+            drop_applied: false,
+        }
     }
 }

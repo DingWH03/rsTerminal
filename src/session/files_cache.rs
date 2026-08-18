@@ -233,30 +233,30 @@ fn tick_local(session: &mut ActiveSession) {
     }
 
     // Prefer live /proc while following the shell (no manual browse).
-    if cache.browse_cwd.is_none()
-        && let Some(cwd) = local_shell_cwd(session.core.handle.shell_pid)
-    {
-        cache.set_shell_cwd(&cwd);
+    if cache.browse_cwd.is_none() {
+        if let Some(cwd) = local_shell_cwd(session.core.handle.shell_pid) {
+            cache.set_shell_cwd(&cwd);
+        }
     }
 
     cache.note_semantic_mark(mark_seq);
 
-    if cache.loading
-        && let Some(cwd) = cache.effective_cwd().map(str::to_string)
-    {
-        match local::list_dir(Path::new(&cwd)) {
-            Ok(entries) => {
-                cache.entries = entries;
-                cache.error = None;
-                cache.generation = cache.generation.wrapping_add(1);
+    if cache.loading {
+        if let Some(cwd) = cache.effective_cwd().map(str::to_string) {
+            match local::list_dir(Path::new(&cwd)) {
+                Ok(entries) => {
+                    cache.entries = entries;
+                    cache.error = None;
+                    cache.generation = cache.generation.wrapping_add(1);
+                }
+                Err(e) => {
+                    cache.entries.clear();
+                    cache.error = Some(e);
+                    cache.generation = cache.generation.wrapping_add(1);
+                }
             }
-            Err(e) => {
-                cache.entries.clear();
-                cache.error = Some(e);
-                cache.generation = cache.generation.wrapping_add(1);
-            }
+            cache.loading = false;
         }
-        cache.loading = false;
     }
 }
 
@@ -265,10 +265,10 @@ fn tick_ssh(
     connections: &[SavedConnection],
     auth_users: &[crate::data::persist::types::AuthUser],
 ) {
-    if let Some(cwd) = session.core.terminal.screen.cwd.as_deref()
-        && !cwd.is_empty()
-    {
-        session.core.metrics.note_osc_cwd(Some(cwd));
+    if let Some(cwd) = session.core.terminal.screen.cwd.as_deref() {
+        if !cwd.is_empty() {
+            session.core.metrics.note_osc_cwd(Some(cwd));
+        }
     }
 
     let osc = session.core.terminal.screen.cwd.clone();
@@ -302,17 +302,16 @@ fn tick_ssh(
             }
             Err(e) => cache.error = Some(e),
         }
-    } else if cache.loading
-        && cache.pending.is_none()
-        && let Some(cwd) = cache.effective_cwd().map(str::to_string)
-    {
-        match client.begin_list_dir(&cwd) {
-            Ok(rx) => {
-                cache.pending = Some(PendingOp::List { path: cwd, rx });
-            }
-            Err(e) => {
-                cache.error = Some(e);
-                cache.loading = false;
+    } else if cache.loading && cache.pending.is_none() {
+        if let Some(cwd) = cache.effective_cwd().map(str::to_string) {
+            match client.begin_list_dir(&cwd) {
+                Ok(rx) => {
+                    cache.pending = Some(PendingOp::List { path: cwd, rx });
+                }
+                Err(e) => {
+                    cache.error = Some(e);
+                    cache.loading = false;
+                }
             }
         }
     }

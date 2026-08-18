@@ -360,8 +360,8 @@ pub fn update_terminal_selection(
                         extend_selection_to(selection, selection_pointer, cell);
                     }
                 }
-            } else if term_resp.drag_started()
-                && let Some(cell) = cell_at_pos(
+            } else if term_resp.drag_started() {
+                if let Some(cell) = cell_at_pos(
                     pos,
                     rect,
                     cell_w,
@@ -370,15 +370,13 @@ pub fn update_terminal_selection(
                     grid_cols,
                     screen,
                     *scroll_offset,
-                )
-            {
-                start_selection(selection, selection_pointer, cell);
+                ) {
+                    start_selection(selection, selection_pointer, cell);
+                }
             }
 
-            if !has_touch
-                && term_resp.clicked()
-                && shift
-                && let Some(cell) = cell_at_pos(
+            if !has_touch && term_resp.clicked() && shift {
+                if let Some(cell) = cell_at_pos(
                     pos,
                     rect,
                     cell_w,
@@ -387,9 +385,9 @@ pub fn update_terminal_selection(
                     grid_cols,
                     screen,
                     *scroll_offset,
-                )
-            {
-                extend_selection_to(selection, selection_pointer, cell);
+                ) {
+                    extend_selection_to(selection, selection_pointer, cell);
+                }
             }
         }
     }

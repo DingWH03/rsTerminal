@@ -65,10 +65,10 @@ fn status_schema_v1() -> u32 {
 
 impl RemoteStatus {
     pub fn with_osc_cwd(mut self, osc: Option<&str>) -> Self {
-        if self.cwd.is_none()
-            && let Some(c) = osc.filter(|s| !s.is_empty())
-        {
-            self.cwd = Some(c.to_string());
+        if self.cwd.is_none() {
+            if let Some(c) = osc.filter(|s| !s.is_empty()) {
+                self.cwd = Some(c.to_string());
+            }
         }
         self
     }
@@ -403,13 +403,6 @@ fn status_brief(st: &RemoteStatus) -> String {
     format!("status host={host} load={load} mem={mem} disk={disk} cwd={cwd}")
 }
 
-fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -565,4 +558,11 @@ mod tests {
         assert_eq!(m.history_len(), METRICS_HISTORY_LEN);
         assert_eq!(m.history().first().unwrap().ts_ms, 11_000);
     }
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }

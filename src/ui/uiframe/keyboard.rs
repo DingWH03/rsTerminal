@@ -414,13 +414,14 @@ impl VirtualKeyboard {
 
     /// Send one text key label (letters, punctuation) honoring sticky Ctrl.
     fn emit_text_label(&mut self, label: &str, output: &mut Vec<Vec<u8>>) {
-        if self.ctrl
-            && let Some(ch) = label.chars().next()
-            && label.chars().nth(1).is_none()
-            && let Some(byte) = ctrl_byte_for_char(ch)
-        {
-            output.push(vec![byte]);
-            return;
+        if self.ctrl {
+            if let Some(ch) = label.chars().next()
+                && label.chars().nth(1).is_none()
+                && let Some(byte) = ctrl_byte_for_char(ch)
+            {
+                output.push(vec![byte]);
+                return;
+            }
         }
         output.push(label.as_bytes().to_vec());
     }
@@ -588,6 +589,17 @@ pub fn ctrl_byte_for_char(c: char) -> Option<u8> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ctrl_mapping() {
+        assert_eq!(ctrl_byte_for_char('c'), Some(0x03));
+        assert_eq!(ctrl_byte_for_char('D'), Some(0x04));
+    }
+}
+
 fn fkey_seq(n: u8) -> Vec<u8> {
     if n <= 4 {
         format!("\x1bO{}", b'P' + n - 1).into_bytes()
@@ -597,16 +609,5 @@ fn fkey_seq(n: u8) -> Vec<u8> {
         format!("\x1b[{}~", n + 12).into_bytes()
     } else {
         Vec::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn ctrl_mapping() {
-        assert_eq!(ctrl_byte_for_char('c'), Some(0x03));
-        assert_eq!(ctrl_byte_for_char('D'), Some(0x04));
     }
 }

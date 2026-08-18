@@ -1097,23 +1097,23 @@ impl Screen {
         // If the first active row is a continuation, its prefix is the newest
         // logical line in scrollback.  Recombine them before reflow so growing the
         // terminal can join the line cleanly across the scrollback/screen boundary.
-        if first_wrapped.first().copied().unwrap_or(false)
-            && let Some(prefix) = self.pop_last_logical_with_visuals()
-        {
-            if !logical_lines.is_empty() {
-                let prefix_len = prefix.cells.len();
-                let mut combined = prefix.cells;
-                combined.extend(std::mem::take(&mut logical_lines[0].cells));
-                logical_lines[0].cells = combined;
-                first_wrapped[0] = false;
-                for (r, li) in row_to_line.iter().copied().enumerate() {
-                    if li == 0 {
-                        row_base_offset[r] += prefix_len;
+        if first_wrapped.first().copied().unwrap_or(false) {
+            if let Some(prefix) = self.pop_last_logical_with_visuals() {
+                if !logical_lines.is_empty() {
+                    let prefix_len = prefix.cells.len();
+                    let mut combined = prefix.cells;
+                    combined.extend(std::mem::take(&mut logical_lines[0].cells));
+                    logical_lines[0].cells = combined;
+                    first_wrapped[0] = false;
+                    for (r, li) in row_to_line.iter().copied().enumerate() {
+                        if li == 0 {
+                            row_base_offset[r] += prefix_len;
+                        }
                     }
+                } else {
+                    logical_lines.push(prefix);
+                    first_wrapped.push(false);
                 }
-            } else {
-                logical_lines.push(prefix);
-                first_wrapped.push(false);
             }
         }
 
@@ -1145,7 +1145,8 @@ impl Screen {
         // visible segment remains `wrapped=true`; when it later scrolls up,
         // `scroll_up` will extend this same logical line instead of creating a
         // duplicate hard line.
-        for (li, segment) in visual_rows.iter().take(visible_start) {
+        for i in 0..visible_start {
+            let (li, segment) = &visual_rows[i];
             let line = &logical_lines[*li];
             let cells = line.cells
                 [segment.start.min(line.cells.len())..segment.end.min(line.cells.len())]
@@ -1360,8 +1361,10 @@ impl Screen {
         // If the alternate screen is active, resize/reflow the saved main-screen
         // snapshot as main-screen history.  This keeps the shell buffer sane after
         // leaving htop/vim when the window was resized inside the alternate screen.
-        if in_alt && let Some(main) = self.saved_main.take() {
-            self.saved_main = Some(self.reflow_saved_main_for_resize(main, rows, cols));
+        if in_alt {
+            if let Some(main) = self.saved_main.take() {
+                self.saved_main = Some(self.reflow_saved_main_for_resize(main, rows, cols));
+            }
         }
 
         if in_alt {
@@ -1938,7 +1941,7 @@ impl TermHandler for Screen {
                 self.flush_pending_cr(false);
                 self.advance_tabs();
             }
-            0x0A..=0x0C => {
+            0x0A | 0x0B | 0x0C => {
                 let preceded_by_cr = self.pending_cr;
                 let double_cr = self.pending_double_cr;
                 self.pending_cr = false;
@@ -2466,10 +2469,10 @@ impl TermHandler for Screen {
             }
         } else if let Some(rest) = data.strip_prefix("133;") {
             self.handle_osc133(rest);
-        } else if data == "0"
-            && let Some(rest) = data.get(1..)
-        {
-            self.title = rest.to_string();
+        } else if data == "0" {
+            if let Some(rest) = data.get(1..) {
+                self.title = rest.to_string();
+            }
         }
     }
 }
@@ -2716,7 +2719,7 @@ fn xt_hex_encode(s: &str) -> String {
 }
 
 fn xt_hex_decode(s: &str) -> Option<String> {
-    if !s.len().is_multiple_of(2) {
+    if s.len() % 2 != 0 {
         return None;
     }
     let mut out = String::new();

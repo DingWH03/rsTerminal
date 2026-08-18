@@ -91,11 +91,13 @@ impl Persist {
                     if db::profiles::get_default(&db)
                         .map_err(|e| e.to_string())?
                         .is_none()
-                        && let Some(first) = db::profiles::list_all(&db)
+                    {
+                        if let Some(first) = db::profiles::list_all(&db)
                             .map_err(|e| e.to_string())?
                             .first()
-                    {
-                        db::profiles::set_default(&db, &first.id).map_err(|e| e.to_string())?;
+                        {
+                            db::profiles::set_default(&db, &first.id).map_err(|e| e.to_string())?;
+                        }
                     }
                 }
             } else {
@@ -152,11 +154,11 @@ impl Persist {
         for c in &mut conns {
             let mut changed = false;
             if c.profile_id.is_none() {
-                if let Some((_, name)) = migrate_names.iter().find(|(id, _)| id == &c.id)
-                    && let Some(pid) = name_to_id.get(name)
-                {
-                    c.profile_id = Some(pid.clone());
-                    changed = true;
+                if let Some((_, name)) = migrate_names.iter().find(|(id, _)| id == &c.id) {
+                    if let Some(pid) = name_to_id.get(name) {
+                        c.profile_id = Some(pid.clone());
+                        changed = true;
+                    }
                 }
                 if c.profile_id.is_none() {
                     c.profile_id = default_id.clone();

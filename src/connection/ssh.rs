@@ -1,6 +1,7 @@
 //! Interactive SSH PTY plus optional shared SFTP + status agent on one TCP connection.
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 
@@ -37,11 +38,11 @@ struct SshClient;
 impl client::Handler for SshClient {
     type Error = russh::Error;
 
-    async fn check_server_key(
+    fn check_server_key(
         &mut self,
         _server_public_key: &russh::keys::PublicKey,
-    ) -> Result<bool, Self::Error> {
-        Ok(true)
+    ) -> impl Future<Output = Result<bool, Self::Error>> + Send {
+        async { Ok(true) }
     }
 }
 
@@ -450,7 +451,7 @@ async fn start_status_agent(
     ch.exec(true, cmd).await.map_err(|e| e.to_string())?;
     wait_channel_success(&mut ch, "agent exec").await?;
 
-    ch.data(AGENT_SCRIPT.as_bytes())
+    ch.data(&AGENT_SCRIPT.as_bytes()[..])
         .await
         .map_err(|e| e.to_string())?;
     if !AGENT_SCRIPT.ends_with('\n') {

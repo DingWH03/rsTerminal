@@ -31,14 +31,27 @@ pub(super) fn handle_selection(
 ) -> bool {
     let has_touch = ui.input(|input| input.has_touch_screen());
 
-    if has_touch
-        && response.long_touched()
-        && let (Some(session), Some(pos)) = (session.as_mut(), response.interact_pointer_pos())
-    {
-        let inside_selection = session.view.selection.as_ref().is_some_and(|selection| {
-            is_pos_in_selection(
+    if has_touch && response.long_touched() {
+        if let (Some(session), Some(pos)) = (session.as_mut(), response.interact_pointer_pos()) {
+            let inside_selection = session.view.selection.as_ref().is_some_and(|selection| {
+                is_pos_in_selection(
+                    pos,
+                    selection,
+                    &session.core.terminal.screen,
+                    session.view.scroll_offset,
+                    grid_rect,
+                    cell_width,
+                    cell_height,
+                    grid_rows,
+                    grid_cols,
+                )
+            });
+
+            if inside_selection {
+                session.view.touch_state.show_touch_popup = true;
+                ctx.request_repaint();
+            } else if let Some(selection) = touch_long_press_selection_from_pos(
                 pos,
-                selection,
                 &session.core.terminal.screen,
                 session.view.scroll_offset,
                 grid_rect,
@@ -46,72 +59,56 @@ pub(super) fn handle_selection(
                 cell_height,
                 grid_rows,
                 grid_cols,
-            )
-        });
-
-        if inside_selection {
-            session.view.touch_state.show_touch_popup = true;
-            ctx.request_repaint();
-        } else if let Some(selection) = touch_long_press_selection_from_pos(
-            pos,
-            &session.core.terminal.screen,
-            session.view.scroll_offset,
-            grid_rect,
-            cell_width,
-            cell_height,
-            grid_rows,
-            grid_cols,
-        ) {
-            session.view.selection_pointer = Some(selection.anchor);
-            session.view.selection = Some(selection);
-            session.view.touch_state.touch_select_mode = true;
-            session.view.touch_state.show_handles = true;
-            session.view.touch_state.scroll_last_pos = None;
-            session.view.touch_state.scroll_remainder_rows = 0.0;
-            session.view.touch_state.scrolled_this_touch = false;
-            #[cfg(target_os = "android")]
-            {
-                _keyboard.terminal_ime_enabled = false;
-                super::input::hide_android_terminal_ime(ui.ctx());
+            ) {
+                session.view.selection_pointer = Some(selection.anchor);
+                session.view.selection = Some(selection);
+                session.view.touch_state.touch_select_mode = true;
+                session.view.touch_state.show_handles = true;
+                session.view.touch_state.scroll_last_pos = None;
+                session.view.touch_state.scroll_remainder_rows = 0.0;
+                session.view.touch_state.scrolled_this_touch = false;
+                #[cfg(target_os = "android")]
+                {
+                    _keyboard.terminal_ime_enabled = false;
+                    super::input::hide_android_terminal_ime(ui.ctx());
+                }
+                ctx.request_repaint();
             }
-            ctx.request_repaint();
         }
     }
 
-    if has_touch
-        && response.clicked()
-        && !response.long_touched()
-        && let (Some(session), Some(pos)) = (session.as_mut(), response.interact_pointer_pos())
-    {
-        let inside = session.view.selection.as_ref().is_some_and(|selection| {
-            is_pos_in_selection(
-                pos,
-                selection,
-                &session.core.terminal.screen,
-                session.view.scroll_offset,
-                grid_rect,
-                cell_width,
-                cell_height,
-                grid_rows,
-                grid_cols,
-            )
-        });
-        if !inside {
-            session.view.selection = None;
-            session.view.selection_pointer = None;
-            session.view.touch_state.show_handles = false;
-            session.view.touch_state.touch_select_mode = false;
-            ctx.request_repaint();
+    if has_touch && response.clicked() && !response.long_touched() {
+        if let (Some(session), Some(pos)) = (session.as_mut(), response.interact_pointer_pos()) {
+            let inside = session.view.selection.as_ref().is_some_and(|selection| {
+                is_pos_in_selection(
+                    pos,
+                    selection,
+                    &session.core.terminal.screen,
+                    session.view.scroll_offset,
+                    grid_rect,
+                    cell_width,
+                    cell_height,
+                    grid_rows,
+                    grid_cols,
+                )
+            });
+            if !inside {
+                session.view.selection = None;
+                session.view.selection_pointer = None;
+                session.view.touch_state.show_handles = false;
+                session.view.touch_state.touch_select_mode = false;
+                ctx.request_repaint();
+            }
         }
     }
 
-    if !has_touch
-        && response.clicked()
-        && let Some(session) = session.as_mut()
-        && session.view.touch_state.show_handles
-    {
-        session.view.touch_state.show_handles = false;
-        session.view.touch_state.touch_select_mode = false;
+    if !has_touch && response.clicked() {
+        if let Some(session) = session.as_mut() {
+            if session.view.touch_state.show_handles {
+                session.view.touch_state.show_handles = false;
+                session.view.touch_state.touch_select_mode = false;
+            }
+        }
     }
 
     has_touch

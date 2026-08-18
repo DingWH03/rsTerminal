@@ -8,12 +8,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub struct PaneId(pub u64);
 
-impl Default for PaneId {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl PaneId {
     pub fn new() -> Self {
         static COUNTER: AtomicU64 = AtomicU64::new(1);
@@ -436,9 +430,9 @@ fn remove_pane_from_tree(node: &mut SplitNode, target: PaneId) -> Option<SplitNo
                 ));
             }
             if let Some(replacement) = remove_pane_from_tree(first, target) {
-                **first = replacement;
+                *first = Box::new(replacement);
             } else if let Some(replacement) = remove_pane_from_tree(second, target) {
-                **second = replacement;
+                *second = Box::new(replacement);
             }
             None
         }

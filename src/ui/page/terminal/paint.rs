@@ -142,7 +142,7 @@ pub fn paint_row(
         if cell.ch != ' ' && cell.ch != '\0' {
             let galley = layout_glyph(ui, cache, font_size, theme, cell.ch, attrs);
             let (fg, _) = resolve_colors(theme, attrs);
-            paint_glyph_at(painter, galley, cell_rect, fg);
+            paint_glyph_at(&painter, galley, cell_rect, fg);
         } else if attrs.underline {
             // Highlight plugins may underline spaces in a command span.
             let (_, bg) = resolve_colors(theme, attrs);

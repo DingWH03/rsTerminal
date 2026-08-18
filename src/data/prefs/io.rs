@@ -38,12 +38,14 @@ pub struct LegacyAppSettings {
 }
 
 pub(crate) fn load_prefs() -> Prefs {
-    if let Some(path) = prefs_path()
-        && path.exists()
-        && let Ok(data) = std::fs::read_to_string(&path)
-        && let Ok(prefs) = serde_json::from_str(&data)
-    {
-        return prefs;
+    if let Some(path) = prefs_path() {
+        if path.exists() {
+            if let Ok(data) = std::fs::read_to_string(&path) {
+                if let Ok(prefs) = serde_json::from_str(&data) {
+                    return prefs;
+                }
+            }
+        }
     }
 
     if let Some(legacy) = load_legacy_settings() {

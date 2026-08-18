@@ -30,7 +30,6 @@ use layout_state::ShellLayout;
 use messages::{FunctionAction, WorkspaceAction};
 
 /// Top-level UI shell owning layout state.
-#[derive(Default)]
 pub struct AppShell {
     pub layout: ShellLayout,
     pub function_pane: FunctionPane,
@@ -38,6 +37,19 @@ pub struct AppShell {
     active_drag: Option<ActiveDrag>,
     animations: ShellAnimations,
     last_drop_zone: Option<DropZone>,
+}
+
+impl Default for AppShell {
+    fn default() -> Self {
+        Self {
+            layout: ShellLayout::default(),
+            function_pane: FunctionPane::new(),
+            last_focused_pane: None,
+            active_drag: None,
+            animations: ShellAnimations::new(),
+            last_drop_zone: None,
+        }
+    }
 }
 
 impl AppShell {
@@ -228,14 +240,13 @@ impl AppShell {
                 }
             }
 
-            if let Some(ref id) = result.function_action.start_session_drag
-                && self.active_drag.is_none()
-                && drag_split_on
-            {
-                self.active_drag = Some(ActiveDrag::Session {
-                    session_id: id.clone(),
-                    label: Self::session_label(sessions, id),
-                });
+            if let Some(ref id) = result.function_action.start_session_drag {
+                if self.active_drag.is_none() && drag_split_on {
+                    self.active_drag = Some(ActiveDrag::Session {
+                        session_id: id.clone(),
+                        label: Self::session_label(sessions, id),
+                    });
+                }
             }
         }
 
@@ -248,7 +259,7 @@ impl AppShell {
                 .frame(ws_frame)
                 .show_inside(ui, |ui| {
                     let mut session_fade = std::collections::HashMap::new();
-                    for &pane in self.layout.workspace.panes.keys() {
+                    for (&pane, _) in &self.layout.workspace.panes {
                         session_fade.insert(pane, self.animations.session_fade_value(pane));
                     }
 
@@ -274,14 +285,13 @@ impl AppShell {
                     };
                     result.workspace_action = ws_result.action;
 
-                    if let Some(pane) = result.workspace_action.start_pane_drag
-                        && self.active_drag.is_none()
-                        && drag_split_on
-                    {
-                        self.active_drag = Some(ActiveDrag::Pane {
-                            pane_id: pane,
-                            label: Self::pane_label(sessions, &self.layout, pane),
-                        });
+                    if let Some(pane) = result.workspace_action.start_pane_drag {
+                        if self.active_drag.is_none() && drag_split_on {
+                            self.active_drag = Some(ActiveDrag::Pane {
+                                pane_id: pane,
+                                label: Self::pane_label(sessions, &self.layout, pane),
+                            });
+                        }
                     }
 
                     if ws_result.drag_ended {

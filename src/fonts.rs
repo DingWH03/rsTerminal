@@ -228,9 +228,11 @@ pub fn apply_terminal_fonts(ctx: &egui::Context, terminal_font_path: &str) {
             log::warn!("terminal font not found: {user_path}");
         }
     }
-    if !has_user && let Some(bytes) = read_first_existing(MONO_FONT_PATHS) {
-        insert_font(&mut fonts, USER_MONO_FAMILY, bytes);
-        has_user = true;
+    if !has_user {
+        if let Some(bytes) = read_first_existing(MONO_FONT_PATHS) {
+            insert_font(&mut fonts, USER_MONO_FAMILY, bytes);
+            has_user = true;
+        }
     }
 
     if let Some(bytes) = read_first_existing(CJK_FONT_PATHS) {

@@ -112,20 +112,20 @@ pub(super) fn paste_into_pane(session: &mut FileManagerSession, pane: FileActive
 }
 
 pub(super) fn refresh_if_needed(session: &mut FileManagerSession) {
-    if let Some(remote) = session.remote.as_mut()
-        && remote.loading
-    {
-        if let Some(err) = remote.client.connection_error() {
-            remote.loading = false;
-            remote.error = Some(err);
-        } else if remote.client.is_connected() {
-            remote.loading = false;
-            match remote.client.list_dir(&remote.cwd) {
-                Ok(entries) => {
-                    remote.entries = entries;
-                    remote.error = None;
+    if let Some(remote) = session.remote.as_mut() {
+        if remote.loading {
+            if let Some(err) = remote.client.connection_error() {
+                remote.loading = false;
+                remote.error = Some(err);
+            } else if remote.client.is_connected() {
+                remote.loading = false;
+                match remote.client.list_dir(&remote.cwd) {
+                    Ok(entries) => {
+                        remote.entries = entries;
+                        remote.error = None;
+                    }
+                    Err(e) => remote.error = Some(e),
                 }
-                Err(e) => remote.error = Some(e),
             }
         }
     }
@@ -174,18 +174,18 @@ pub(super) fn run_local_ops(
     if let Some(indices) = ops.bulk_delete.take() {
         delete_local_indices(pane, &indices, status);
     }
-    if let Some(idx) = ops.rename_index.take()
-        && let Some(ent) = pane.entries.get(idx)
-    {
-        rename_dialog.open_for(pane_side, &ent.name);
+    if let Some(idx) = ops.rename_index.take() {
+        if let Some(ent) = pane.entries.get(idx) {
+            rename_dialog.open_for(pane_side, &ent.name);
+        }
     }
-    if let Some(idx) = ops.info_index.take()
-        && let Some(ent) = pane.entries.get(idx)
-    {
-        let path = local::join_path(&pane.cwd, &ent.name);
-        match entry_info::local_entry_info(&path) {
-            Ok(info) => info_dialog.show(info),
-            Err(e) => *status = Some(e),
+    if let Some(idx) = ops.info_index.take() {
+        if let Some(ent) = pane.entries.get(idx) {
+            let path = local::join_path(&pane.cwd, &ent.name);
+            match entry_info::local_entry_info(&path) {
+                Ok(info) => info_dialog.show(info),
+                Err(e) => *status = Some(e),
+            }
         }
     }
     if ops.dismiss_multiselect {
@@ -217,18 +217,18 @@ pub(super) fn run_remote_ops(
     if let Some(indices) = ops.bulk_delete.take() {
         delete_remote_indices(remote, &indices, status);
     }
-    if let Some(idx) = ops.rename_index.take()
-        && let Some(ent) = remote.entries.get(idx)
-    {
-        rename_dialog.open_for(FileActivePane::Remote, &ent.name);
+    if let Some(idx) = ops.rename_index.take() {
+        if let Some(ent) = remote.entries.get(idx) {
+            rename_dialog.open_for(FileActivePane::Remote, &ent.name);
+        }
     }
-    if let Some(idx) = ops.info_index.take()
-        && let Some(ent) = remote.entries.get(idx)
-    {
-        let path = join_remote(&remote.cwd, &ent.name);
-        match remote.client.entry_info(&path) {
-            Ok(info) => info_dialog.show(info),
-            Err(e) => *status = Some(e),
+    if let Some(idx) = ops.info_index.take() {
+        if let Some(ent) = remote.entries.get(idx) {
+            let path = join_remote(&remote.cwd, &ent.name);
+            match remote.client.entry_info(&path) {
+                Ok(info) => info_dialog.show(info),
+                Err(e) => *status = Some(e),
+            }
         }
     }
     if ops.dismiss_multiselect {

@@ -272,11 +272,13 @@ fn parse_tags(
     let mut rest = rest;
 
     // `w=` (cwd) or error `m=` may contain spaces — take as remainder of the line.
-    if cwd_or_msg_rest && let Some(idx) = find_tag(rest, "w") {
-        let before = rest[..idx].trim_end();
-        let value = rest[idx + 2..].to_string();
-        tags.insert("w".into(), value);
-        rest = before;
+    if cwd_or_msg_rest {
+        if let Some(idx) = find_tag(rest, "w") {
+            let before = rest[..idx].trim_end();
+            let value = rest[idx + 2..].to_string();
+            tags.insert("w".into(), value);
+            rest = before;
+        }
     }
 
     for tok in rest.split_whitespace() {

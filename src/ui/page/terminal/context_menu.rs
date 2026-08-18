@@ -66,10 +66,10 @@ pub(super) fn apply(
     if menu_action.copy {
         copy_selection_to_clipboard(session, ctx);
     }
-    if menu_action.paste
-        && let Some(text) = read_text()
-    {
-        super::paste_to_session(session, &text, ctx, action);
+    if menu_action.paste {
+        if let Some(text) = read_text() {
+            super::paste_to_session(session, &text, ctx, action);
+        }
     }
     if menu_action.clear_selection {
         clear_selection(session);

@@ -19,7 +19,7 @@ pub fn default_shell() -> String {
 
     #[cfg(all(unix, not(target_os = "android")))]
     {
-        std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
+        return std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
     }
 
     #[cfg(not(any(windows, unix)))]

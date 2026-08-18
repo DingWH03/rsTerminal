@@ -73,14 +73,14 @@ impl RsTerminalApp {
             &self.auth_users,
         );
 
-        if let Some(idx) = self.focused_session_index()
-            && let WorkspaceSession::Terminal(term) = &mut self.sessions[idx]
-        {
-            let ctx = ctx.clone();
-            term.core
-                .handle
-                .repaint
-                .set_wake(move || ctx.request_repaint());
+        if let Some(idx) = self.focused_session_index() {
+            if let WorkspaceSession::Terminal(term) = &mut self.sessions[idx] {
+                let ctx = ctx.clone();
+                term.core
+                    .handle
+                    .repaint
+                    .set_wake(move || ctx.request_repaint());
+            }
         }
 
         // Only modal dialogs block the host (quit / connection failure).
@@ -165,11 +165,11 @@ impl RsTerminalApp {
             self.dialogs.favorite_cmd.open_new();
             self.release_terminal_keyboard_focus(&ctx);
         }
-        if let Some(id) = manage.edit_id
-            && let Some(cmd) = self.favorite_commands.iter().find(|c| c.id == id).cloned()
-        {
-            self.dialogs.favorite_cmd.open_edit(&cmd);
-            self.release_terminal_keyboard_focus(&ctx);
+        if let Some(id) = manage.edit_id {
+            if let Some(cmd) = self.favorite_commands.iter().find(|c| c.id == id).cloned() {
+                self.dialogs.favorite_cmd.open_edit(&cmd);
+                self.release_terminal_keyboard_focus(&ctx);
+            }
         }
         if let Some(id) = manage.delete_id {
             self.delete_favorite_command(&id);

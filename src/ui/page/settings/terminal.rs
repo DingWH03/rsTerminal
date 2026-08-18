@@ -33,11 +33,10 @@ pub fn page(ui: &mut egui::Ui, ctx: &mut SettingsPageCtx<'_>) {
                         }
                     });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if !profile.is_default
-                            && ctx.profiles.len() > 1
-                            && ui.small_button(rust_i18n::t!("delete")).clicked()
-                        {
-                            ctx.action.delete_profile_id = Some(profile.id.clone());
+                        if !profile.is_default && ctx.profiles.len() > 1 {
+                            if ui.small_button(rust_i18n::t!("delete")).clicked() {
+                                ctx.action.delete_profile_id = Some(profile.id.clone());
+                            }
                         }
                         if ui.small_button(rust_i18n::t!("edit")).clicked() {
                             ctx.action.request_edit_profile = Some(profile.id.clone());

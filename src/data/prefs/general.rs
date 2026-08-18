@@ -4,8 +4,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::i18n::Language;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GeneralPrefs {
     #[serde(default)]
     pub language: Language,
+}
+
+impl Default for GeneralPrefs {
+    fn default() -> Self {
+        Self {
+            language: Language::default(),
+        }
+    }
 }
