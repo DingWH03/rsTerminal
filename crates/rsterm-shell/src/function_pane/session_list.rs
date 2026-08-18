@@ -2,8 +2,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::connection_display::workspace_session_icon;
 use crate::session_host::WorkspaceSession;
+use crate::connection_display::workspace_session_icon;
 use crate::uiframe::components::empty_state::{EmptyStateConfig, paint_empty_state};
 use crate::uiframe::interactive::{self, AccentTone, RowState};
 use crate::uiframe::style;
@@ -40,11 +40,7 @@ pub fn paint_session_rows(
     if sessions.is_empty() {
         paint_empty_state(
             ui,
-            EmptyStateConfig::compact(
-                Icon::Sessions,
-                &crate::i18n_bridge::tr("sidebar_no_sessions"),
-                None,
-            ),
+            EmptyStateConfig::compact(Icon::Sessions, &crate::i18n_bridge::tr("sidebar_no_sessions"), None),
         );
         return action;
     }

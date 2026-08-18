@@ -14,9 +14,7 @@ use rsterm_fs::local;
 use rsterm_fs::sftp::{SftpClient, join_remote};
 use rsterm_fs::transfer_progress::ByteProgress;
 
-use crate::file_manager::{
-    FileClipboard, FileClipboardMode, FileManagerSession, FileTransferState,
-};
+use crate::file_manager::{FileClipboard, FileClipboardMode, FileManagerSession, FileTransferState};
 
 /// 粘贴目标面板。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

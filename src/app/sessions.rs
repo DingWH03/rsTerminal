@@ -7,7 +7,6 @@ use super::RsTerminalApp;
 use crate::connection::local;
 use crate::connection::ssh;
 use crate::data::persist::types::{ConnectionType, SavedConnection};
-use crate::session::TerminalViewState;
 use crate::session::{
     ActiveSession, ConnectionViewAction, FileManagerMode, FileManagerSession, TerminalSessionCore,
     WorkspaceSession, drain_connection,
@@ -15,6 +14,7 @@ use crate::session::{
 use crate::terminal::Terminal;
 use crate::terminal::{DEFAULT_GRID_COLS, DEFAULT_GRID_ROWS};
 use crate::ui::shell::coordinator::ShellCoordinator;
+use crate::session::TerminalViewState;
 use crate::ui::uiframe::keyboard::VirtualKeyboard;
 
 impl RsTerminalApp {
@@ -63,11 +63,7 @@ impl RsTerminalApp {
         term.core.handle.close();
         let rows = term.view.last_pty_rows.max(1);
         let cols = term.view.last_pty_cols.max(1);
-        match local::connect_local(
-            &crate::session::connect_params::local_params(config),
-            rows,
-            cols,
-        ) {
+        match local::connect_local(&crate::session::connect_params::local_params(config), rows, cols) {
             Ok(handle) => {
                 term.core.handle = handle;
                 term.core.saved_conn_id = Some(config.id.clone());

@@ -3,9 +3,9 @@
 //! Pane-local accumulators remain useful while rendering, but the application
 //! consumes this enum instead of interpreting their optional fields.
 
+use rsterm_session_core::ConnectionViewAction;
 use crate::layout::PaneId;
 use crate::shell::messages::{FunctionAction, WorkspaceAction};
-use rsterm_session_core::ConnectionViewAction;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UiAction {

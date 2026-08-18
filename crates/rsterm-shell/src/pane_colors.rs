@@ -2,10 +2,10 @@
 
 use std::collections::HashMap;
 
+use rsterm_data::prefs::Prefs;
 use crate::layout::{PaneId, WorkspaceLayout};
 use crate::uiframe::style;
 use crate::uiframe::tokens;
-use rsterm_data::prefs::Prefs;
 
 pub fn default_palette() -> Vec<[u8; 3]> {
     let accent = tokens::SemanticPalette::DARK.accent;

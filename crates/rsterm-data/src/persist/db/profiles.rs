@@ -2,9 +2,9 @@
 
 use rusqlite::{Connection, OptionalExtension, params};
 
-use crate::persist::types::TerminalProfile;
 use rsterm_config::KeyboardMode;
 use rsterm_config::{BellStyle, CursorStyle, TerminalTheme, TerminalType};
+use crate::persist::types::TerminalProfile;
 
 pub fn list_all(conn: &Connection) -> rusqlite::Result<Vec<TerminalProfile>> {
     let mut stmt = conn.prepare(

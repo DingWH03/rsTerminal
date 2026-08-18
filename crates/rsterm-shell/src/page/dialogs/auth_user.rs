@@ -1,7 +1,7 @@
 //! Auth user (SSH identity) create/edit dialog.
 
-use crate::uiframe::form::{self, FooterAction};
 use rsterm_data::persist::types::{AuthMethod, AuthUser};
+use crate::uiframe::form::{self, FooterAction};
 
 /// Create / edit an SSH auth user.
 #[derive(Default)]
@@ -65,17 +65,12 @@ impl AuthUserDialog {
         let closed = frame.show(ctx, "auth_user_dialog", |ui| {
             ui.add_space(4.0);
 
-            let name_resp =
-                form::labeled_text(ui, crate::i18n_bridge::tr("auth_user_name"), &mut self.name);
+            let name_resp = form::labeled_text(ui, crate::i18n_bridge::tr("auth_user_name"), &mut self.name);
             if self.request_name_focus {
                 name_resp.request_focus();
                 self.request_name_focus = false;
             }
-            form::labeled_text(
-                ui,
-                crate::i18n_bridge::tr("auth_user_username"),
-                &mut self.username,
-            );
+            form::labeled_text(ui, crate::i18n_bridge::tr("auth_user_username"), &mut self.username);
 
             form::labeled_row(ui, crate::i18n_bridge::tr("auth_user_method"), |ui| {
                 ui.radio_value(
@@ -135,12 +130,8 @@ impl AuthUserDialog {
                     AuthMethod::Password => !self.password.is_empty(),
                     AuthMethod::PrivateKey => !self.private_key.trim().is_empty(),
                 };
-            match form::dialog_footer(
-                ui,
-                crate::i18n_bridge::tr("cancel"),
-                crate::i18n_bridge::tr("save"),
-                can_save,
-            ) {
+            match form::dialog_footer(ui, crate::i18n_bridge::tr("cancel"), crate::i18n_bridge::tr("save"), can_save)
+            {
                 FooterAction::Cancel => close_requested = true,
                 FooterAction::Save => {
                     let id = self

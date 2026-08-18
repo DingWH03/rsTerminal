@@ -49,13 +49,19 @@ pub(super) fn render(
             ui.scope(|ui| {
                 ui.style_mut().spacing.button_padding =
                     egui::vec2(tokens::space::MD, tokens::space::XS * 0.5);
-                if text_toolbar_button(ui, ui.id().with("sel_copy"), &labels.copy).clicked() {
+                if text_toolbar_button(ui, ui.id().with("sel_copy"), &labels.copy)
+                    .clicked()
+                {
                     copy = true;
                 }
-                if text_toolbar_button(ui, ui.id().with("sel_paste"), &labels.paste).clicked() {
+                if text_toolbar_button(ui, ui.id().with("sel_paste"), &labels.paste)
+                    .clicked()
+                {
                     paste = true;
                 }
-                if text_toolbar_button(ui, ui.id().with("sel_cancel"), &labels.cancel).clicked() {
+                if text_toolbar_button(ui, ui.id().with("sel_cancel"), &labels.cancel)
+                    .clicked()
+                {
                     cancel_sel = true;
                 }
             });

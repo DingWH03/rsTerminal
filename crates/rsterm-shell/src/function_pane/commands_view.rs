@@ -1,11 +1,11 @@
 //! Favorite commands quick-input page in the function pane.
 
+use rsterm_data::persist::types::FavoriteCommand;
 use crate::shell::messages::FunctionAction;
 use crate::uiframe::components::compact_list_row::{CompactListRow, ListRowDensity};
 use crate::uiframe::components::empty_state::{EmptyStateConfig, paint_empty_state};
 use crate::uiframe::components::overflow_menu::{self, OverflowMenuState};
 use crate::uiframe::vector_icons::Icon;
-use rsterm_data::persist::types::FavoriteCommand;
 
 pub fn render(ui: &mut egui::Ui, commands: &[FavoriteCommand]) -> FunctionAction {
     render_with_id(ui, commands, "function_cmds")

@@ -2,11 +2,11 @@
 
 use std::collections::BTreeMap;
 
-use crate::files_cache::SessionFilesCache;
-use crate::view::{PortViewState, TerminalViewState};
 use rsterm_connection::{ConnectionPort, ConnectionPortKind};
 use rsterm_data::persist::types::ConnectionType;
+use crate::files_cache::SessionFilesCache;
 use rsterm_terminal::Terminal;
+use crate::view::{PortViewState, TerminalViewState};
 
 pub struct PortCoreState {
     pub port: u8,

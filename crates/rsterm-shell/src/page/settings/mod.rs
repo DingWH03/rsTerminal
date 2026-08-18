@@ -8,10 +8,10 @@ mod general;
 mod terminal;
 mod users;
 
-use crate::page::dialogs::ManageAuthUsersAction;
-use crate::uiframe::form;
 use rsterm_data::persist::types::{AuthUser, TerminalProfile};
 use rsterm_data::prefs::Prefs;
+use crate::page::dialogs::ManageAuthUsersAction;
+use crate::uiframe::form;
 
 /// Settings tab identifiers (also openable as standalone dialogs).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]

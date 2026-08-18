@@ -47,7 +47,10 @@ fn contents(ui: &mut egui::Ui, has_selection: bool, action: &mut TerminalMenuAct
         ui.close();
     }
     if ui
-        .add_enabled(has_selection, egui::Button::new(&labels.clear_selection))
+        .add_enabled(
+            has_selection,
+            egui::Button::new(&labels.clear_selection),
+        )
         .clicked()
     {
         action.clear_selection = true;

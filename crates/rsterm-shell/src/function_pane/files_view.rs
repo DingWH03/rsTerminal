@@ -3,13 +3,13 @@
 //! Listing I/O is driven by [`rsterm_session_core::tick_session_files`]; this module only paints
 //! and applies browse / DnD gestures.
 
+use rsterm_data::persist::types::{AuthUser, ConnectionType, SavedConnection};
 use crate::session_host::WorkspaceSession;
+use rsterm_session_core::tick_session_files;
 use crate::shell::messages::FunctionAction;
 use crate::uiframe::components::empty_state::{EmptyStateConfig, paint_empty_state};
 use crate::uiframe::file_list::{FileListLabels, FileListView};
 use crate::uiframe::vector_icons::Icon;
-use rsterm_data::persist::types::{AuthUser, ConnectionType, SavedConnection};
-use rsterm_session_core::tick_session_files;
 
 pub fn render(
     ui: &mut egui::Ui,
@@ -90,9 +90,7 @@ pub fn render(
                 ui,
                 Icon::Folder,
                 &crate::i18n_bridge::tr("sidebar_files_sftp_connecting"),
-                Some(&crate::i18n_bridge::tr(
-                    "sidebar_files_sftp_connecting_hint",
-                )),
+                Some(&crate::i18n_bridge::tr("sidebar_files_sftp_connecting_hint")),
             );
             ui.ctx().request_repaint();
             return action;
@@ -120,9 +118,7 @@ pub fn render(
                 ui,
                 Icon::Folder,
                 &crate::i18n_bridge::tr("sidebar_files_sftp_connecting"),
-                Some(&crate::i18n_bridge::tr(
-                    "sidebar_files_sftp_connecting_hint",
-                )),
+                Some(&crate::i18n_bridge::tr("sidebar_files_sftp_connecting_hint")),
             );
             ui.ctx().request_repaint();
         } else {

@@ -279,7 +279,13 @@ impl TerminalTheme {
                 let r = (i / 36) % 6;
                 let g = (i / 6) % 6;
                 let b = i % 6;
-                let level = |c: u8| -> u8 { if c == 0 { 0 } else { 55 + (c - 1) * 40 } };
+                let level = |c: u8| -> u8 {
+                    if c == 0 {
+                        0
+                    } else {
+                        55 + (c - 1) * 40
+                    }
+                };
                 Rgba::from_rgb(level(r), level(g), level(b))
             }
             232..=255 => {

@@ -7,14 +7,14 @@ pub mod split_widget;
 
 use std::collections::HashMap;
 
+use rsterm_data::persist::types::{SavedConnection, TerminalProfile};
+use rsterm_data::prefs::Prefs;
+use crate::session_host::WorkspaceSession;
 use crate::function_pane::FunctionPane;
 use crate::layout::{DropZone, PaneId, WorkspaceLayout};
-use crate::session_host::WorkspaceSession;
 use crate::shell::layout_preview::pane_rects_from_tree;
 use crate::shell::messages::WorkspaceAction;
 use crate::uiframe::keyboard::VirtualKeyboard;
-use rsterm_data::persist::types::{SavedConnection, TerminalProfile};
-use rsterm_data::prefs::Prefs;
 
 use drag_drop::{commit_drop, hit_test_drop_zone, paint_drag_overlay};
 use split_widget::render_split_tree;
@@ -85,7 +85,9 @@ pub fn render(
 
         if ui.input(|i| i.pointer.any_released()) {
             drag_ended = true;
-            let palette_len = crate::pane_colors::resolve_palette(ctx.prefs).len().max(1);
+            let palette_len = crate::pane_colors::resolve_palette(ctx.prefs)
+                .len()
+                .max(1);
             if let Some(focused) = commit_drop(layout, drag, zone, *ctx.last_drop_zone, palette_len)
             {
                 action.drop_applied = true;

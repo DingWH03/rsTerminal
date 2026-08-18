@@ -178,16 +178,8 @@ impl ProfileDialog {
                 },
             );
             ui.horizontal(|ui| {
-                color_edit_btn(
-                    ui,
-                    &crate::i18n_bridge::tr("theme_bg"),
-                    &mut self.draft.theme.bg,
-                );
-                color_edit_btn(
-                    ui,
-                    &crate::i18n_bridge::tr("theme_fg"),
-                    &mut self.draft.theme.fg,
-                );
+                color_edit_btn(ui, &crate::i18n_bridge::tr("theme_bg"), &mut self.draft.theme.bg);
+                color_edit_btn(ui, &crate::i18n_bridge::tr("theme_fg"), &mut self.draft.theme.fg);
                 color_edit_btn(
                     ui,
                     &crate::i18n_bridge::tr("theme_cursor"),
@@ -247,12 +239,8 @@ impl ProfileDialog {
             );
 
             let can_save = !self.draft.name.trim().is_empty();
-            match form::dialog_footer(
-                ui,
-                crate::i18n_bridge::tr("cancel"),
-                crate::i18n_bridge::tr("save"),
-                can_save,
-            ) {
+            match form::dialog_footer(ui, crate::i18n_bridge::tr("cancel"), crate::i18n_bridge::tr("save"), can_save)
+            {
                 FooterAction::Cancel => close_requested = true,
                 FooterAction::Save => {
                     self.draft.name = self.draft.name.trim().to_string();

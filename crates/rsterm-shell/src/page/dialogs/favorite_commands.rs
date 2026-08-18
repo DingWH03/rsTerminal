@@ -1,8 +1,8 @@
 //! Favorite command create/edit dialog and manage list dialog.
 
+use rsterm_data::persist::types::FavoriteCommand;
 use crate::uiframe::form::{self, FooterAction};
 use crate::uiframe::style;
-use rsterm_data::persist::types::FavoriteCommand;
 
 /// Outcome of the favorite-command editor for one frame.
 pub enum FavoriteCommandOutcome {
@@ -69,11 +69,8 @@ impl FavoriteCommandDialog {
         let closed = frame.show(ctx, "favorite_command_dialog", |ui| {
             ui.add_space(4.0);
 
-            let name_resp = form::labeled_text(
-                ui,
-                crate::i18n_bridge::tr("cmd_dialog_name"),
-                &mut self.name,
-            );
+            let name_resp =
+                form::labeled_text(ui, crate::i18n_bridge::tr("cmd_dialog_name"), &mut self.name);
             if self.request_name_focus {
                 name_resp.request_focus();
                 self.request_name_focus = false;
@@ -98,12 +95,8 @@ impl FavoriteCommandDialog {
             );
 
             let can_save = !self.name.trim().is_empty() && !self.command.trim().is_empty();
-            match form::dialog_footer(
-                ui,
-                crate::i18n_bridge::tr("cancel"),
-                crate::i18n_bridge::tr("save"),
-                can_save,
-            ) {
+            match form::dialog_footer(ui, crate::i18n_bridge::tr("cancel"), crate::i18n_bridge::tr("save"), can_save)
+            {
                 FooterAction::Cancel => close_requested = true,
                 FooterAction::Save => {
                     let cmd = if let Some(id) = &self.edit_id {
@@ -195,11 +188,9 @@ impl ManageFavoriteCommandsDialog {
                                 );
                                 if cmd.auto_execute {
                                     ui.label(
-                                        egui::RichText::new(crate::i18n_bridge::tr(
-                                            "cmd_badge_auto",
-                                        ))
-                                        .size(10.0)
-                                        .color(style::ACCENT),
+                                        egui::RichText::new(crate::i18n_bridge::tr("cmd_badge_auto"))
+                                            .size(10.0)
+                                            .color(style::ACCENT),
                                     );
                                 }
                             });

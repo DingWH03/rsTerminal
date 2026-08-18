@@ -4,14 +4,14 @@ use std::sync::mpsc;
 
 use std::collections::HashMap;
 
-use crate::connection_display::connection_type_label;
-use crate::uiframe::form::{self, FooterAction};
-use crate::uiframe::style;
 use rsterm_connection::enumeration::{enumerate_serial_ports, scan_ble_devices_blocking};
 use rsterm_data::persist::types::{
     AuthUser, ConnectionType, SavedConnection, TerminalProfile, default_local_env_vars,
     default_ssh_env_vars,
 };
+use crate::connection_display::connection_type_label;
+use crate::uiframe::form::{self, FooterAction};
+use crate::uiframe::style;
 
 fn env_map_to_rows(map: &HashMap<String, String>) -> Vec<(String, String)> {
     let mut rows: Vec<(String, String)> = map.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
@@ -287,8 +287,7 @@ impl NewConnectionDialog {
             });
         });
 
-        let name_resp =
-            form::labeled_text(ui, crate::i18n_bridge::tr("dialog_name"), &mut self.name);
+        let name_resp = form::labeled_text(ui, crate::i18n_bridge::tr("dialog_name"), &mut self.name);
         if self.request_name_focus {
             name_resp.request_focus();
             form::android_ime_for_text_edit(ui, &name_resp, true);
@@ -351,16 +350,8 @@ impl NewConnectionDialog {
                 );
             }
             ConnectionType::Ssh => {
-                form::labeled_text(
-                    ui,
-                    crate::i18n_bridge::tr("dialog_host"),
-                    &mut self.ssh_host,
-                );
-                form::labeled_text(
-                    ui,
-                    crate::i18n_bridge::tr("dialog_port"),
-                    &mut self.ssh_port,
-                );
+                form::labeled_text(ui, crate::i18n_bridge::tr("dialog_host"), &mut self.ssh_host);
+                form::labeled_text(ui, crate::i18n_bridge::tr("dialog_port"), &mut self.ssh_port);
                 let selected_auth_label = self
                     .selected_auth_user_id
                     .as_ref()
@@ -399,19 +390,12 @@ impl NewConnectionDialog {
                 }
             }
             ConnectionType::Serial => {
-                if ui
-                    .button(crate::i18n_bridge::tr("dialog_refresh_devices"))
-                    .clicked()
-                {
+                if ui.button(crate::i18n_bridge::tr("dialog_refresh_devices")).clicked() {
                     self.refresh_serial_devices();
                 }
                 ui.add_space(form::FIELD_GAP);
                 if self.serial_devices.is_empty() {
-                    form::labeled_text(
-                        ui,
-                        crate::i18n_bridge::tr("dialog_device"),
-                        &mut self.serial_port,
-                    );
+                    form::labeled_text(ui, crate::i18n_bridge::tr("dialog_device"), &mut self.serial_port);
                 } else {
                     let selected_text = self
                         .serial_devices
@@ -432,11 +416,7 @@ impl NewConnectionDialog {
                         },
                     );
                 }
-                form::labeled_text(
-                    ui,
-                    crate::i18n_bridge::tr("dialog_baud_rate"),
-                    &mut self.serial_baud,
-                );
+                form::labeled_text(ui, crate::i18n_bridge::tr("dialog_baud_rate"), &mut self.serial_baud);
             }
             ConnectionType::Ble => {
                 let scan_label = if self.ble_scanning {
@@ -455,9 +435,7 @@ impl NewConnectionDialog {
                     ui.label(egui::RichText::new(err).small().color(style::RED));
                 }
                 if self.ble_devices.is_empty() && !self.ble_scanning {
-                    ui.label(
-                        egui::RichText::new(crate::i18n_bridge::tr("dialog_ble_scan_hint")).weak(),
-                    );
+                    ui.label(egui::RichText::new(crate::i18n_bridge::tr("dialog_ble_scan_hint")).weak());
                     form::labeled_text(
                         ui,
                         crate::i18n_bridge::tr("dialog_device_name"),
@@ -510,10 +488,7 @@ impl NewConnectionDialog {
             if let Some(i) = remove_idx {
                 self.env_rows.remove(i);
             }
-            if ui
-                .button(crate::i18n_bridge::tr("dialog_env_add"))
-                .clicked()
-            {
+            if ui.button(crate::i18n_bridge::tr("dialog_env_add")).clicked() {
                 self.env_rows.push((String::new(), String::new()));
             }
         }

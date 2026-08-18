@@ -25,6 +25,6 @@ pub use terminal::{
 };
 pub use transfer::{PasteTarget, TransferDone, apply_transfer_done};
 pub use view::{
-    CellPos, PortViewState, RowGalleyCache, TerminalSelection, TerminalTouchState,
-    TerminalViewState, extract_range_text,
+    CellPos, PortViewState, RowGalleyCache, TerminalSelection, TerminalTouchState, TerminalViewState,
+    extract_range_text,
 };

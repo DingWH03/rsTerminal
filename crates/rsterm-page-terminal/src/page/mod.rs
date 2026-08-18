@@ -21,26 +21,30 @@ mod overlay;
 mod status_overlay;
 mod touch;
 
+use rsterm_config::{CursorStyle, TerminalTheme};
+use rsterm_session_core::{ActiveSession, ConnectionViewAction, drain_connection};
+use rsterm_terminal::{DEFAULT_GRID_COLS, DEFAULT_GRID_ROWS};
+use rsterm_uiframe::PaneChrome;
 use crate::page::grid::{apply_resize, drain_after_resize};
 use crate::page::input::{
     allocate_terminal_surface, has_any_keyboard_input, lock_terminal_focus, process_keyboard_input,
     terminal_widget_id,
 };
 #[cfg(target_os = "android")]
-use crate::page::input::{show_android_terminal_ime, update_android_terminal_ime_rect};
+use crate::page::input::{
+    show_android_terminal_ime, update_android_terminal_ime_rect,
+};
 use crate::page::mouse::{
     process_terminal_mouse, process_terminal_scrollbar, process_terminal_wheel,
     process_touch_scroll,
 };
 use crate::page::paint::paint_row;
-use crate::page::selection::{paint_selection, paint_selection_handles, update_terminal_selection};
-use crate::paint_helpers::measure_cell;
+use crate::page::selection::{
+    paint_selection, paint_selection_handles, update_terminal_selection,
+};
 use crate::paint_helpers::paint_cursor;
+use crate::paint_helpers::measure_cell;
 use crate::theme_color::to_egui;
-use rsterm_config::{CursorStyle, TerminalTheme};
-use rsterm_session_core::{ActiveSession, ConnectionViewAction, drain_connection};
-use rsterm_terminal::{DEFAULT_GRID_COLS, DEFAULT_GRID_ROWS};
-use rsterm_uiframe::PaneChrome;
 use rsterm_uiframe::keyboard::VirtualKeyboard;
 
 use self::context_menu::{

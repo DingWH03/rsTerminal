@@ -1,5 +1,6 @@
 //! Connections management page in the function pane.
 
+use rsterm_data::persist::types::{ConnectionType, SavedConnection};
 use crate::filter_chips_conn::connection_type_filters;
 use crate::shell::messages::FunctionAction;
 use crate::uiframe::components::compact_list_row::{CompactListRow, ListRowDensity};
@@ -7,7 +8,6 @@ use crate::uiframe::components::empty_state::{EmptyStateConfig, paint_empty_stat
 use crate::uiframe::components::filter_chips;
 use crate::uiframe::components::overflow_menu::{self, OverflowMenuState};
 use crate::uiframe::vector_icons::Icon;
-use rsterm_data::persist::types::{ConnectionType, SavedConnection};
 
 /// Paint saved-connection list (filter chips + rows).
 /// Used by the sidebar Connections tab and the "Open Connection" dialog.
@@ -155,11 +155,7 @@ fn paint_conn_menu(
         action.connect_connection = Some(conn.id.clone());
         ui.close();
     }
-    if show_file
-        && ui
-            .button(crate::i18n_bridge::tr("home_file_manager"))
-            .clicked()
-    {
+    if show_file && ui.button(crate::i18n_bridge::tr("home_file_manager")).clicked() {
         action.open_file_mgr = Some(conn.id.clone());
         ui.close();
     }

@@ -1,5 +1,6 @@
 //! 最近连接视图 — 在侧边栏中显示最近使用的连接列表。
 
+use rsterm_data::persist::types::SavedConnection;
 use crate::PaneChrome;
 use crate::connection_display::connection_type_icon;
 use crate::uiframe::components::compact_list_row::{CompactListRow, ListRowDensity};
@@ -9,7 +10,6 @@ use crate::uiframe::components::toolbar_button::{icon_toolbar_button, icon_toolb
 use crate::uiframe::style;
 use crate::uiframe::tokens;
 use crate::uiframe::vector_icons::Icon;
-use rsterm_data::persist::types::SavedConnection;
 
 /// 最近连接最大显示数量
 const MAX_RECENT_CONNECTIONS: usize = 20;
