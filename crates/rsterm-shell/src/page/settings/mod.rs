@@ -1,7 +1,9 @@
-//! Settings — nested pages: General / Appearance / Terminal / Files / Users.
+//! Settings — four nested pages: General / Appearance / Terminal / Users.
+//!
+//! Each tab body can embed in the full Settings dialog or open via
+//! [`settings_page_dialog`].
 
 mod appearance;
-mod files;
 mod general;
 mod terminal;
 mod users;
@@ -18,25 +20,17 @@ pub enum SettingsTab {
     General,
     Appearance,
     Terminal,
-    Files,
     Users,
 }
 
 impl SettingsTab {
-    pub const ALL: [Self; 5] = [
-        Self::General,
-        Self::Appearance,
-        Self::Terminal,
-        Self::Files,
-        Self::Users,
-    ];
+    pub const ALL: [Self; 4] = [Self::General, Self::Appearance, Self::Terminal, Self::Users];
 
     pub fn label(self) -> String {
         match self {
             Self::General => crate::i18n_bridge::tr("settings_tab_general"),
             Self::Appearance => crate::i18n_bridge::tr("settings_tab_appearance"),
             Self::Terminal => crate::i18n_bridge::tr("settings_tab_terminal"),
-            Self::Files => crate::i18n_bridge::tr("settings_tab_files"),
             Self::Users => crate::i18n_bridge::tr("settings_tab_users"),
         }
     }
@@ -127,7 +121,6 @@ fn settings_body(ui: &mut egui::Ui, ctx: &mut SettingsPageCtx<'_>, forced: Optio
         SettingsTab::General => general::page(ui, ctx),
         SettingsTab::Appearance => appearance::page(ui, ctx),
         SettingsTab::Terminal => terminal::page(ui, ctx),
-        SettingsTab::Files => files::page(ui, ctx),
         SettingsTab::Users => users::page(ui, ctx),
     }
 }

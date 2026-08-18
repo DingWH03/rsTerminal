@@ -106,22 +106,6 @@ pub fn render_pane(
                             action.terminal_pane = Some(pane_id);
                         }
                     }
-                    if let Some(fm) = ctx.sessions[idx]
-                        .content_mut()
-                        .as_any_mut()
-                        .downcast_mut::<rsterm_page_file_manager::FileManagerContent>(
-                    ) && let Some(prefs) = fm.pending_prefs.take()
-                    {
-                        action.file_manager.prefs = Some(prefs);
-                    }
-                    if let Some(fm) = ctx.sessions[idx]
-                        .content_mut()
-                        .as_any_mut()
-                        .downcast_mut::<rsterm_page_file_manager::FileManagerContent>(
-                    ) && let Some(ui_state) = fm.pending_ui_state.take()
-                    {
-                        action.file_manager.ui_state = Some(ui_state);
-                    }
                     if let Some(term) = ctx.sessions[idx]
                         .content_mut()
                         .as_any_mut()

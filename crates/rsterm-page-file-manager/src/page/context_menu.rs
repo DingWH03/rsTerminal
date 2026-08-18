@@ -9,7 +9,11 @@ use super::PaneOps;
 
 const CONTEXT_MENU_MIN_WIDTH: f32 = 140.0;
 
-pub(super) fn install_context_menu(resp: &egui::Response, mut build: impl FnMut(&mut egui::Ui)) {
+pub(super) fn install_context_menu(
+    _ui: &egui::Ui,
+    resp: &egui::Response,
+    mut build: impl FnMut(&mut egui::Ui),
+) {
     let menu_id = resp.id.with("ctx_popup");
     resp.context_menu(|ui| build(ui));
     if resp.long_touched() {

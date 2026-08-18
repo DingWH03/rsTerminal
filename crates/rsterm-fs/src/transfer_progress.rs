@@ -13,8 +13,6 @@ pub struct TransferSnapshot {
     pub refresh_remote: bool,
     pub refresh_local_right: bool,
     pub refresh_local_left: bool,
-    pub failed: bool,
-    pub cancelled: bool,
 }
 
 /// Byte-accurate transfer progress shared between UI and worker threads.

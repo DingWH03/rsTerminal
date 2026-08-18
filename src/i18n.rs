@@ -86,23 +86,6 @@ fn file_manager_labels() -> rsterm_page_file_manager::FileManagerLabels {
         original_name: t!("original_name").into_owned(),
         new_name: t!("new_name").into_owned(),
         confirm: t!("confirm").into_owned(),
-        col_name: t!("fm_col_name").into_owned(),
-        col_size: t!("fm_col_size").into_owned(),
-        col_modified: t!("fm_col_modified").into_owned(),
-        view_list: t!("fm_view_list").into_owned(),
-        view_details: t!("fm_view_details").into_owned(),
-        view_icons_small: t!("fm_view_icons_small").into_owned(),
-        view_icons_large: t!("fm_view_icons_large").into_owned(),
-        layout_single: t!("fm_layout_single").into_owned(),
-        layout_dual: t!("fm_layout_dual").into_owned(),
-        filter_placeholder: t!("fm_filter").into_owned(),
-        show_hidden: t!("fm_show_hidden").into_owned(),
-        sort_by: t!("fm_sort_by").into_owned(),
-        transfer_queue: t!("fm_transfer_queue").into_owned(),
-        clear_queue: t!("fm_clear_queue").into_owned(),
-        remove: t!("fm_remove").into_owned(),
-        retry: t!("fm_retry").into_owned(),
-        queued: t!("fm_queued").into_owned(),
     }
 }
 

@@ -4731,7 +4731,6 @@ version = "0.7.2"
 dependencies = [
  "egui",
  "log",
- "rsterm-data",
  "rsterm-fs",
  "rsterm-platform",
  "rsterm-session-core",
