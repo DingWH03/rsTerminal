@@ -551,7 +551,7 @@ fn paint_file_list_area(
                 ui.painter().rect_stroke(
                     list_rect,
                     style::CORNER_RADIUS_XS,
-                    egui::Stroke::new(1.5_f32, style::ACCENT),
+                    egui::Stroke::new(1.5, style::ACCENT),
                     egui::StrokeKind::Inside,
                 );
             }

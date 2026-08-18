@@ -1966,7 +1966,7 @@ impl TermHandler for Screen {
 
     fn esc_dispatch(&mut self, intermediates: &[u8], final_byte: u8) {
         self.flush_pending_cr(false); // SS3 (ESC O x): same cursor motion as CSI ESC [ x
-        if intermediates == *b"O" {
+        if intermediates == [b'O'] {
             match final_byte {
                 b'A' | b'B' | b'C' | b'D' => {
                     self.csi_dispatch(&[1], &[], final_byte);

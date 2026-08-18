@@ -159,7 +159,7 @@ pub fn paint_row(
                     egui::pos2(cell_rect.left(), y_line),
                     egui::pos2(cell_rect.right(), y_line),
                 ],
-                Stroke::new(1.0_f32, fg),
+                Stroke::new(1.0, fg),
             );
         }
 
@@ -236,7 +236,7 @@ fn text_format(
     bg: egui::Color32,
     attrs: RunAttrs,
 ) -> TextFormat {
-    let stroke = Stroke::new(1.0_f32, fg);
+    let stroke = Stroke::new(1.0, fg);
     TextFormat {
         font_id,
         color: fg,

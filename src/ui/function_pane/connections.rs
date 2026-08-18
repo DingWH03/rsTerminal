@@ -58,7 +58,7 @@ pub fn render_with_id(
     ui.painter().hline(
         full.x_range(),
         y,
-        egui::Stroke::new(1.0_f32, ui.visuals().widgets.noninteractive.bg_stroke.color),
+        egui::Stroke::new(1.0, ui.visuals().widgets.noninteractive.bg_stroke.color),
     );
     ui.add_space(1.0);
 
