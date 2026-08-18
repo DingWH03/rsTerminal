@@ -152,8 +152,10 @@ pub fn monitor_tab_visible(
         return false;
     };
     sessions.iter().find(|s| s.id() == id).is_some_and(|s| {
-        s.as_terminal()
-            .is_some_and(|t| t.core.conn_type == ConnectionType::Ssh)
+        matches!(
+            s,
+            WorkspaceSession::Terminal(t) if t.core.conn_type == ConnectionType::Ssh
+        )
     })
 }
 

@@ -4621,26 +4621,27 @@ dependencies = [
  "android_clipboard",
  "android_logger",
  "arboard",
+ "btleplug",
  "directories",
  "eframe",
  "egui",
  "env_logger",
  "fontdb",
+ "futures",
+ "jni 0.19.0",
+ "jni 0.22.4",
  "libc",
  "log",
  "once_cell",
+ "portable-pty",
  "rfd",
- "rsterm-connection",
- "rsterm-fs",
- "rsterm-platform",
- "rsterm-remote",
- "rsterm-terminal",
- "rsterm-uiframe",
- "rsterm-workspace",
  "rusqlite",
+ "russh",
+ "russh-sftp",
  "rust-i18n",
  "serde",
  "serde_json",
+ "serialport",
  "sys-locale",
  "tokio",
  "unicode-width",
@@ -4665,91 +4666,6 @@ dependencies = [
  "signature",
  "spki",
  "zeroize",
-]
-
-[[package]]
-name = "rsterm-connection"
-version = "0.7.2"
-dependencies = [
- "btleplug",
- "directories",
- "futures",
- "libc",
- "log",
- "portable-pty",
- "rsterm-platform",
- "rsterm-remote",
- "russh",
- "russh-sftp",
- "serialport",
- "tokio",
- "uuid",
-]
-
-[[package]]
-name = "rsterm-fs"
-version = "0.7.2"
-dependencies = [
- "directories",
- "log",
- "rsterm-connection",
- "russh",
- "russh-sftp",
- "tokio",
-]
-
-[[package]]
-name = "rsterm-platform"
-version = "0.7.2"
-dependencies = [
- "android_clipboard",
- "arboard",
- "btleplug",
- "egui",
- "jni 0.19.0",
- "jni 0.22.4",
- "libc",
- "log",
- "serialport",
- "tokio",
- "winit",
-]
-
-[[package]]
-name = "rsterm-remote"
-version = "0.7.2"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "rsterm-terminal"
-version = "0.7.2"
-dependencies = [
- "unicode-width",
-]
-
-[[package]]
-name = "rsterm-uiframe"
-version = "0.7.2"
-dependencies = [
- "android_clipboard",
- "arboard",
- "egui",
- "log",
- "rsterm-fs",
- "rsterm-platform",
- "serde",
-]
-
-[[package]]
-name = "rsterm-workspace"
-version = "0.7.2"
-dependencies = [
- "egui",
- "rsterm-uiframe",
- "serde",
 ]
 
 [[package]]

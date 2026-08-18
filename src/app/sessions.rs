@@ -37,13 +37,13 @@ impl RsTerminalApp {
         let host = config.ssh_host.as_deref().unwrap_or("host");
         let port = config.ssh_port.unwrap_or(22);
         match FileManagerSession::open_ssh(host, port, auth, config.id.clone()) {
-            Ok(fm) => self.push_session(WorkspaceSession::file_manager(fm)),
+            Ok(fm) => self.push_session(WorkspaceSession::FileManager(fm)),
             Err(e) => info!("SFTP failed: {e}"),
         }
     }
 
     pub(crate) fn open_file_manager_local(&mut self) {
-        self.push_session(WorkspaceSession::file_manager(
+        self.push_session(WorkspaceSession::FileManager(
             FileManagerSession::open_local(),
         ));
     }
@@ -54,7 +54,7 @@ impl RsTerminalApp {
             return;
         };
         let profile = self.resolve_profile(config.profile_id.as_deref()).clone();
-        let Some(term) = self.sessions[idx].as_terminal_mut() else {
+        let WorkspaceSession::Terminal(term) = &mut self.sessions[idx] else {
             return;
         };
         if term.core.conn_type != ConnectionType::Local {
@@ -91,26 +91,21 @@ impl RsTerminalApp {
             .sessions
             .iter()
             .find(|s| s.id() == session_id)
-            .and_then(|s| {
-                if let Some(term) = s.as_terminal() {
-                    match term.core.conn_type {
-                        #[cfg(not(target_os = "android"))]
-                        ConnectionType::Local => Some(DupPlan::TerminalLocal),
-                        #[cfg(target_os = "android")]
-                        ConnectionType::Local => None,
-                        ConnectionType::Ssh => {
-                            term.core.saved_conn_id.clone().map(DupPlan::TerminalSsh)
-                        }
-                        ConnectionType::Serial | ConnectionType::Ble => None,
+            .and_then(|s| match s {
+                WorkspaceSession::Terminal(term) => match term.core.conn_type {
+                    #[cfg(not(target_os = "android"))]
+                    ConnectionType::Local => Some(DupPlan::TerminalLocal),
+                    #[cfg(target_os = "android")]
+                    ConnectionType::Local => None,
+                    ConnectionType::Ssh => {
+                        term.core.saved_conn_id.clone().map(DupPlan::TerminalSsh)
                     }
-                } else if let Some(fm) = s.as_file_manager() {
-                    match fm.mode {
-                        FileManagerMode::SshSftp => fm.saved_conn_id.clone().map(DupPlan::FileSsh),
-                        FileManagerMode::LocalDual => Some(DupPlan::FileLocal),
-                    }
-                } else {
-                    None
-                }
+                    ConnectionType::Serial | ConnectionType::Ble => None,
+                },
+                WorkspaceSession::FileManager(fm) => match fm.mode {
+                    FileManagerMode::SshSftp => fm.saved_conn_id.clone().map(DupPlan::FileSsh),
+                    FileManagerMode::LocalDual => Some(DupPlan::FileLocal),
+                },
             });
         match plan {
             #[cfg(not(target_os = "android"))]
@@ -174,7 +169,7 @@ impl RsTerminalApp {
 
         let id = uuid::Uuid::new_v4().to_string();
         self.sessions
-            .push(WorkspaceSession::terminal(ActiveSession::new(
+            .push(WorkspaceSession::Terminal(ActiveSession::new(
                 TerminalSessionCore {
                     id: id.clone(),
                     conn_type: config.conn_type,
@@ -248,7 +243,7 @@ impl RsTerminalApp {
 
     pub(crate) fn close_session(&mut self, id: &str) {
         if let Some(pos) = self.sessions.iter().position(|s| s.id() == id) {
-            if let Some(s) = self.sessions[pos].as_terminal_mut() {
+            if let WorkspaceSession::Terminal(s) = &mut self.sessions[pos] {
                 s.core.handle.close();
             }
             self.sessions.remove(pos);
@@ -312,7 +307,7 @@ impl RsTerminalApp {
         let Some(idx) = self.sessions.iter().position(|s| s.id() == sid) else {
             return;
         };
-        let Some(session) = self.sessions[idx].as_terminal_mut() else {
+        let WorkspaceSession::Terminal(session) = &mut self.sessions[idx] else {
             return;
         };
         if !matches!(session.core.conn_type, ConnectionType::Ssh) {

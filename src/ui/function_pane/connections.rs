@@ -1,11 +1,10 @@
 //! Connections management page in the function pane.
 
 use crate::data::persist::types::{ConnectionType, SavedConnection};
-use crate::ui::filter_chips_conn::connection_type_filters;
 use crate::ui::shell::messages::FunctionAction;
 use crate::ui::uiframe::components::compact_list_row::{CompactListRow, ListRowDensity};
 use crate::ui::uiframe::components::empty_state::{EmptyStateConfig, paint_empty_state};
-use crate::ui::uiframe::components::filter_chips;
+use crate::ui::uiframe::components::filter_chips::{self, connection_type_filters};
 use crate::ui::uiframe::components::overflow_menu::{self, OverflowMenuState};
 use crate::ui::uiframe::vector_icons::Icon;
 

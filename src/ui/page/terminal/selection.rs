@@ -6,7 +6,7 @@ use crate::config::TerminalTheme;
 use crate::terminal::screen::{Screen, cell_display_width};
 use crate::ui::theme_color::to_egui;
 
-pub use crate::ui::terminal::{CellPos, TerminalSelection, TerminalTouchState, extract_range_text};
+pub use crate::session::{CellPos, TerminalSelection, TerminalTouchState, extract_range_text};
 
 /// 从触摸长按位置选择一个单词。
 pub fn touch_long_press_selection_from_pos(

@@ -2,7 +2,7 @@
 
 use super::RsTerminalApp;
 use crate::data::persist::types::FavoriteCommand;
-use crate::session::drain_connection;
+use crate::session::{WorkspaceSession, drain_connection};
 
 impl RsTerminalApp {
     pub(crate) fn save_favorite_command(&mut self, mut cmd: FavoriteCommand) {
@@ -39,7 +39,7 @@ impl RsTerminalApp {
         let Some(idx) = self.focused_session_index() else {
             return;
         };
-        let Some(term) = self.sessions[idx].as_terminal_mut() else {
+        let WorkspaceSession::Terminal(term) = &mut self.sessions[idx] else {
             return;
         };
         let mut action = term.paste_text(&cmd.command);

@@ -1,8 +1,20 @@
 use serde::{Deserialize, Serialize};
 
-pub use rsterm_uiframe::keyboard::KeyboardMode;
+/// Virtual keyboard layout mode (persisted on terminal profiles).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
+pub enum KeyboardMode {
+    /// Function / arrow keys only.
+    Special,
+    /// Full alphanumeric keyboard.
+    #[default]
+    Full,
+}
 
-pub use rsterm_connection::ssh::SSH_OSC7_PROMPT_COMMAND;
+/// Bash `PROMPT_COMMAND` that emits OSC 7 (`file://host/path`) for cwd tracking over SSH.
+///
+/// Sent via SSH `set_env` (no PTY echo). Requires the server to accept the variable
+/// (`AcceptEnv PROMPT_COMMAND` / `SetEnv`, etc.); otherwise it is ignored.
+pub const SSH_OSC7_PROMPT_COMMAND: &str = r#"printf "\033]7;file://%s%s\033\\" "$HOSTNAME" "$PWD""#;
 
 /// Terminal cursor appearance (configurable in settings).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -441,15 +453,3 @@ impl TerminalTheme {
 
 /// Built-in theme preset: display name + constructor.
 pub type ThemePreset = (&'static str, fn() -> TerminalTheme);
-
-#[cfg(test)]
-mod tests {
-    use super::TerminalTheme;
-
-    #[test]
-    fn xterm256_gray_is_not_default_fg() {
-        let theme = TerminalTheme::default();
-        let gray = theme.indexed_color(244);
-        assert_ne!(gray, theme.fg);
-    }
-}

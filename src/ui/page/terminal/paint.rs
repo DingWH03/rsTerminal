@@ -17,7 +17,7 @@ use crate::fonts::terminal_font_id_for_char;
 use crate::terminal::screen::{Cell, Color, cell_display_width};
 use crate::ui::theme_color::to_egui;
 
-pub use crate::ui::terminal::RowGalleyCache;
+pub use crate::session::RowGalleyCache;
 
 /// 影响字形渲染的视觉属性（SGR 转义序列 / vim / zsh 建议）。
 #[derive(Clone, Copy, PartialEq, Eq)]

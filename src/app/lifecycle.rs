@@ -5,6 +5,7 @@ use crate::data::persist::types::TerminalProfile;
 use crate::data::persist::types::resolve_profile;
 use crate::data::prefs::save_prefs;
 use crate::fonts;
+use crate::session::WorkspaceSession;
 use crate::ui::function_pane::pages::FunctionPage;
 use crate::ui::page::dialogs::LocalTerminalSettingsDialog;
 
@@ -16,7 +17,7 @@ impl RsTerminalApp {
         fonts::apply_terminal_fonts(ctx, &font);
         let font_gen = fonts::font_generation();
         for session in &mut self.sessions {
-            if let Some(term) = session.as_terminal_mut() {
+            if let WorkspaceSession::Terminal(term) = session {
                 term.clear_all_galley_caches();
                 term.view.font_generation = font_gen;
             }
@@ -32,13 +33,13 @@ impl RsTerminalApp {
             .get(&self.shell.layout.workspace.focused_pane)?
             .session_id
             .as_deref()?;
-        self.sessions.iter().find_map(|s| {
-            let t = s.as_terminal()?;
-            (t.core.id == sid).then(|| {
+        self.sessions.iter().find_map(|s| match s {
+            WorkspaceSession::Terminal(t) if t.core.id == sid => Some(
                 self.resolve_profile(Some(t.view.profile_id.as_str()))
                     .terminal_font
-                    .clone()
-            })
+                    .clone(),
+            ),
+            _ => None,
         })
     }
 
@@ -49,7 +50,7 @@ impl RsTerminalApp {
         fonts::apply_terminal_fonts(ctx, &font);
         let font_gen = fonts::font_generation();
         for session in &mut self.sessions {
-            if let Some(term) = session.as_terminal_mut() {
+            if let WorkspaceSession::Terminal(term) = session {
                 term.clear_all_galley_caches();
                 term.view.font_generation = font_gen;
             }
@@ -97,9 +98,11 @@ impl RsTerminalApp {
             .and_then(|p| p.session_id.clone());
         let (profile_id, font_size) = focused_id
             .and_then(|id| {
-                self.sessions.iter().find_map(|s| {
-                    let t = s.as_terminal()?;
-                    (t.core.id == id).then(|| (t.view.profile_id.clone(), t.view.live_font_size))
+                self.sessions.iter().find_map(|s| match s {
+                    WorkspaceSession::Terminal(t) if t.core.id == id => {
+                        Some((t.view.profile_id.clone(), t.view.live_font_size))
+                    }
+                    _ => None,
                 })
             })
             .unwrap_or_else(|| {

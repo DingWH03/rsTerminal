@@ -7,7 +7,7 @@ use crate::data::persist::types::{AuthUser, ConnectionType, SavedConnection};
 use crate::session::{WorkspaceSession, tick_session_files};
 use crate::ui::shell::messages::FunctionAction;
 use crate::ui::uiframe::components::empty_state::{EmptyStateConfig, paint_empty_state};
-use crate::ui::uiframe::file_list::{FileListLabels, FileListView};
+use crate::ui::uiframe::file_list::FileListView;
 use crate::ui::uiframe::vector_icons::Icon;
 
 pub fn render(
@@ -39,7 +39,7 @@ pub fn render(
         return action;
     };
 
-    let Some(term) = sessions[idx].as_terminal_mut() else {
+    let WorkspaceSession::Terminal(term) = &mut sessions[idx] else {
         paint_empty(
             ui,
             Icon::Folder,
@@ -138,11 +138,6 @@ pub fn render(
         term.core.files.error(),
         term.core.files.is_busy(),
         "sidebar_files_list",
-        FileListLabels {
-            parent_folder: &rust_i18n::t!("parent_folder"),
-            loading: &rust_i18n::t!("loading"),
-            empty_folder: &rust_i18n::t!("empty_folder"),
-        },
     );
 
     let conn_type = term.core.conn_type;

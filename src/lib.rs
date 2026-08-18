@@ -12,19 +12,16 @@ rust_i18n::i18n!("locales", fallback = "en");
 
 pub mod app;
 pub mod config;
+pub mod connection;
 pub mod data;
 pub mod fonts;
+pub mod fs;
 pub mod i18n;
+pub mod platform;
+pub mod remote;
 pub mod session;
+pub mod terminal;
 pub mod ui;
-
-pub use rsterm_connection as connection;
-pub use rsterm_fs as fs;
-pub use rsterm_platform as platform;
-pub use rsterm_remote as remote;
-pub use rsterm_terminal as terminal;
-pub use rsterm_uiframe as uiframe;
-pub use rsterm_workspace as workspace;
 
 use app::RsTerminalApp;
 use log::info;

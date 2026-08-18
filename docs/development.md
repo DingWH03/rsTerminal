@@ -35,13 +35,13 @@ feature/* ──PR──► develop ──PR──► RC ──PR──► maste
 2. 本地完成改动后自检（须与 CI 一致，全部通过后再推送）：
    ```bash
    cargo fmt --all
-   cargo clippy --workspace --all-targets --all-features -- -D warnings
-   cargo check --workspace --all-targets
-   cargo test --workspace
+   cargo clippy --all-targets --all-features -- -D warnings
+   cargo check --all-targets
+   cargo test
    ```
    Clippy 使用 `-D warnings`：**警告视为错误**，与 Develop / RC / Master 的 quality job 相同。若有大量可自动修复的告警，可先：
    ```bash
-   cargo clippy --workspace --all-targets --all-features --fix -- -D warnings
+   cargo clippy --all-targets --all-features --fix -- -D warnings
    ```
    再对 `--fix` 无法处理的项按提示手改，直到无 error。不要为过 CI 随意 `#[allow(...)]` 大面积压制；确有合理例外时在最小范围内注明原因。
 3. 向 `develop` 开 PR（或 Owner 在权限允许时直接推送 `develop`）。
@@ -156,22 +156,22 @@ BREAKING CHANGE: `AuthParams` 重命名为 `SshAuthParams`，调用方需同步�
 
 ```bash
 cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo check --workspace --all-targets
-cargo test --workspace
+cargo clippy --all-targets --all-features -- -D warnings
+cargo check --all-targets
+cargo test
 ```
 
 本地开发应对齐上述标准；提交前建议完整跑一遍。Clippy 告警处理顺序：
 
-1. `cargo clippy --workspace --all-targets --all-features --fix -- -D warnings`（自动修复）
-2. 手改剩余报错，直至 `cargo clippy --workspace --all-targets --all-features -- -D warnings` 退出码为 0
-3. 再跑 `cargo fmt --all` 与 `cargo test --workspace`，避免 fix 引入格式或测试回归
+1. `cargo clippy --all-targets --all-features --fix -- -D warnings`（自动修复）
+2. 手改剩余报错，直至 `cargo clippy --all-targets --all-features -- -D warnings` 退出码为 0
+3. 再跑 `cargo fmt --all` 与 `cargo test`，避免 fix 引入格式或测试回归
 
 ## 6. 本地与 CI 对照
 
 | 阶段 | 本地建议 | CI |
 |------|----------|-----|
-| 日常开发 | `fmt` / `clippy --workspace --all-targets --all-features -- -D warnings` / `test --workspace` | Develop CI |
+| 日常开发 | `fmt` / `clippy --all-targets --all-features -- -D warnings` / `test` | Develop CI |
 | 进 RC | 同上 + 必要时本地打 deb/APK | RC CI（含 Debian 矩阵） |
 | 进 master | 确认 RC 已验证 | Master CI + 打包校验 |
 | 发版 | 对齐 `Cargo.toml` 与 Tag | Release（校验、打包、SHA256、Release） |

@@ -12,26 +12,12 @@
 
 pub(crate) mod actions;
 pub mod connection_display;
-pub mod filter_chips_conn;
 pub mod function_pane;
+pub(crate) mod layout;
 pub mod page;
 pub mod pane_colors;
 pub mod shell;
 pub(crate) mod terminal;
 pub mod theme_color;
+pub mod uiframe;
 pub mod workspace_pane;
-
-/// Re-export workspace layout types so `crate::ui::layout::…` keeps working.
-pub mod layout {
-    pub use rsterm_workspace::layout::*;
-}
-
-/// Re-export uiframe so `crate::ui::uiframe::…` keeps working.
-pub mod uiframe {
-    pub use rsterm_uiframe::*;
-
-    /// Split handle lives in `rsterm-workspace`; keep the old path for call sites.
-    pub mod split_handle {
-        pub use rsterm_workspace::split_handle::*;
-    }
-}

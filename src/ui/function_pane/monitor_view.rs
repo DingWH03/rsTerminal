@@ -28,11 +28,7 @@ pub fn render(
         return FunctionAction::empty();
     };
 
-    let Some(term) = sessions
-        .iter()
-        .find(|s| s.id() == id)
-        .and_then(|s| s.as_terminal())
-    else {
+    let Some(WorkspaceSession::Terminal(term)) = sessions.iter().find(|s| s.id() == id) else {
         paint_empty(
             ui,
             Icon::Chart,
