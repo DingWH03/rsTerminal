@@ -1,0 +1,9 @@
+[package]
+name = "rsterm-terminal"
+version.workspace = true
+edition.workspace = true
+description = "VT/ANSI terminal emulator core for rsTerminal"
+license.workspace = true
+
+[dependencies]
+unicode-width = { workspace = true }

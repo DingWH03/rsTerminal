@@ -1,0 +1,17 @@
+# cargo-audit project config (used by local `cargo audit` and Security CI).
+# Prefer upgrading dependencies; only ignore when no safe upgrade/replace exists.
+
+[advisories]
+ignore = [
+    # quick-xml 0.39.x — pinned by wayland-scanner (^0.39) via eframe/winit/rfd.
+    # Used at build time for Wayland protocol XML, not untrusted runtime input.
+    # Remove when wayland-scanner allows quick-xml >= 0.41.
+    # Review by: 2026-12-01
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+
+    # rsa 0.10.0-rc.x via russh — Marvin timing sidechannel; no fixed upgrade yet.
+    # Remove when russh drops/replaces this rsa RC with a fixed release.
+    # Review by: 2026-12-01
+    "RUSTSEC-2023-0071",
+]

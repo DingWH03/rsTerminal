@@ -7,6 +7,7 @@ use super::RsTerminalApp;
 use crate::connection::local;
 use crate::connection::ssh;
 use crate::data::persist::types::{ConnectionType, SavedConnection};
+use crate::session::TerminalViewState;
 use crate::session::{
     ActiveSession, ConnectionViewAction, FileManagerMode, FileManagerSession, TerminalSessionCore,
     WorkspaceSession, drain_connection,
@@ -14,7 +15,6 @@ use crate::session::{
 use crate::terminal::Terminal;
 use crate::terminal::{DEFAULT_GRID_COLS, DEFAULT_GRID_ROWS};
 use crate::ui::shell::coordinator::ShellCoordinator;
-use crate::ui::terminal::TerminalViewState;
 use crate::ui::uiframe::keyboard::VirtualKeyboard;
 
 impl RsTerminalApp {
@@ -33,17 +33,20 @@ impl RsTerminalApp {
             .auth_user_id
             .as_ref()
             .and_then(|id| self.auth_users.iter().find(|u| u.id == *id));
-        let auth = super::connect_params::ssh_auth(&config, auth_user);
+        let auth = crate::session::connect_params::ssh_auth(&config, auth_user);
         let host = config.ssh_host.as_deref().unwrap_or("host");
         let port = config.ssh_port.unwrap_or(22);
         match FileManagerSession::open_ssh(host, port, auth, config.id.clone()) {
-            Ok(fm) => self.push_session(WorkspaceSession::FileManager(fm)),
-            Err(e) => info!("SFTP failed: {e}"),
+            Ok(fm) => self.push_session(WorkspaceSession::file_manager(fm)),
+            Err(e) => {
+                info!("SFTP failed: {e}");
+                self.connection_notice = Some(format!("SFTP failed: {e}"));
+            }
         }
     }
 
     pub(crate) fn open_file_manager_local(&mut self) {
-        self.push_session(WorkspaceSession::FileManager(
+        self.push_session(WorkspaceSession::file_manager(
             FileManagerSession::open_local(),
         ));
     }
@@ -54,7 +57,7 @@ impl RsTerminalApp {
             return;
         };
         let profile = self.resolve_profile(config.profile_id.as_deref()).clone();
-        let WorkspaceSession::Terminal(term) = &mut self.sessions[idx] else {
+        let Some(term) = self.sessions[idx].as_terminal_mut() else {
             return;
         };
         if term.core.conn_type != ConnectionType::Local {
@@ -63,7 +66,11 @@ impl RsTerminalApp {
         term.core.handle.close();
         let rows = term.view.last_pty_rows.max(1);
         let cols = term.view.last_pty_cols.max(1);
-        match local::connect_local(&super::connect_params::local_params(config), rows, cols) {
+        match local::connect_local(
+            &crate::session::connect_params::local_params(config),
+            rows,
+            cols,
+        ) {
             Ok(handle) => {
                 term.core.handle = handle;
                 term.core.saved_conn_id = Some(config.id.clone());
@@ -91,21 +98,26 @@ impl RsTerminalApp {
             .sessions
             .iter()
             .find(|s| s.id() == session_id)
-            .and_then(|s| match s {
-                WorkspaceSession::Terminal(term) => match term.core.conn_type {
-                    #[cfg(not(target_os = "android"))]
-                    ConnectionType::Local => Some(DupPlan::TerminalLocal),
-                    #[cfg(target_os = "android")]
-                    ConnectionType::Local => None,
-                    ConnectionType::Ssh => {
-                        term.core.saved_conn_id.clone().map(DupPlan::TerminalSsh)
+            .and_then(|s| {
+                if let Some(term) = s.as_terminal() {
+                    match term.core.conn_type {
+                        #[cfg(not(target_os = "android"))]
+                        ConnectionType::Local => Some(DupPlan::TerminalLocal),
+                        #[cfg(target_os = "android")]
+                        ConnectionType::Local => None,
+                        ConnectionType::Ssh => {
+                            term.core.saved_conn_id.clone().map(DupPlan::TerminalSsh)
+                        }
+                        ConnectionType::Serial | ConnectionType::Ble => None,
                     }
-                    ConnectionType::Serial | ConnectionType::Ble => None,
-                },
-                WorkspaceSession::FileManager(fm) => match fm.mode {
-                    FileManagerMode::SshSftp => fm.saved_conn_id.clone().map(DupPlan::FileSsh),
-                    FileManagerMode::LocalDual => Some(DupPlan::FileLocal),
-                },
+                } else if let Some(fm) = s.as_file_manager() {
+                    match fm.mode {
+                        FileManagerMode::SshSftp => fm.saved_conn_id.clone().map(DupPlan::FileSsh),
+                        FileManagerMode::LocalDual => Some(DupPlan::FileLocal),
+                    }
+                } else {
+                    None
+                }
             });
         match plan {
             #[cfg(not(target_os = "android"))]
@@ -169,10 +181,10 @@ impl RsTerminalApp {
 
         let id = uuid::Uuid::new_v4().to_string();
         self.sessions
-            .push(WorkspaceSession::Terminal(ActiveSession::new(
+            .push(WorkspaceSession::terminal(ActiveSession::new(
                 TerminalSessionCore {
                     id: id.clone(),
-                    conn_type: config.conn_type.clone(),
+                    conn_type: config.conn_type,
                     disconnect_message: None,
                     saved_conn_id: Some(config.id.clone()),
                     name: config.name.clone(),
@@ -243,7 +255,7 @@ impl RsTerminalApp {
 
     pub(crate) fn close_session(&mut self, id: &str) {
         if let Some(pos) = self.sessions.iter().position(|s| s.id() == id) {
-            if let WorkspaceSession::Terminal(s) = &mut self.sessions[pos] {
+            if let Some(s) = self.sessions[pos].as_terminal_mut() {
                 s.core.handle.close();
             }
             self.sessions.remove(pos);
@@ -286,8 +298,8 @@ impl RsTerminalApp {
             .auth_user_id
             .as_ref()
             .and_then(|id| self.auth_users.iter().find(|u| u.id == *id));
-        let auth = super::connect_params::ssh_auth(&config, auth_user);
-        let params = match super::connect_params::ssh_params(&config) {
+        let auth = crate::session::connect_params::ssh_auth(&config, auth_user);
+        let params = match crate::session::connect_params::ssh_params(&config) {
             Ok(p) => p,
             Err(e) => {
                 self.connection_notice = Some(e);
@@ -307,7 +319,7 @@ impl RsTerminalApp {
         let Some(idx) = self.sessions.iter().position(|s| s.id() == sid) else {
             return;
         };
-        let WorkspaceSession::Terminal(session) = &mut self.sessions[idx] else {
+        let Some(session) = self.sessions[idx].as_terminal_mut() else {
             return;
         };
         if !matches!(session.core.conn_type, ConnectionType::Ssh) {

@@ -1,7 +1,6 @@
 //! Per-frame orchestration: tick → shell.render → dispatch actions → dialogs.
 
 use super::RsTerminalApp;
-use crate::session::WorkspaceSession;
 use crate::ui::page::dialogs::{FavoriteCommandOutcome, ProfileDialogOutcome};
 
 impl RsTerminalApp {
@@ -44,7 +43,7 @@ impl RsTerminalApp {
             }
         }
 
-        self.prefs.ui_theme().apply(&ctx);
+        crate::i18n::apply_ui_theme(self.prefs.ui_theme(), &ctx);
         self.shell.sync_width(ctx.content_rect().width());
 
         // F11 toggles OS fullscreen (consume so the terminal does not receive it).
@@ -73,14 +72,14 @@ impl RsTerminalApp {
             &self.auth_users,
         );
 
-        if let Some(idx) = self.focused_session_index() {
-            if let WorkspaceSession::Terminal(term) = &mut self.sessions[idx] {
-                let ctx = ctx.clone();
-                term.core
-                    .handle
-                    .repaint
-                    .set_wake(move || ctx.request_repaint());
-            }
+        if let Some(idx) = self.focused_session_index()
+            && let Some(term) = self.sessions[idx].as_terminal_mut()
+        {
+            let ctx = ctx.clone();
+            term.core
+                .handle
+                .repaint
+                .set_wake(move || ctx.request_repaint());
         }
 
         // Only modal dialogs block the host (quit / connection failure).
@@ -106,6 +105,12 @@ impl RsTerminalApp {
         }
 
         self.dispatch_ui_actions(render.actions, &ctx);
+        if let Some(fm_prefs) = render.workspace_action.file_manager.prefs {
+            self.prefs.file_manager = fm_prefs;
+        }
+        if let Some(ui_state) = render.workspace_action.file_manager.ui_state {
+            self.prefs.ui_state.file_manager = ui_state;
+        }
 
         if let Some(apply) = self.dialogs.local_term.show(&ctx, &self.saved_connections) {
             self.apply_local_terminal_settings(apply);
@@ -165,11 +170,11 @@ impl RsTerminalApp {
             self.dialogs.favorite_cmd.open_new();
             self.release_terminal_keyboard_focus(&ctx);
         }
-        if let Some(id) = manage.edit_id {
-            if let Some(cmd) = self.favorite_commands.iter().find(|c| c.id == id).cloned() {
-                self.dialogs.favorite_cmd.open_edit(&cmd);
-                self.release_terminal_keyboard_focus(&ctx);
-            }
+        if let Some(id) = manage.edit_id
+            && let Some(cmd) = self.favorite_commands.iter().find(|c| c.id == id).cloned()
+        {
+            self.dialogs.favorite_cmd.open_edit(&cmd);
+            self.release_terminal_keyboard_focus(&ctx);
         }
         if let Some(id) = manage.delete_id {
             self.delete_favorite_command(&id);

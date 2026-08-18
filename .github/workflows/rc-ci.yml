@@ -1,0 +1,22 @@
+# RC candidate validation: quality + full platform builds including Debian.
+# Intended entry path is PR into RC (branch protection should block direct pushes).
+name: RC CI
+
+on:
+  pull_request:
+    branches: [RC]
+  workflow_dispatch:
+
+jobs:
+  quality:
+    uses: ./.github/workflows/reusable-quality.yml
+
+  build:
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      build_linux: true
+      build_windows: true
+      build_android: true
+      build_deb: true
+      upload_artifacts: true
+      run_tests: true

@@ -1,0 +1,23 @@
+# Daily develop validation: quality + base platform builds.
+name: Develop CI
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop]
+  workflow_dispatch:
+
+jobs:
+  quality:
+    uses: ./.github/workflows/reusable-quality.yml
+
+  build:
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      build_linux: true
+      build_windows: true
+      build_android: true
+      build_deb: false
+      upload_artifacts: true
+      run_tests: true

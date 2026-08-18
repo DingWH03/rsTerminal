@@ -10,7 +10,7 @@ cargo build --release
 
 ## Debian packages
 
-CI builds `.deb` packages for **amd64**, **arm64**, **i386**, and **armhf** (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
+CI builds `.deb` packages for **amd64**, **arm64**, **i386**, and **armhf** on RC/master validation and on version tags (see [`.github/workflows/rc-ci.yml`](.github/workflows/rc-ci.yml), [`.github/workflows/master-ci.yml`](.github/workflows/master-ci.yml), and [`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 Local packaging (example, amd64):
 
