@@ -11,10 +11,7 @@ pub struct ContentUiCtx<'a> {
     pub is_focused: bool,
     pub in_split: bool,
     pub suppress_terminal_input: bool,
-    pub show_hamburger: bool,
-    pub hamburger_pending: &'a mut bool,
-    pub pane_focus_click: &'a mut bool,
-    /// Host-specific payload (e.g. terminal profiles). Adapters downcast.
+    /// Host-provided extras ([`crate::PaneHostExtras`], …). Adapters downcast.
     pub extras: &'a mut dyn Any,
 }
 
@@ -24,6 +21,7 @@ pub enum ContentAction {
     None,
     Close,
     MinimizePane,
+    Reconnect(String),
 }
 
 pub trait WorkspaceContent: Send {

@@ -9,6 +9,7 @@ license.workspace = true
 egui = { version = "0.34", features = ["serde"] }
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
+rsterm-fs = { workspace = true }
 rsterm-platform = { workspace = true }
 
 [target.'cfg(all(not(target_os = "android"), not(windows)))'.dependencies]

@@ -3,15 +3,10 @@
 use crate::function_pane::pages::FunctionPage;
 use crate::page::settings::SettingsTab;
 
-/// Function pane width bounds (shell chrome, not workspace layout).
-pub const FUNCTION_MIN_WIDTH: f32 = 200.0;
-pub const FUNCTION_MAX_WIDTH: f32 = 360.0;
-pub const FUNCTION_DEFAULT_WIDTH: f32 = 220.0;
-
 /// Compatibility exports for callers that have not yet moved to `ui::layout`.
 pub use crate::layout::{
-    DropEdge, DropZone, MIN_PANE_HEIGHT, MIN_PANE_WIDTH, PaneId, PaneState, SplitAxis, SplitNode,
-    WorkspaceLayout,
+    DropEdge, DropZone, FUNCTION_DEFAULT_WIDTH, FUNCTION_MAX_WIDTH, FUNCTION_MIN_WIDTH,
+    MIN_PANE_HEIGHT, MIN_PANE_WIDTH, PaneId, PaneState, SplitAxis, SplitNode, WorkspaceLayout,
 };
 
 /// Shell-only UI state. Business-page types stay out of the base layout module.

@@ -13,7 +13,6 @@ uuid = { version = "1", features = ["v4"] }
 rsterm-config = { workspace = true }
 rsterm-connection = { workspace = true }
 rsterm-data = { workspace = true }
-rsterm-fs = { workspace = true }
 rsterm-page-file-manager = { workspace = true }
 rsterm-page-terminal = { workspace = true }
 rsterm-platform = { workspace = true }

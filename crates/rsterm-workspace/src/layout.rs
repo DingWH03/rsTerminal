@@ -99,6 +99,9 @@ pub struct WorkspaceLayout {
     pub focused_pane: PaneId,
 }
 
+pub const FUNCTION_MIN_WIDTH: f32 = 200.0;
+pub const FUNCTION_MAX_WIDTH: f32 = 360.0;
+pub const FUNCTION_DEFAULT_WIDTH: f32 = 220.0;
 pub const MIN_PANE_WIDTH: f32 = 120.0;
 pub const MIN_PANE_HEIGHT: f32 = 80.0;
 

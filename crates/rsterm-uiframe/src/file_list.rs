@@ -1,13 +1,9 @@
 //! Single-column file / folder list used by sidebar Files and dual-pane FM.
 
+use rsterm_fs::FileEntry;
+
 use crate::style;
 use crate::tokens;
-
-/// Minimal row data for [`FileListView`] (implemented by callers / domain types).
-pub trait FileRow {
-    fn name(&self) -> &str;
-    fn is_dir(&self) -> bool;
-}
 
 #[derive(Debug, Default)]
 pub struct FileListAction {
@@ -33,7 +29,7 @@ impl FileListView {
     pub fn show(
         ui: &mut egui::Ui,
         cwd: &str,
-        entries: &[impl FileRow],
+        entries: &[FileEntry],
         error: Option<&str>,
         loading: bool,
         id_salt: &str,
@@ -96,11 +92,11 @@ impl FileListView {
                             .min_size(egui::vec2(ui.available_width(), tokens::size::NAV_ROW)),
                     );
 
-                    if (resp.clicked() || resp.double_clicked()) && ent.is_dir() {
+                    if (resp.clicked() || resp.double_clicked()) && ent.is_dir {
                         action.open_index = Some(idx);
                     }
 
-                    if resp.dragged() && !ent.is_dir() && !action.drag_indices.contains(&idx) {
+                    if resp.dragged() && !ent.is_dir && !action.drag_indices.contains(&idx) {
                         action.drag_indices.push(idx);
                     }
                 }
@@ -141,7 +137,7 @@ impl FileListView {
     }
 }
 
-fn entry_label(ent: &impl FileRow) -> String {
-    let marker = if ent.is_dir() { "▸" } else { " " };
-    format!("{marker} {}", ent.name())
+fn entry_label(ent: &FileEntry) -> String {
+    let marker = if ent.is_dir { "▸" } else { " " };
+    format!("{marker} {}", ent.name)
 }

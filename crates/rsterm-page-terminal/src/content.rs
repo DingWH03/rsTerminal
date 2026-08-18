@@ -5,24 +5,18 @@ use std::any::Any;
 use rsterm_data::persist::types::resolve_profile;
 use rsterm_session_core::{ActiveSession, ConnectionViewAction};
 use rsterm_uiframe::PaneChrome;
-use rsterm_workspace::{ContentAction, ContentUiCtx, WorkspaceContent};
+use rsterm_workspace::{ContentAction, ContentUiCtx, PaneHostExtras, WorkspaceContent};
 
-use crate::host_extras::TerminalHostExtras;
 use crate::page::connection_view;
 
 /// Orphan-rule newtype owning an [`ActiveSession`].
 pub struct ActiveSessionContent {
     pub inner: ActiveSession,
-    /// Set during `ui` when the view requests reconnect; host reads after `ui`.
-    pub pending_reconnect: Option<String>,
 }
 
 /// Wrap a terminal session as workspace content.
 pub fn wrap_terminal(s: ActiveSession) -> Box<dyn WorkspaceContent> {
-    Box::new(ActiveSessionContent {
-        inner: s,
-        pending_reconnect: None,
-    })
+    Box::new(ActiveSessionContent { inner: s })
 }
 
 impl WorkspaceContent for ActiveSessionContent {
@@ -39,10 +33,11 @@ impl WorkspaceContent for ActiveSessionContent {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, ctx: &mut ContentUiCtx<'_>) -> ContentAction {
-        let Some(extras) = ctx.extras.downcast_mut::<TerminalHostExtras>() else {
+        let Some(extras) = ctx.extras.downcast_mut::<PaneHostExtras>() else {
             return ContentAction::None;
         };
 
+        let show_hamburger = extras.show_hamburger;
         let profile_id = self.inner.view.profile_id.clone();
         let (theme, cursor_style, cell_width_scale) = {
             let profile = resolve_profile(extras.profiles(), Some(profile_id.as_str()));
@@ -55,12 +50,12 @@ impl WorkspaceContent for ActiveSessionContent {
 
         let mut hamburger_clicked = false;
         let view_action = {
-            let (_, virtual_keyboard) = extras.split_mut();
+            let (_, virtual_keyboard, pane_focus_click) = extras.split_mut();
             let mut on_hamburger = || {
                 hamburger_clicked = true;
             };
             let mut chrome = PaneChrome {
-                show_hamburger: ctx.show_hamburger,
+                show_hamburger,
                 on_hamburger: &mut on_hamburger,
             };
             connection_view(
@@ -73,23 +68,20 @@ impl WorkspaceContent for ActiveSessionContent {
                 &mut chrome,
                 ctx.pane_id,
                 ctx.is_focused,
-                ctx.pane_focus_click,
+                pane_focus_click,
                 ctx.in_split,
                 ctx.suppress_terminal_input,
             )
         };
         if hamburger_clicked {
-            *ctx.hamburger_pending = true;
+            extras.request_hamburger();
         }
 
         match view_action {
             ConnectionViewAction::None => ContentAction::None,
             ConnectionViewAction::CloseSession => ContentAction::Close,
             ConnectionViewAction::MinimizePane => ContentAction::MinimizePane,
-            ConnectionViewAction::Reconnect(id) => {
-                self.pending_reconnect = Some(id);
-                ContentAction::None
-            }
+            ConnectionViewAction::Reconnect(id) => ContentAction::Reconnect(id),
         }
     }
 

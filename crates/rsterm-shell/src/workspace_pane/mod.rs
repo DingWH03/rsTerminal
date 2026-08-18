@@ -19,6 +19,12 @@ use rsterm_data::prefs::Prefs;
 use drag_drop::{commit_drop, hit_test_drop_zone, paint_drag_overlay};
 use split_widget::render_split_tree;
 
+/// Host extras for content `ui` (re-export from workspace).
+pub use rsterm_workspace::PaneHostExtras;
+
+/// Backward-compatible alias used by older call sites.
+pub type PaneRenderExtras = PaneHostExtras;
+
 pub struct WorkspacePaneContext<'a> {
     pub sessions: &'a mut [WorkspaceSession],
     pub prefs: &'a mut Prefs,

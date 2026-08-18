@@ -6,24 +6,10 @@
 use crate::session_host::WorkspaceSession;
 use crate::shell::messages::FunctionAction;
 use crate::uiframe::components::empty_state::{EmptyStateConfig, paint_empty_state};
-use crate::uiframe::file_list::{FileListLabels, FileListView, FileRow};
+use crate::uiframe::file_list::{FileListLabels, FileListView};
 use crate::uiframe::vector_icons::Icon;
 use rsterm_data::persist::types::{AuthUser, ConnectionType, SavedConnection};
-use rsterm_fs::FileEntry;
 use rsterm_session_core::tick_session_files;
-
-/// Local adapter so we can implement [`FileRow`] without violating orphan rules.
-struct FileEntryRow<'a>(&'a FileEntry);
-
-impl FileRow for FileEntryRow<'_> {
-    fn name(&self) -> &str {
-        &self.0.name
-    }
-
-    fn is_dir(&self) -> bool {
-        self.0.is_dir
-    }
-}
 
 pub fn render(
     ui: &mut egui::Ui,
@@ -150,23 +136,19 @@ pub fn render(
         return action;
     };
 
-    let list_action = {
-        let entries = term.core.files.entries();
-        let rows: Vec<FileEntryRow<'_>> = entries.iter().map(FileEntryRow).collect();
-        FileListView::show(
-            ui,
-            &cwd_display,
-            &rows,
-            term.core.files.error(),
-            term.core.files.is_busy(),
-            "sidebar_files_list",
-            FileListLabels {
-                parent_folder: &crate::i18n_bridge::tr("parent_folder"),
-                loading: &crate::i18n_bridge::tr("loading"),
-                empty_folder: &crate::i18n_bridge::tr("empty_folder"),
-            },
-        )
-    };
+    let list_action = FileListView::show(
+        ui,
+        &cwd_display,
+        term.core.files.entries(),
+        term.core.files.error(),
+        term.core.files.is_busy(),
+        "sidebar_files_list",
+        FileListLabels {
+            parent_folder: &crate::i18n_bridge::tr("parent_folder"),
+            loading: &crate::i18n_bridge::tr("loading"),
+            empty_folder: &crate::i18n_bridge::tr("empty_folder"),
+        },
+    );
 
     let conn_type = term.core.conn_type;
     if list_action.go_up {

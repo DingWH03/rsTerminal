@@ -4803,7 +4803,6 @@ dependencies = [
  "rsterm-config",
  "rsterm-connection",
  "rsterm-data",
- "rsterm-fs",
  "rsterm-page-file-manager",
  "rsterm-page-terminal",
  "rsterm-platform",
@@ -4830,6 +4829,7 @@ dependencies = [
  "arboard",
  "egui",
  "log",
+ "rsterm-fs",
  "rsterm-platform",
  "serde",
 ]
@@ -4839,6 +4839,8 @@ name = "rsterm-workspace"
 version = "0.7.2"
 dependencies = [
  "egui",
+ "rsterm-data",
+ "rsterm-uiframe",
  "serde",
 ]
 

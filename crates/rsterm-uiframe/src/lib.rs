@@ -34,6 +34,6 @@ pub use dialog::{
     ALERT_HEIGHT, ALERT_WIDTH, DEFAULT_HEIGHT, DEFAULT_WIDTH, DialogFrame, DialogOutcome,
     host_blocked_this_frame,
 };
-pub use file_list::{FileListAction, FileListLabels, FileListView, FileRow};
+pub use file_list::{FileListAction, FileListLabels, FileListView};
 pub use menu_bar::{MenuBar, MenuBarSpec, MenuEntry, MenuEntryId, MenuGroup};
 pub use tab_bar::{TabBar, TabBarItem};
