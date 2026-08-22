@@ -1,4 +1,4 @@
-//! Files settings — default FM view mode and pane layout.
+//! File manager page under Appearance > Layout.
 
 use rsterm_data::prefs::{PrefsFilePaneLayout, PrefsFileViewMode};
 
@@ -31,25 +31,32 @@ pub fn page(ui: &mut egui::Ui, ctx: &mut SettingsPageCtx<'_>) {
                 }
             },
         );
-        form::labeled_combo(
-            ui,
-            "prefs_fm_layout",
-            crate::i18n_bridge::tr("fm_pref_layout"),
-            layout_label(ctx.prefs.file_manager.pane_layout),
-            |ui| {
-                for layout in [PrefsFilePaneLayout::Dual, PrefsFilePaneLayout::Single] {
-                    if ui
-                        .selectable_label(
-                            ctx.prefs.file_manager.pane_layout == layout,
-                            layout_label(layout),
-                        )
-                        .clicked()
-                    {
-                        ctx.prefs.file_manager.pane_layout = layout;
-                    }
-                }
-            },
-        );
+        ui.horizontal(|ui| {
+            ui.label(crate::i18n_bridge::tr("fm_pref_layout"));
+            let mut dual = matches!(
+                ctx.prefs.file_manager.pane_layout,
+                PrefsFilePaneLayout::Dual
+            );
+            if ui
+                .checkbox(&mut dual, crate::i18n_bridge::tr("fm_layout_dual"))
+                .changed()
+            {
+                ctx.prefs.file_manager.pane_layout = if dual {
+                    PrefsFilePaneLayout::Dual
+                } else {
+                    PrefsFilePaneLayout::Single
+                };
+            }
+        });
+        ui.horizontal(|ui| {
+            let mut hidden = ctx.prefs.file_manager.show_hidden;
+            if ui
+                .checkbox(&mut hidden, crate::i18n_bridge::tr("fm_show_hidden"))
+                .changed()
+            {
+                ctx.prefs.file_manager.show_hidden = hidden;
+            }
+        });
     });
 }
 
@@ -59,12 +66,5 @@ fn view_label(mode: PrefsFileViewMode) -> String {
         PrefsFileViewMode::Details => crate::i18n_bridge::tr("fm_view_details"),
         PrefsFileViewMode::IconsSmall => crate::i18n_bridge::tr("fm_view_icons_small"),
         PrefsFileViewMode::IconsLarge => crate::i18n_bridge::tr("fm_view_icons_large"),
-    }
-}
-
-fn layout_label(layout: PrefsFilePaneLayout) -> String {
-    match layout {
-        PrefsFilePaneLayout::Single => crate::i18n_bridge::tr("fm_layout_single"),
-        PrefsFilePaneLayout::Dual => crate::i18n_bridge::tr("fm_layout_dual"),
     }
 }

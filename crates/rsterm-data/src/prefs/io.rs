@@ -3,11 +3,12 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 
+use super::{
+    AppearancePrefs, ChromePrefs, FileManagerPrefs, GeneralPrefs, Prefs, UiStatePrefs,
+    default_input_mode,
+};
 use crate::paths::config_dir;
 use crate::persist::types::LegacyProfileJson;
-use crate::prefs::{
-    AppearancePrefs, ChromePrefs, FileManagerPrefs, GeneralPrefs, Prefs, UiStatePrefs,
-};
 use rsterm_config::{Language, UiTheme};
 
 fn prefs_path() -> Option<std::path::PathBuf> {
@@ -52,6 +53,7 @@ pub(crate) fn load_prefs() -> Prefs {
         let prefs = Prefs {
             general: GeneralPrefs {
                 language: legacy.language,
+                input_mode: default_input_mode(),
             },
             appearance: AppearancePrefs {
                 ui_theme: legacy.ui_theme,

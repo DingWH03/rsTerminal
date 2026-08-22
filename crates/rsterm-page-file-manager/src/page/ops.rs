@@ -490,3 +490,305 @@ fn delete_remote_indices(remote: &mut RemotePane, indices: &[usize], status: &mu
         *status = Some(errors.join("; "));
     }
 }
+
+const RECURSIVE_SEARCH_MAX: usize = 5000;
+
+/// Start or restart recursive name search for the active pane.
+pub(super) fn kick_recursive_search(session: &mut FileManagerSession) {
+    if let Some(prev) = session.recursive_search.as_ref() {
+        prev.request_cancel();
+    }
+    session.recursive_search = None;
+
+    let pane = session.active_pane;
+    let filter = match pane {
+        FileActivePane::Remote => session.remote.as_ref().map(|r| r.listing_filter()),
+        FileActivePane::LeftLocal => session.left_local.as_ref().map(|p| p.listing_filter()),
+        FileActivePane::Right => Some(session.right.listing_filter()),
+    };
+    let Some(filter) = filter else {
+        return;
+    };
+    if filter.query.trim().is_empty() || !match_recursive_enabled(session, pane) {
+        // Fall back to in-memory recompute.
+        recompute_active_pane(session);
+        return;
+    }
+
+    use std::sync::atomic::AtomicBool;
+    use std::sync::{Arc, Mutex};
+    use std::thread;
+
+    use rsterm_session_core::{RecursiveSearchState, sort_entries};
+
+    let cancel = Arc::new(AtomicBool::new(false));
+    let results: Arc<Mutex<Option<rsterm_session_core::RecursiveSearchResult>>> =
+        Arc::new(Mutex::new(None));
+    let cancel_t = Arc::clone(&cancel);
+    let results_t = Arc::clone(&results);
+
+    let join = match pane {
+        FileActivePane::Remote => {
+            let Some(remote) = session.remote.as_ref() else {
+                return;
+            };
+            let client = Arc::clone(&remote.client);
+            let root = remote.cwd.clone();
+            let sort_key = remote.sort_key;
+            let sort_asc = remote.sort_asc;
+            thread::spawn(move || {
+                let out = walk_remote_recursive(
+                    &client,
+                    &root,
+                    &root,
+                    &filter,
+                    &cancel_t,
+                    RECURSIVE_SEARCH_MAX,
+                );
+                let out = out.map(|mut v| {
+                    sort_entries(&mut v, sort_key, sort_asc);
+                    v
+                });
+                if let Ok(mut g) = results_t.lock() {
+                    *g = Some(out);
+                }
+            })
+        }
+        FileActivePane::LeftLocal | FileActivePane::Right => {
+            let (root, sort_key, sort_asc) = match pane {
+                FileActivePane::LeftLocal => {
+                    let p = session.left_local.as_ref().unwrap();
+                    (p.cwd.clone(), p.sort_key, p.sort_asc)
+                }
+                _ => {
+                    let p = &session.right;
+                    (p.cwd.clone(), p.sort_key, p.sort_asc)
+                }
+            };
+            thread::spawn(move || {
+                let out =
+                    walk_local_recursive(&root, &root, &filter, &cancel_t, RECURSIVE_SEARCH_MAX);
+                let out = out.map(|mut v| {
+                    sort_entries(&mut v, sort_key, sort_asc);
+                    v
+                });
+                if let Ok(mut g) = results_t.lock() {
+                    *g = Some(out);
+                }
+            })
+        }
+    };
+
+    session.recursive_search = Some(RecursiveSearchState {
+        pane,
+        cancel,
+        results,
+        join: Some(join),
+    });
+    session.status = Some("Searching…".into());
+}
+
+fn match_recursive_enabled(session: &FileManagerSession, pane: FileActivePane) -> bool {
+    match pane {
+        FileActivePane::Remote => session
+            .remote
+            .as_ref()
+            .map(|r| r.filter_recursive)
+            .unwrap_or(false),
+        FileActivePane::LeftLocal => session
+            .left_local
+            .as_ref()
+            .map(|p| p.filter_recursive)
+            .unwrap_or(false),
+        FileActivePane::Right => session.right.filter_recursive,
+    }
+}
+
+/// Poll recursive search completion and apply results.
+pub(super) fn poll_recursive_search(session: &mut FileManagerSession) {
+    let done = session
+        .recursive_search
+        .as_mut()
+        .and_then(|s| s.take_if_done().map(|r| (s.pane, r)));
+    let Some((pane, result)) = done else {
+        return;
+    };
+    session.recursive_search = None;
+    match result {
+        Ok(entries) => {
+            session.status = Some(format!("Found {} item(s)", entries.len()));
+            match pane {
+                FileActivePane::Remote => {
+                    if let Some(remote) = session.remote.as_mut() {
+                        remote.entries = entries;
+                        remote.selected.clear();
+                        remote.focus_index = None;
+                    }
+                }
+                FileActivePane::LeftLocal => {
+                    if let Some(left) = session.left_local.as_mut() {
+                        left.entries = entries;
+                        left.selected.clear();
+                        left.focus_index = None;
+                    }
+                }
+                FileActivePane::Right => {
+                    session.right.entries = entries;
+                    session.right.selected.clear();
+                    session.right.focus_index = None;
+                }
+            }
+        }
+        Err(e) => {
+            session.status = Some(e);
+            recompute_active_pane(session);
+        }
+    }
+}
+
+pub(super) fn cancel_recursive_search(session: &mut FileManagerSession) {
+    if let Some(s) = session.recursive_search.as_ref() {
+        s.request_cancel();
+    }
+}
+
+fn walk_local_recursive(
+    root: &Path,
+    dir: &Path,
+    filter: &rsterm_session_core::ListingFilter,
+    cancel: &std::sync::atomic::AtomicBool,
+    budget: usize,
+) -> Result<Vec<rsterm_fs::FileEntry>, String> {
+    use rsterm_session_core::name_matches;
+    use std::sync::atomic::Ordering;
+
+    let mut out = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        if cancel.load(Ordering::Relaxed) {
+            return Err("Search cancelled".into());
+        }
+        if out.len() >= budget {
+            break;
+        }
+        let entries = local::list_dir(&current)?;
+        for e in entries {
+            if cancel.load(Ordering::Relaxed) {
+                return Err("Search cancelled".into());
+            }
+            if !filter.show_hidden && e.name.starts_with('.') {
+                continue;
+            }
+            let full = current.join(&e.name);
+            let rel = full
+                .strip_prefix(root)
+                .unwrap_or(full.as_path())
+                .to_string_lossy()
+                .replace('\\', "/");
+            if name_matches(&e.name, filter) {
+                out.push(rsterm_fs::FileEntry {
+                    name: rel.clone(),
+                    is_dir: e.is_dir,
+                    size: e.size,
+                    modified: e.modified,
+                });
+                if out.len() >= budget {
+                    break;
+                }
+            }
+            if e.is_dir {
+                stack.push(full);
+            }
+        }
+    }
+    Ok(out)
+}
+
+fn walk_remote_recursive(
+    client: &rsterm_fs::sftp::SftpClient,
+    root: &str,
+    dir: &str,
+    filter: &rsterm_session_core::ListingFilter,
+    cancel: &std::sync::atomic::AtomicBool,
+    budget: usize,
+) -> Result<Vec<rsterm_fs::FileEntry>, String> {
+    use rsterm_session_core::name_matches;
+    use std::sync::atomic::Ordering;
+
+    let mut out = Vec::new();
+    let mut stack = vec![dir.to_string()];
+    while let Some(current) = stack.pop() {
+        if cancel.load(Ordering::Relaxed) {
+            return Err("Search cancelled".into());
+        }
+        if out.len() >= budget {
+            break;
+        }
+        let entries = client.list_dir(&current)?;
+        for e in entries {
+            if cancel.load(Ordering::Relaxed) {
+                return Err("Search cancelled".into());
+            }
+            if !filter.show_hidden && e.name.starts_with('.') {
+                continue;
+            }
+            let full = join_remote(&current, &e.name);
+            let rel = full
+                .strip_prefix(root.trim_end_matches('/'))
+                .unwrap_or(full.as_str())
+                .trim_start_matches('/')
+                .to_string();
+            if name_matches(&e.name, filter) {
+                out.push(rsterm_fs::FileEntry {
+                    name: if rel.is_empty() { e.name.clone() } else { rel },
+                    is_dir: e.is_dir,
+                    size: e.size,
+                    modified: e.modified,
+                });
+                if out.len() >= budget {
+                    break;
+                }
+            }
+            if e.is_dir {
+                stack.push(full);
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Submit a path from the address bar for the active pane.
+pub(super) fn submit_path_active_pane(session: &mut FileManagerSession, raw: &str) {
+    use super::path_bar::{apply_local_path, apply_remote_path};
+    match session.active_pane {
+        FileActivePane::Remote => {
+            if let Some(remote) = session.remote.as_mut() {
+                match apply_remote_path(remote, raw) {
+                    Ok(()) => session.status = None,
+                    Err(e) => {
+                        session.status = Some(e);
+                        remote.sync_path_edit_from_cwd();
+                    }
+                }
+            }
+        }
+        FileActivePane::LeftLocal => {
+            if let Some(left) = session.left_local.as_mut() {
+                match apply_local_path(left, raw) {
+                    Ok(()) => session.status = None,
+                    Err(e) => {
+                        session.status = Some(e);
+                        left.sync_path_edit_from_cwd();
+                    }
+                }
+            }
+        }
+        FileActivePane::Right => match apply_local_path(&mut session.right, raw) {
+            Ok(()) => session.status = None,
+            Err(e) => {
+                session.status = Some(e);
+                session.right.sync_path_edit_from_cwd();
+            }
+        },
+    }
+}

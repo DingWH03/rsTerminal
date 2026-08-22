@@ -33,6 +33,16 @@ pub struct FileManagerContent {
     pub details_columns_right: Option<FileDetailsColumns>,
     /// Left pane fraction of dual layout (`0.15..=0.85`).
     pub dual_split: f32,
+    /// Whether the advanced search strip under the top bar is open.
+    pub search_panel_open: bool,
+    /// FM settings gear popup open.
+    pub settings_menu: rsterm_uiframe::PopupMenuState,
+    /// Unified hover / detail panel state.
+    pub hover_panel: rsterm_uiframe::hover_panel::HoverPanelState,
+    /// Touch multiselect overlay state.
+    pub touch_multiselect: crate::page::touch_multiselect::TouchMultiselectState,
+    pub touch_ops_menu: rsterm_uiframe::PopupMenuState,
+    pub pending_open_settings: bool,
     /// Pending prefs write for the host app to merge into in-memory `Prefs`.
     pub pending_prefs: Option<FileManagerPrefs>,
     /// Pending ui_state write for the host app to merge into in-memory `Prefs`.
@@ -103,8 +113,16 @@ pub fn dual_split_from_ui_state(s: &FileManagerUiState) -> f32 {
 }
 
 /// Wrap a file-manager session as workspace content (loads view prefs).
-pub fn wrap_file_manager(s: FileManagerSession) -> Box<dyn WorkspaceContent> {
+pub fn wrap_file_manager(mut s: FileManagerSession) -> Box<dyn WorkspaceContent> {
     let prefs = load_prefs();
+    let show_hidden = prefs.file_manager.show_hidden;
+    if let Some(left) = s.left_local.as_mut() {
+        left.show_hidden = show_hidden;
+    }
+    if let Some(remote) = s.remote.as_mut() {
+        remote.show_hidden = show_hidden;
+    }
+    s.right.show_hidden = show_hidden;
     let ui_fm = &prefs.ui_state.file_manager;
     Box::new(FileManagerContent {
         inner: s,
@@ -113,6 +131,12 @@ pub fn wrap_file_manager(s: FileManagerSession) -> Box<dyn WorkspaceContent> {
         details_columns_left: columns_from_ui_state(ui_fm, DetailsPaneSide::Left),
         details_columns_right: columns_from_ui_state(ui_fm, DetailsPaneSide::Right),
         dual_split: dual_split_from_ui_state(ui_fm),
+        search_panel_open: false,
+        settings_menu: rsterm_uiframe::PopupMenuState::default(),
+        hover_panel: rsterm_uiframe::hover_panel::HoverPanelState::default(),
+        touch_multiselect: crate::page::touch_multiselect::TouchMultiselectState::default(),
+        touch_ops_menu: rsterm_uiframe::PopupMenuState::default(),
+        pending_open_settings: false,
         pending_prefs: None,
         pending_ui_state: None,
     })
@@ -149,6 +173,11 @@ impl WorkspaceContent for FileManagerContent {
                 &mut self.details_columns_left,
                 &mut self.details_columns_right,
                 &mut self.dual_split,
+                &mut self.search_panel_open,
+                &mut self.settings_menu,
+                &mut self.hover_panel,
+                &mut self.touch_multiselect,
+                &mut self.touch_ops_menu,
                 &mut self.pending_prefs,
                 &mut self.pending_ui_state,
                 &mut chrome,
@@ -160,6 +189,9 @@ impl WorkspaceContent for FileManagerContent {
         if fm_action.close {
             ContentAction::Close
         } else {
+            if fm_action.open_settings {
+                self.pending_open_settings = true;
+            }
             ContentAction::None
         }
     }
@@ -178,10 +210,24 @@ pub fn persist_file_manager_prefs(
     view_mode: FileViewMode,
     pane_layout: FilePaneLayout,
 ) -> FileManagerPrefs {
+    persist_file_manager_prefs_full(
+        view_mode,
+        pane_layout,
+        load_prefs().file_manager.show_hidden,
+    )
+}
+
+/// Persist full FM prefs snapshot.
+pub fn persist_file_manager_prefs_full(
+    view_mode: FileViewMode,
+    pane_layout: FilePaneLayout,
+    show_hidden: bool,
+) -> FileManagerPrefs {
     let mut prefs = load_prefs();
     prefs.file_manager = FileManagerPrefs {
         view_mode: view_mode_to_prefs(view_mode),
         pane_layout: pane_layout_to_prefs(pane_layout),
+        show_hidden,
     };
     save_prefs(&prefs);
     prefs.file_manager

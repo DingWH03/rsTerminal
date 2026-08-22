@@ -3,6 +3,7 @@
 use egui::{Id, Response, Ui};
 
 use super::compact_list_row::paint_overflow_dots;
+use super::popup_menu::{menu_popup, popup_menu_content};
 
 #[derive(Default)]
 pub struct OverflowMenuState {
@@ -40,10 +41,12 @@ pub fn overflow_trigger(
     row_resp: &Response,
     item_id: &str,
     state: &mut OverflowMenuState,
+    popup_id: Id,
 ) {
     paint_overflow_dots(ui, dots_resp.rect, dots_resp.hovered());
     if row_resp.long_touched() || dots_resp.clicked() {
         state.open(item_id.to_string());
+        egui::Popup::open_id(ui.ctx(), popup_id);
     }
 }
 
@@ -55,22 +58,23 @@ pub fn show_if_open(
     dots_id: Id,
     item_id: &str,
     state: &mut OverflowMenuState,
-    min_width: f32,
+    width_hint: Option<f32>,
     add_contents: impl FnOnce(&mut Ui),
 ) -> bool {
     if !state.is_open(item_id) {
         return false;
     }
-    let open = egui::Popup::from_response(dots_resp)
-        .id(dots_id.with("overflow_popup"))
-        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-        .show(|ui| {
-            ui.set_min_width(min_width);
-            add_contents(ui);
-        })
-        .is_some();
-    if !open {
+    let popup_id = dots_id.with("overflow_popup");
+    let ctx = dots_resp.ctx.clone();
+    if !egui::Popup::is_id_open(&ctx, popup_id) {
+        egui::Popup::open_id(&ctx, popup_id);
+    }
+    menu_popup(dots_resp, popup_id, width_hint).show(|ui| {
+        popup_menu_content(ui, add_contents);
+    });
+    let still_open = egui::Popup::is_id_open(&ctx, popup_id);
+    if !still_open {
         state.close();
     }
-    open
+    still_open
 }

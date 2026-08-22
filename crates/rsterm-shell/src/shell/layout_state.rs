@@ -18,6 +18,7 @@ pub use crate::layout::{
 #[derive(Clone, Debug, Default)]
 pub struct ShellUiState {
     pub settings_dialog_open: bool,
+    pub settings_initial_path: Option<crate::page::settings::SettingsPath>,
     pub help_dialog_open: bool,
     pub connections_dialog_open: bool,
     pub commands_manage_dialog_open: bool,

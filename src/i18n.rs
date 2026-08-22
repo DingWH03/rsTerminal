@@ -103,6 +103,23 @@ fn file_manager_labels() -> rsterm_page_file_manager::FileManagerLabels {
         remove: t!("fm_remove").into_owned(),
         retry: t!("fm_retry").into_owned(),
         queued: t!("fm_queued").into_owned(),
+        path_placeholder: t!("fm_path_placeholder").into_owned(),
+        path_autocomplete_loading: t!("fm_path_autocomplete_loading").into_owned(),
+        search_toggle: t!("fm_search_toggle").into_owned(),
+        search_open: t!("fm_search_open").into_owned(),
+        search_close: t!("fm_search_close").into_owned(),
+        search_query: t!("fm_search_query").into_owned(),
+        search_match_case: t!("fm_search_match_case").into_owned(),
+        search_regex: t!("fm_search_regex").into_owned(),
+        search_recursive: t!("fm_search_recursive").into_owned(),
+        search_regex_invalid: t!("fm_search_regex_invalid").into_owned(),
+        search_clear: t!("fm_search_clear").into_owned(),
+        search_stop: t!("fm_search_stop").into_owned(),
+        settings_view_group: t!("fm_settings_view_group").into_owned(),
+        settings_layout_group: t!("fm_settings_layout_group").into_owned(),
+        settings_display_group: t!("fm_settings_display_group").into_owned(),
+        settings_open_in_prefs: t!("fm_settings_open_in_prefs").into_owned(),
+        touch_menu: t!("fm_touch_menu").into_owned(),
     }
 }
 

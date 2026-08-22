@@ -6,6 +6,7 @@ use crate::uiframe::components::compact_list_row::{CompactListRow, ListRowDensit
 use crate::uiframe::components::empty_state::{EmptyStateConfig, paint_empty_state};
 use crate::uiframe::components::filter_chips;
 use crate::uiframe::components::overflow_menu::{self, OverflowMenuState};
+use crate::uiframe::menu_action;
 use crate::uiframe::vector_icons::Icon;
 use rsterm_data::persist::types::{ConnectionType, SavedConnection};
 
@@ -139,10 +140,12 @@ fn paint_connection_row(
     let show_file = matches!(conn.conn_type, ConnectionType::Local | ConnectionType::Ssh);
     row_resp.context_menu(|ui| {
         menu_state.close();
-        paint_conn_menu(ui, conn, show_file, action);
+        crate::uiframe::popup_body(ui, |ui| {
+            paint_conn_menu(ui, conn, show_file, action);
+        });
     });
-    overflow_menu::overflow_trigger(ui, &dots_resp, &row_resp, &conn.id, menu_state);
-    overflow_menu::show_if_open(ui, &dots_resp, dots_id, &conn.id, menu_state, 130.0, |ui| {
+    overflow_menu::overflow_trigger(ui, &dots_resp, &row_resp, &conn.id, menu_state, dots_id);
+    overflow_menu::show_if_open(ui, &dots_resp, dots_id, &conn.id, menu_state, None, |ui| {
         paint_conn_menu(ui, conn, show_file, action)
     });
 }
@@ -153,26 +156,17 @@ fn paint_conn_menu(
     show_file: bool,
     action: &mut FunctionAction,
 ) {
-    ui.set_min_width(130.0);
-    if ui.button(crate::i18n_bridge::tr("connect")).clicked() {
+    if menu_action(ui, &crate::i18n_bridge::tr("connect")) {
         action.connect_connection = Some(conn.id.clone());
-        ui.close();
     }
-    if show_file
-        && ui
-            .button(crate::i18n_bridge::tr("home_file_manager"))
-            .clicked()
-    {
+    if show_file && menu_action(ui, &crate::i18n_bridge::tr("home_file_manager")) {
         action.open_file_mgr = Some(conn.id.clone());
-        ui.close();
     }
-    if ui.button(crate::i18n_bridge::tr("edit")).clicked() {
+    if menu_action(ui, &crate::i18n_bridge::tr("edit")) {
         action.edit_connection = Some(conn.id.clone());
-        ui.close();
     }
-    if ui.button(crate::i18n_bridge::tr("delete")).clicked() {
+    if menu_action(ui, &crate::i18n_bridge::tr("delete")) {
         action.delete_connection = Some(conn.id.clone());
-        ui.close();
     }
 }
 

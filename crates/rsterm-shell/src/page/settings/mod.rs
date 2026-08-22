@@ -1,7 +1,6 @@
-//! Settings — nested pages: General / Appearance / Terminal / Files / Users.
+//! Settings — nested pages: General / Appearance / Terminal / Users.
 
 mod appearance;
-mod files;
 mod general;
 mod terminal;
 mod users;
@@ -11,6 +10,14 @@ use crate::uiframe::form;
 use rsterm_data::persist::types::{AuthUser, TerminalProfile};
 use rsterm_data::prefs::Prefs;
 
+/// Deep-link target inside the settings dialog.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum SettingsPath {
+    #[default]
+    Root,
+    AppearanceLayoutFileManager,
+}
+
 /// Settings tab identifiers (also openable as standalone dialogs).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum SettingsTab {
@@ -18,25 +25,17 @@ pub enum SettingsTab {
     General,
     Appearance,
     Terminal,
-    Files,
     Users,
 }
 
 impl SettingsTab {
-    pub const ALL: [Self; 5] = [
-        Self::General,
-        Self::Appearance,
-        Self::Terminal,
-        Self::Files,
-        Self::Users,
-    ];
+    pub const ALL: [Self; 4] = [Self::General, Self::Appearance, Self::Terminal, Self::Users];
 
     pub fn label(self) -> String {
         match self {
             Self::General => crate::i18n_bridge::tr("settings_tab_general"),
             Self::Appearance => crate::i18n_bridge::tr("settings_tab_appearance"),
             Self::Terminal => crate::i18n_bridge::tr("settings_tab_terminal"),
-            Self::Files => crate::i18n_bridge::tr("settings_tab_files"),
             Self::Users => crate::i18n_bridge::tr("settings_tab_users"),
         }
     }
@@ -66,8 +65,13 @@ pub fn settings_dialog(
     prefs: &mut Prefs,
     profiles: &[TerminalProfile],
     auth_users: &[AuthUser],
+    initial_path: Option<SettingsPath>,
 ) -> (bool, SettingsUiAction) {
     use crate::uiframe::{DialogFrame, DialogOutcome};
+
+    if let Some(path) = initial_path {
+        apply_settings_path(ctx, path);
+    }
 
     let mut action = SettingsUiAction::default();
     let frame = DialogFrame::new(crate::i18n_bridge::tr("settings"));
@@ -108,8 +112,19 @@ pub fn settings_page_dialog(
     (matches!(outcome, DialogOutcome::Closed), action)
 }
 
+pub fn apply_settings_path(ctx: &egui::Context, path: SettingsPath) {
+    let tab_id = egui::Id::new("settings_tab_v5");
+    match path {
+        SettingsPath::Root => {}
+        SettingsPath::AppearanceLayoutFileManager => {
+            ctx.memory_mut(|m| {
+                *m.data.get_temp_mut_or_default::<SettingsTab>(tab_id) = SettingsTab::Appearance;
+            });
+        }
+    }
+}
+
 fn settings_body(ui: &mut egui::Ui, ctx: &mut SettingsPageCtx<'_>, forced: Option<SettingsTab>) {
-    // Stable id outside scroll-child noise.
     let tab_id = egui::Id::new("settings_tab_v5");
     let mut active = forced.unwrap_or_else(|| {
         ui.ctx()
@@ -127,7 +142,6 @@ fn settings_body(ui: &mut egui::Ui, ctx: &mut SettingsPageCtx<'_>, forced: Optio
         SettingsTab::General => general::page(ui, ctx),
         SettingsTab::Appearance => appearance::page(ui, ctx),
         SettingsTab::Terminal => terminal::page(ui, ctx),
-        SettingsTab::Files => files::page(ui, ctx),
         SettingsTab::Users => users::page(ui, ctx),
     }
 }

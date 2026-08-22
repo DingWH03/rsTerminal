@@ -4,10 +4,18 @@ use rsterm_config::UiTheme;
 
 use crate::host_hooks;
 use crate::page::settings::SettingsPageCtx;
-use crate::pane_colors::palette_for_theme;
 use crate::uiframe::form;
 
+mod layout;
+
 pub fn page(ui: &mut egui::Ui, ctx: &mut SettingsPageCtx<'_>) {
+    theme_page(ui, ctx);
+    ui.add_space(form::SECTION_GAP);
+    form::section_header(ui, crate::i18n_bridge::tr("settings_appearance_layout"));
+    layout::page(ui, ctx);
+}
+
+fn theme_page(ui: &mut egui::Ui, ctx: &mut SettingsPageCtx<'_>) {
     form::section_card(ui, |ui| {
         form::labeled_combo(
             ui,
@@ -24,7 +32,6 @@ pub fn page(ui: &mut egui::Ui, ctx: &mut SettingsPageCtx<'_>) {
                         .clicked()
                     {
                         ctx.prefs.appearance.ui_theme = theme;
-                        // Apply immediately so the settings window itself updates.
                         host_hooks::apply_ui_theme(theme, ui.ctx());
                     }
                 }
@@ -72,3 +79,5 @@ pub fn page(ui: &mut egui::Ui, ctx: &mut SettingsPageCtx<'_>) {
         });
     });
 }
+
+use crate::pane_colors::palette_for_theme;

@@ -4731,6 +4731,7 @@ version = "0.7.2"
 dependencies = [
  "egui",
  "log",
+ "regex",
  "rsterm-data",
  "rsterm-fs",
  "rsterm-platform",
@@ -4785,6 +4786,7 @@ version = "0.7.2"
 dependencies = [
  "egui",
  "log",
+ "regex",
  "rsterm-connection",
  "rsterm-data",
  "rsterm-fs",

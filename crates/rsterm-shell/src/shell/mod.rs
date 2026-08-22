@@ -354,7 +354,9 @@ impl AppShell {
 
         // Settings dialog (all tabs, including Users)
         if self.layout.ui.settings_dialog_open {
-            let (closed, ui_action) = settings_dialog(ui.ctx(), prefs, profiles, auth_users);
+            let initial = self.layout.ui.settings_initial_path.take();
+            let (closed, ui_action) =
+                settings_dialog(ui.ctx(), prefs, profiles, auth_users, initial);
             merge_settings_ui_action(&mut result, ui_action);
             if closed {
                 self.layout.ui.settings_dialog_open = false;

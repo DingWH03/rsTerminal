@@ -1,6 +1,7 @@
 //! Shell coordinator — applies actions from function and workspace panes.
 
 use crate::layout::PaneId;
+use crate::page::settings::SettingsPath;
 use crate::shell::layout_state::ShellLayout;
 use crate::shell::messages::{FunctionAction, WorkspaceAction};
 
@@ -36,6 +37,10 @@ impl ShellCoordinator {
         }
         if let Some(pane) = action.minimize_pane {
             layout.workspace.hide_pane(pane);
+        }
+        if action.file_manager.open_settings {
+            layout.ui.settings_dialog_open = true;
+            layout.ui.settings_initial_path = Some(SettingsPath::AppearanceLayoutFileManager);
         }
         let _ = action.start_pane_drag;
     }

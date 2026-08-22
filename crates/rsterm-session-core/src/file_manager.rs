@@ -9,7 +9,7 @@ use std::thread::JoinHandle;
 use rsterm_fs::sftp::SftpClient;
 use rsterm_fs::{FileEntry, home_dir};
 
-use crate::listing::{FileSortKey, recompute_entries};
+use crate::listing::{FileSortKey, ListingFilter, recompute_entries};
 
 /// 粘贴目标面板。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -59,6 +59,8 @@ pub enum FileActivePane {
 
 pub struct FilePaneState {
     pub cwd: PathBuf,
+    /// Editable path bar buffer (synced from `cwd` when not focused).
+    pub path_edit: String,
     /// Last `list_dir` result (unfiltered).
     pub all_entries: Vec<FileEntry>,
     /// Derived display list (filter + sort).
@@ -72,6 +74,9 @@ pub struct FilePaneState {
     pub sort_asc: bool,
     pub filter: String,
     pub show_hidden: bool,
+    pub filter_case_sensitive: bool,
+    pub filter_regex: bool,
+    pub filter_recursive: bool,
 }
 
 /// Compatibility alias for the pre-phase-6 public file-manager path.
@@ -79,8 +84,10 @@ pub use FilePaneState as PaneState;
 
 impl FilePaneState {
     pub fn new_local(start: PathBuf) -> Self {
+        let path_edit = start.display().to_string();
         Self {
             cwd: start,
+            path_edit,
             all_entries: Vec::new(),
             entries: Vec::new(),
             selected: HashSet::new(),
@@ -92,19 +99,39 @@ impl FilePaneState {
             sort_asc: true,
             filter: String::new(),
             show_hidden: false,
+            filter_case_sensitive: false,
+            filter_regex: false,
+            filter_recursive: false,
         }
+    }
+
+    pub fn listing_filter(&self) -> ListingFilter {
+        ListingFilter {
+            query: self.filter.clone(),
+            case_sensitive: self.filter_case_sensitive,
+            regex: self.filter_regex,
+            show_hidden: self.show_hidden,
+        }
+    }
+
+    pub fn sync_path_edit_from_cwd(&mut self) {
+        self.path_edit = self.cwd.display().to_string();
     }
 
     pub fn apply_listing(&mut self, entries: Vec<FileEntry>) {
         self.all_entries = entries;
+        self.sync_path_edit_from_cwd();
         self.recompute();
     }
 
     pub fn recompute(&mut self) {
+        if self.filter_recursive && !self.filter.trim().is_empty() {
+            // Recursive results are applied asynchronously; keep current entries until then.
+            return;
+        }
         self.entries = recompute_entries(
             &self.all_entries,
-            &self.filter,
-            self.show_hidden,
+            &self.listing_filter(),
             self.sort_key,
             self.sort_asc,
         );
@@ -154,6 +181,8 @@ impl Default for FileTransferState {
 pub struct RemotePane {
     pub client: Arc<SftpClient>,
     pub cwd: String,
+    /// Editable path bar buffer.
+    pub path_edit: String,
     pub all_entries: Vec<FileEntry>,
     pub entries: Vec<FileEntry>,
     pub selected: HashSet<usize>,
@@ -165,19 +194,38 @@ pub struct RemotePane {
     pub sort_asc: bool,
     pub filter: String,
     pub show_hidden: bool,
+    pub filter_case_sensitive: bool,
+    pub filter_regex: bool,
+    pub filter_recursive: bool,
 }
 
 impl RemotePane {
+    pub fn listing_filter(&self) -> ListingFilter {
+        ListingFilter {
+            query: self.filter.clone(),
+            case_sensitive: self.filter_case_sensitive,
+            regex: self.filter_regex,
+            show_hidden: self.show_hidden,
+        }
+    }
+
+    pub fn sync_path_edit_from_cwd(&mut self) {
+        self.path_edit = self.cwd.clone();
+    }
+
     pub fn apply_listing(&mut self, entries: Vec<FileEntry>) {
         self.all_entries = entries;
+        self.sync_path_edit_from_cwd();
         self.recompute();
     }
 
     pub fn recompute(&mut self) {
+        if self.filter_recursive && !self.filter.trim().is_empty() {
+            return;
+        }
         self.entries = recompute_entries(
             &self.all_entries,
-            &self.filter,
-            self.show_hidden,
+            &self.listing_filter(),
             self.sort_key,
             self.sort_asc,
         );
@@ -186,7 +234,7 @@ impl RemotePane {
     }
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct RenameDialog {
     pub open: bool,
     pub pane: FileActivePane,
@@ -210,7 +258,7 @@ impl RenameDialog {
 #[derive(Clone)]
 pub struct InfoLine(pub String, pub String);
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct InfoDialog {
     pub open: bool,
     pub lines: Vec<InfoLine>,
@@ -228,6 +276,91 @@ impl InfoDialog {
             InfoLine("Modified".into(), info.modified),
             InfoLine("Path".into(), info.path),
         ];
+    }
+}
+
+/// Background recursive name search for the active pane.
+pub type RecursiveSearchResult = Result<Vec<FileEntry>, String>;
+
+/// Shared slot for a background path-autocomplete directory listing.
+pub type PathAutocompleteResultSlot = Arc<Mutex<Option<Result<Vec<FileEntry>, String>>>>;
+
+/// Background directory listing for path-bar autocomplete.
+#[derive(Default)]
+pub struct PathAutocompleteState {
+    pub active_pane: Option<FileActivePane>,
+    pub parent: String,
+    pub generation: u64,
+    pub loading: bool,
+    pub entries: Vec<FileEntry>,
+    pub error: Option<String>,
+    pub input_generation: u64,
+    pub debounce_parent: String,
+    pub debounce_generation: u64,
+    pub debounce_remote: bool,
+    pub debounce_show_hidden: bool,
+    pub debounce_at: Option<std::time::Instant>,
+    pub cache: std::collections::VecDeque<(String, Vec<FileEntry>)>,
+    pub cancel: Option<Arc<AtomicBool>>,
+    pub results: Option<PathAutocompleteResultSlot>,
+    pub local_join: Option<JoinHandle<()>>,
+    pub remote_rx: Option<std::sync::mpsc::Receiver<Result<Vec<FileEntry>, String>>>,
+    pub pending_generation: u64,
+    /// Last `path_edit` value that triggered a debounced fetch.
+    pub last_request_input: String,
+}
+
+impl PathAutocompleteState {
+    pub fn reset(&mut self) {
+        if let Some(c) = self.cancel.as_ref() {
+            c.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        if let Some(handle) = self.local_join.take() {
+            let _ = handle.join();
+        }
+        self.remote_rx = None;
+        self.cancel = None;
+        self.results = None;
+        self.loading = false;
+        self.entries.clear();
+        self.error = None;
+        self.parent.clear();
+        self.active_pane = None;
+        self.debounce_at = None;
+        self.debounce_parent.clear();
+        self.last_request_input.clear();
+    }
+}
+
+pub struct RecursiveSearchState {
+    pub pane: FileActivePane,
+    pub cancel: Arc<AtomicBool>,
+    pub results: Arc<Mutex<Option<RecursiveSearchResult>>>,
+    pub join: Option<JoinHandle<()>>,
+}
+
+impl RecursiveSearchState {
+    pub fn take_if_done(&mut self) -> Option<RecursiveSearchResult> {
+        let ready = {
+            let guard = self.results.lock().ok()?;
+            guard.is_some()
+        };
+        if !ready {
+            return None;
+        }
+        if let Some(handle) = self.join.take() {
+            let _ = handle.join();
+        }
+        self.results.lock().ok().and_then(|mut g| g.take())
+    }
+
+    pub fn request_cancel(&self) {
+        self.cancel
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.join.is_some() && self.results.lock().map(|g| g.is_none()).unwrap_or(false)
     }
 }
 
@@ -251,6 +384,8 @@ pub struct FileManagerSession {
     pub right_anchor: Option<usize>,
     pub remote_anchor: Option<usize>,
     pub active_pane: FileActivePane,
+    pub recursive_search: Option<RecursiveSearchState>,
+    pub path_autocomplete: PathAutocompleteState,
 }
 
 impl FileManagerSession {
@@ -291,6 +426,7 @@ impl FileManagerSession {
             remote: Some(RemotePane {
                 client: Arc::new(client),
                 cwd: "/".to_string(),
+                path_edit: "/".to_string(),
                 all_entries: Vec::new(),
                 entries: Vec::new(),
                 selected: HashSet::new(),
@@ -302,6 +438,9 @@ impl FileManagerSession {
                 sort_asc: true,
                 filter: String::new(),
                 show_hidden: false,
+                filter_case_sensitive: false,
+                filter_regex: false,
+                filter_recursive: false,
             }),
             left_local: None,
             right: FilePaneState::new_local(home_dir()),
@@ -314,6 +453,8 @@ impl FileManagerSession {
             right_anchor: None,
             remote_anchor: None,
             active_pane: FileActivePane::Remote,
+            recursive_search: None,
+            path_autocomplete: PathAutocompleteState::default(),
         })
     }
 
@@ -336,6 +477,8 @@ impl FileManagerSession {
             right_anchor: None,
             remote_anchor: None,
             active_pane: FileActivePane::LeftLocal,
+            recursive_search: None,
+            path_autocomplete: PathAutocompleteState::default(),
         }
     }
 }

@@ -4,6 +4,7 @@ use crate::shell::messages::FunctionAction;
 use crate::uiframe::components::compact_list_row::{CompactListRow, ListRowDensity};
 use crate::uiframe::components::empty_state::{EmptyStateConfig, paint_empty_state};
 use crate::uiframe::components::overflow_menu::{self, OverflowMenuState};
+use crate::uiframe::menu_action;
 use crate::uiframe::vector_icons::Icon;
 use rsterm_data::persist::types::FavoriteCommand;
 
@@ -94,25 +95,24 @@ fn paint_command_row(
 
     row_resp.context_menu(|ui| {
         menu_state.close();
-        paint_cmd_menu(ui, cmd, action);
+        crate::uiframe::popup_body(ui, |ui| {
+            paint_cmd_menu(ui, cmd, action);
+        });
     });
-    overflow_menu::overflow_trigger(ui, &dots_resp, &row_resp, &cmd.id, menu_state);
-    overflow_menu::show_if_open(ui, &dots_resp, dots_id, &cmd.id, menu_state, 120.0, |ui| {
+    overflow_menu::overflow_trigger(ui, &dots_resp, &row_resp, &cmd.id, menu_state, dots_id);
+    overflow_menu::show_if_open(ui, &dots_resp, dots_id, &cmd.id, menu_state, None, |ui| {
         paint_cmd_menu(ui, cmd, action);
     });
 }
 
 fn paint_cmd_menu(ui: &mut egui::Ui, cmd: &FavoriteCommand, action: &mut FunctionAction) {
-    if ui.button(crate::i18n_bridge::tr("cmd_run")).clicked() {
+    if menu_action(ui, &crate::i18n_bridge::tr("cmd_run")) {
         action.run_favorite_command = Some(cmd.id.clone());
-        ui.close();
     }
-    if ui.button(crate::i18n_bridge::tr("edit")).clicked() {
+    if menu_action(ui, &crate::i18n_bridge::tr("edit")) {
         action.edit_favorite_command = Some(cmd.id.clone());
-        ui.close();
     }
-    if ui.button(crate::i18n_bridge::tr("delete")).clicked() {
+    if menu_action(ui, &crate::i18n_bridge::tr("delete")) {
         action.delete_favorite_command = Some(cmd.id.clone());
-        ui.close();
     }
 }

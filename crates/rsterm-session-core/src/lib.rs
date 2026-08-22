@@ -17,10 +17,11 @@ pub use drain::{ConnectionViewAction, drain_connection};
 pub use file_manager::{
     FileActivePane, FileClipboard, FileClipboardMode, FileManagerMode, FileManagerSession,
     FilePaneState, FileTransferState, InfoDialog, InfoLine, PaneSide, PaneState, PasteTarget,
+    PathAutocompleteResultSlot, PathAutocompleteState, RecursiveSearchResult, RecursiveSearchState,
     RemotePane, RenameDialog, TransferJob,
 };
 pub use files_cache::{SessionFilesCache, tick_session_files};
-pub use listing::{FileSortKey, recompute_entries};
+pub use listing::{FileSortKey, ListingFilter, name_matches, recompute_entries, sort_entries};
 pub use terminal::{
     ActiveSession, PortCoreState, PortUiState, TerminalSessionCore, normalize_paste_text,
     paste_payload,

@@ -7,9 +7,14 @@
 mod context_menu;
 mod dialogs;
 mod dnd;
+mod fm_settings_menu;
 mod list;
 mod ops;
+mod path_autocomplete;
+mod path_bar;
+pub(crate) mod touch_multiselect;
 pub mod transfer;
+pub(crate) use touch_multiselect::TouchMultiselectState;
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -17,7 +22,7 @@ use std::time::SystemTime;
 
 use egui::Key;
 
-use rsterm_data::prefs::{FileManagerPrefs, FileManagerUiState};
+use rsterm_data::prefs::{FileManagerPrefs, FileManagerUiState, InputInteractionMode, load_prefs};
 use rsterm_fs::FileEntry;
 use rsterm_fs::sftp::SftpClient;
 use rsterm_session_core::FileSortKey;
@@ -25,15 +30,17 @@ use rsterm_session_core::{
     FileActivePane, FileClipboard, FileManagerMode, FileManagerSession, FilePaneState, InfoDialog,
     RemotePane, RenameDialog,
 };
-use rsterm_uiframe::PaneChrome;
+use rsterm_uiframe::PopupMenuState;
 use rsterm_uiframe::file_list::{
     FileBrowserAction, FileBrowserConfig, FileBrowserLabels, FileBrowserState, FileBrowserView,
     FileDetailsColumns, FilePaneLayout, FileRow, FileSortColumn, FileViewMode,
 };
-
-use crate::content::{
-    DetailsPaneSide, persist_details_columns, persist_dual_split, persist_file_manager_prefs,
+use rsterm_uiframe::hover_panel::{
+    HoverDetail, HoverInstallMode, HoverPanelState, file_entry_detail, install_hover_detail,
+    paint_hover_panel,
 };
+
+use rsterm_uiframe::PaneChrome;
 use rsterm_uiframe::style;
 use rsterm_uiframe::tokens;
 
@@ -41,14 +48,23 @@ use crate::labels;
 use crate::page::transfer::apply_transfer_done;
 
 use self::context_menu::{
-    install_context_menu, paint_blank_context_menu, row_context_menu_local, row_context_menu_remote,
+    blank_context_menu_width, install_context_menu, paint_blank_context_menu,
+    row_context_menu_local, row_context_menu_remote, row_context_menu_width,
 };
 use self::dialogs::{show_info_dialog, show_rename_dialog};
 use self::dnd::{apply_external_drag_out, apply_external_drop};
+use self::fm_settings_menu::paint_fm_settings_menu;
 use self::ops::{
-    go_up_active_pane, paste_into_pane, recompute_active_pane, refresh_if_needed, run_local_ops,
-    run_remote_ops, transfer_to_opposite_pane,
+    cancel_recursive_search, go_up_active_pane, kick_recursive_search, paste_into_pane,
+    poll_recursive_search, recompute_active_pane, refresh_if_needed, run_local_ops, run_remote_ops,
+    submit_path_active_pane, transfer_to_opposite_pane,
 };
+use self::path_autocomplete::{cancel_path_autocomplete, poll_path_autocomplete};
+use self::touch_multiselect::{
+    TouchHoldEvent, enter_multiselect_on_row, paint_touch_multiselect_bar, poll_row_hold,
+    show_row_detail_panel, track_row_press,
+};
+use crate::content::{DetailsPaneSide, persist_details_columns, persist_dual_split};
 
 /// Local adapter so we can implement [`FileRow`] without violating orphan rules.
 struct FileEntryRow<'a>(&'a FileEntry);
@@ -76,10 +92,20 @@ impl FileRow for FileEntryRow<'_> {
 pub struct FileManagerAction {
     /// 是否关闭文件管理器
     pub close: bool,
+    /// Open full settings at Appearance > Layout > File Manager.
+    pub open_settings: bool,
     /// Prefs snapshot to merge into the host app's in-memory prefs.
     pub prefs: Option<rsterm_data::prefs::FileManagerPrefs>,
     /// Silent UI state (column widths) to merge into host prefs.
     pub ui_state: Option<FileManagerUiState>,
+}
+
+/// Per-pane row hover / touch-hold wiring.
+struct FmInteractParams<'a> {
+    touch_mode: bool,
+    hover: &'a mut HoverPanelState,
+    touch: &'a mut TouchMultiselectState,
+    labels: &'a labels::FileManagerLabels,
 }
 
 /// 面板操作集合。
@@ -105,6 +131,15 @@ pub(super) struct PaneOps {
 /// 底部操作栏高度
 const BOTTOM_BAR_H: f32 = tokens::size::BOTTOM_BAR;
 
+/// 底部操作栏总高度（含分隔线），与 [`paint_bottom_action_bar`] 实际占用一致。
+fn pane_bottom_chrome_h(ui: &egui::Ui, show: bool) -> f32 {
+    if !show {
+        return 0.0;
+    }
+    let sep = ui.spacing().item_spacing.y + ui.visuals().widgets.noninteractive.bg_stroke.width;
+    BOTTOM_BAR_H + sep
+}
+
 /// 文件管理器主视图渲染入口。
 ///
 /// 处理刷新、传输轮询、标题栏、双面板布局、键盘快捷键（F5 传输）等。
@@ -116,6 +151,11 @@ pub fn file_manager_view(
     details_columns_left: &mut Option<FileDetailsColumns>,
     details_columns_right: &mut Option<FileDetailsColumns>,
     dual_split: &mut f32,
+    search_panel_open: &mut bool,
+    settings_menu: &mut PopupMenuState,
+    hover_panel: &mut HoverPanelState,
+    touch_multiselect: &mut TouchMultiselectState,
+    touch_ops_menu: &mut PopupMenuState,
     pending_prefs: &mut Option<FileManagerPrefs>,
     pending_ui_state: &mut Option<FileManagerUiState>,
     chrome: &mut PaneChrome<'_>,
@@ -124,42 +164,157 @@ pub fn file_manager_view(
     if let Some(done) = session.transfer.poll(ui.ctx()) {
         apply_transfer_done(session, done);
     }
-    // Keep sidebar path labels animating (marquee) while a file manager session is open.
-    ui.ctx().request_repaint();
+    poll_recursive_search(session);
+    {
+        let pane = session.active_pane;
+        let remote = matches!(pane, FileActivePane::Remote);
+        let client = session.remote.as_ref().map(|r| Arc::clone(&r.client));
+        poll_path_autocomplete(
+            &mut session.path_autocomplete,
+            pane,
+            remote,
+            client.as_ref(),
+        );
+    }
+
+    let prev_pane = ui.memory(|m| {
+        m.data
+            .get_temp::<FileActivePane>(egui::Id::new("fm_path_ac_pane"))
+    });
+    if prev_pane.is_some_and(|p| p != session.active_pane) {
+        cancel_path_autocomplete(&mut session.path_autocomplete);
+    }
+    ui.memory_mut(|m| {
+        m.data
+            .insert_temp(egui::Id::new("fm_path_ac_pane"), session.active_pane);
+    });
+    if session.path_autocomplete.loading || session.path_autocomplete.debounce_at.is_some() {
+        ui.ctx().request_repaint();
+    }
 
     let mut action = FileManagerAction::default();
     let has_clipboard = session.clipboard.is_some();
     let transfer_ui = session.transfer.read_ui();
     let labels = labels::labels();
+    let input_mode = load_prefs().general.input_mode;
+    let touch_mode = matches!(input_mode, InputInteractionMode::Touch);
+    hover_panel.set_close_label(labels.close.clone());
 
-    let (go_up, listing_changed) = paint_fm_top_bar(
+    let mut touch_ops = PaneOps::default();
+    if touch_mode && touch_multiselect.active {
+        if paint_touch_multiselect_bar(
+            ui,
+            session,
+            touch_multiselect,
+            &mut touch_ops,
+            touch_ops_menu,
+        ) {
+            touch_multiselect.exit_multiselect(session);
+        }
+        apply_touch_ops(session, &mut touch_ops);
+    }
+
+    if ui.input(|i| i.key_pressed(Key::Escape)) {
+        if hover_panel.handle_back() {
+            // consumed
+        } else if touch_multiselect.active {
+            touch_multiselect.exit_multiselect(session);
+        }
+    }
+
+    if let Some(event) = poll_row_hold(touch_multiselect, touch_mode) {
+        match event {
+            TouchHoldEvent::EnterMultiselect { row } => {
+                enter_multiselect_on_row(session, row);
+            }
+            TouchHoldEvent::ShowDetail { row } => {
+                if let Some(detail) = row_detail_for_active_pane(session, row, &labels) {
+                    let anchor =
+                        ui.input(|i| i.pointer.interact_pos().unwrap_or(egui::pos2(0.0, 0.0)));
+                    show_row_detail_panel(hover_panel, anchor, detail, touch_multiselect, session);
+                }
+            }
+        }
+    }
+
+    let top = paint_fm_top_bar(
         ui,
         session,
         chrome,
         view_mode,
         pane_layout,
+        search_panel_open,
+        settings_menu,
         pending_prefs,
         &transfer_ui,
         &labels,
         &mut action,
     );
-    if go_up {
+    if top.go_up {
         go_up_active_pane(session);
     }
-    if listing_changed {
-        recompute_active_pane(session);
+    if let Some(path) = top.path_submitted {
+        submit_path_active_pane(session, &path);
+    }
+
+    {
+        let pane = session.active_pane;
+        let remote = matches!(pane, FileActivePane::Remote);
+        let client = session.remote.as_ref().map(|r| Arc::clone(&r.client));
+        poll_path_autocomplete(
+            &mut session.path_autocomplete,
+            pane,
+            remote,
+            client.as_ref(),
+        );
+    }
+
+    if top.cancel_recursive_search {
+        cancel_recursive_search(session);
+    }
+    if top.kick_recursive_search {
+        kick_recursive_search(session);
+    } else if top.listing_changed {
+        let recursive = match session.active_pane {
+            FileActivePane::Remote => session
+                .remote
+                .as_ref()
+                .map(|r| r.filter_recursive && !r.filter.trim().is_empty())
+                .unwrap_or(false),
+            FileActivePane::LeftLocal => session
+                .left_local
+                .as_ref()
+                .map(|p| p.filter_recursive && !p.filter.trim().is_empty())
+                .unwrap_or(false),
+            FileActivePane::Right => {
+                session.right.filter_recursive && !session.right.filter.trim().is_empty()
+            }
+        };
+        if recursive {
+            kick_recursive_search(session);
+        } else {
+            recompute_active_pane(session);
+        }
     }
 
     let block_pane_keyboard = session.rename_dialog.open || session.info_dialog.open;
+    let mut interact = FmInteractParams {
+        touch_mode,
+        hover: hover_panel,
+        touch: touch_multiselect,
+        labels: &labels,
+    };
 
     if !block_pane_keyboard && ui.input(|i| i.key_pressed(Key::F5)) {
         transfer_to_opposite_pane(session);
     }
 
-    let available = ui.available_size();
-    let pane_h = available.y;
+    let available_w = ui.available_width();
 
     paint_transfer_queue_panel(ui, session, &labels);
+
+    let pane_h = ui.available_height().max(32.0);
+    let available = egui::vec2(available_w, pane_h);
 
     match *pane_layout {
         FilePaneLayout::Dual => {
@@ -173,12 +328,14 @@ pub fn file_manager_view(
                 pending_ui_state,
                 has_clipboard,
                 block_pane_keyboard,
+                &mut interact,
                 available,
                 pane_h,
             );
         }
         FilePaneLayout::Single => {
             let pane_size = egui::vec2(available.x, pane_h);
+            const ACTIVE_SCROLL: &str = "fm_scroll_active";
             paint_pane_column(ui, pane_size, |ui| match session.active_pane {
                 FileActivePane::Remote | FileActivePane::LeftLocal => {
                     paint_left_host(
@@ -189,6 +346,8 @@ pub fn file_manager_view(
                         pending_ui_state,
                         has_clipboard,
                         block_pane_keyboard,
+                        &mut interact,
+                        ACTIVE_SCROLL,
                     );
                 }
                 FileActivePane::Right => {
@@ -200,6 +359,8 @@ pub fn file_manager_view(
                         pending_ui_state,
                         has_clipboard,
                         block_pane_keyboard,
+                        &mut interact,
+                        ACTIVE_SCROLL,
                     );
                 }
             });
@@ -208,6 +369,7 @@ pub fn file_manager_view(
 
     show_rename_dialog(ui.ctx(), session);
     show_info_dialog(ui.ctx(), session);
+    paint_hover_panel(ui.ctx(), hover_panel);
 
     action
 }
@@ -222,6 +384,7 @@ fn paint_dual_panes(
     pending_ui_state: &mut Option<FileManagerUiState>,
     has_clipboard: bool,
     block_pane_keyboard: bool,
+    interact: &mut FmInteractParams<'_>,
     available: egui::Vec2,
     pane_h: f32,
 ) {
@@ -238,71 +401,84 @@ fn paint_dual_panes(
     let left_w = (content_w * *dual_split).floor().max(1.0);
     let right_w = (content_w - left_w).max(1.0);
 
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 0.0;
-        ui.set_min_height(pane_h);
-        ui.set_max_width(total_w);
+    ui.allocate_ui_with_layout(
+        egui::vec2(total_w, pane_h),
+        egui::Layout::left_to_right(egui::Align::TOP).with_main_wrap(false),
+        |ui| {
+            ui.spacing_mut().item_spacing.x = 0.0;
 
-        paint_pane_column(ui, egui::vec2(left_w, pane_h), |ui| {
-            paint_left_host(
-                ui,
-                session,
-                view_mode,
-                details_columns_left,
-                pending_ui_state,
-                has_clipboard,
-                block_pane_keyboard,
-            );
-        });
+            paint_pane_column(ui, egui::vec2(left_w, pane_h), |ui| {
+                paint_left_host(
+                    ui,
+                    session,
+                    view_mode,
+                    details_columns_left,
+                    pending_ui_state,
+                    has_clipboard,
+                    block_pane_keyboard,
+                    interact,
+                    default_left_scroll_id(session),
+                );
+            });
 
-        let (sep_rect, sep_resp) =
-            ui.allocate_exact_size(egui::vec2(SPLITTER_SIZE, pane_h), egui::Sense::drag());
-        if sep_resp.hovered() || sep_resp.dragged() {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
-            ui.painter().rect_filled(
-                sep_rect,
-                0.0,
-                ui.visuals().widgets.hovered.bg_fill.gamma_multiply(0.35),
+            let (sep_rect, sep_resp) =
+                ui.allocate_exact_size(egui::vec2(SPLITTER_SIZE, pane_h), egui::Sense::drag());
+            if sep_resp.hovered() || sep_resp.dragged() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+                ui.painter().rect_filled(
+                    sep_rect,
+                    0.0,
+                    ui.visuals().widgets.hovered.bg_fill.gamma_multiply(0.35),
+                );
+            }
+            // Always-visible divider line down the splitter center.
+            let line_stroke = if sep_resp.hovered() || sep_resp.dragged() {
+                egui::Stroke::new(
+                    tokens::stroke::EMPHASIS,
+                    ui.visuals().widgets.hovered.bg_stroke.color,
+                )
+            } else {
+                ui.visuals().widgets.noninteractive.bg_stroke
+            };
+            let x = sep_rect.center().x;
+            ui.painter().line_segment(
+                [
+                    egui::pos2(x, sep_rect.top()),
+                    egui::pos2(x, sep_rect.bottom()),
+                ],
+                line_stroke,
             );
-        }
-        // Always-visible divider line down the splitter center.
-        let line_stroke = if sep_resp.hovered() || sep_resp.dragged() {
-            egui::Stroke::new(
-                tokens::stroke::EMPHASIS,
-                ui.visuals().widgets.hovered.bg_stroke.color,
-            )
-        } else {
-            ui.visuals().widgets.noninteractive.bg_stroke
-        };
-        let x = sep_rect.center().x;
-        ui.painter().line_segment(
-            [
-                egui::pos2(x, sep_rect.top()),
-                egui::pos2(x, sep_rect.bottom()),
-            ],
-            line_stroke,
-        );
-        if sep_resp.dragged() {
-            let new_left = (left_w + sep_resp.drag_delta().x)
-                .clamp(content_w * min_frac, content_w * max_frac);
-            *dual_split = (new_left / content_w).clamp(min_frac, max_frac);
-        }
-        if sep_resp.drag_stopped() {
-            *pending_ui_state = Some(persist_dual_split(*dual_split));
-        }
+            if sep_resp.dragged() {
+                let new_left = (left_w + sep_resp.drag_delta().x)
+                    .clamp(content_w * min_frac, content_w * max_frac);
+                *dual_split = (new_left / content_w).clamp(min_frac, max_frac);
+            }
+            if sep_resp.drag_stopped() {
+                *pending_ui_state = Some(persist_dual_split(*dual_split));
+            }
 
-        paint_pane_column(ui, egui::vec2(right_w, pane_h), |ui| {
-            paint_right_host(
-                ui,
-                session,
-                view_mode,
-                details_columns_right,
-                pending_ui_state,
-                has_clipboard,
-                block_pane_keyboard,
-            );
-        });
-    });
+            paint_pane_column(ui, egui::vec2(right_w, pane_h), |ui| {
+                paint_right_host(
+                    ui,
+                    session,
+                    view_mode,
+                    details_columns_right,
+                    pending_ui_state,
+                    has_clipboard,
+                    block_pane_keyboard,
+                    interact,
+                    "fm_scroll_right",
+                );
+            });
+        },
+    );
+}
+
+fn default_left_scroll_id(session: &FileManagerSession) -> &'static str {
+    match session.mode {
+        FileManagerMode::SshSftp => "fm_scroll_remote",
+        FileManagerMode::LocalDual => "fm_scroll_left",
+    }
 }
 
 fn paint_left_host(
@@ -313,7 +489,9 @@ fn paint_left_host(
     pending_ui_state: &mut Option<FileManagerUiState>,
     has_clipboard: bool,
     block_pane_keyboard: bool,
-) {
+    interact: &mut FmInteractParams<'_>,
+    scroll_id: &str,
+) -> (bool, PaneOps) {
     match session.mode {
         FileManagerMode::SshSftp => {
             if let Some(remote) = session.remote.as_mut() {
@@ -325,7 +503,7 @@ fn paint_left_host(
                     &mut session.status,
                     &mut session.rename_dialog,
                     &mut session.info_dialog,
-                    "fm_scroll_remote",
+                    scroll_id,
                     view_mode,
                     details_columns,
                     DetailsPaneSide::Left,
@@ -333,6 +511,7 @@ fn paint_left_host(
                     has_clipboard,
                     block_pane_keyboard,
                     session.active_pane == FileActivePane::Remote,
+                    interact,
                 );
                 if clicked {
                     session.active_pane = FileActivePane::Remote;
@@ -341,6 +520,7 @@ fn paint_left_host(
                     paste_into_pane(session, FileActivePane::Remote);
                 }
                 apply_external_drop(session, FileActivePane::Remote, &ops.dropped_paths);
+                return (clicked, ops);
             }
         }
         FileManagerMode::LocalDual => {
@@ -355,7 +535,7 @@ fn paint_left_host(
                     &mut session.rename_dialog,
                     &mut session.info_dialog,
                     None,
-                    "fm_scroll_left",
+                    scroll_id,
                     view_mode,
                     details_columns,
                     DetailsPaneSide::Left,
@@ -363,6 +543,7 @@ fn paint_left_host(
                     has_clipboard,
                     block_pane_keyboard,
                     session.active_pane == FileActivePane::LeftLocal,
+                    interact,
                 );
                 if clicked {
                     session.active_pane = FileActivePane::LeftLocal;
@@ -372,9 +553,11 @@ fn paint_left_host(
                 }
                 apply_external_drop(session, FileActivePane::LeftLocal, &ops.dropped_paths);
                 apply_external_drag_out(session, FileActivePane::LeftLocal, &ops.drag_out_indices);
+                return (clicked, ops);
             }
         }
     }
+    (false, PaneOps::default())
 }
 
 fn paint_right_host(
@@ -385,6 +568,8 @@ fn paint_right_host(
     pending_ui_state: &mut Option<FileManagerUiState>,
     has_clipboard: bool,
     block_pane_keyboard: bool,
+    interact: &mut FmInteractParams<'_>,
+    scroll_id: &str,
 ) {
     let remote_client = session.remote.as_ref().map(|r| &r.client);
     let (clicked, ops) = paint_local_pane(
@@ -397,7 +582,7 @@ fn paint_right_host(
         &mut session.rename_dialog,
         &mut session.info_dialog,
         remote_client,
-        "fm_scroll_right",
+        scroll_id,
         view_mode,
         details_columns,
         DetailsPaneSide::Right,
@@ -405,6 +590,7 @@ fn paint_right_host(
         has_clipboard,
         block_pane_keyboard,
         session.active_pane == FileActivePane::Right,
+        interact,
     );
     if clicked {
         session.active_pane = FileActivePane::Right;
@@ -433,6 +619,7 @@ fn paint_pane_column<R>(
 }
 
 /// 渲染远程 SFTP 面板：工具栏、文件列表、底部操作栏。
+#[allow(clippy::too_many_arguments)]
 fn paint_remote_pane(
     ui: &mut egui::Ui,
     remote: &mut RemotePane,
@@ -449,16 +636,18 @@ fn paint_remote_pane(
     has_clipboard: bool,
     block_keyboard: bool,
     is_active: bool,
+    interact: &mut FmInteractParams<'_>,
 ) -> (bool, PaneOps) {
     let mut ops = PaneOps::default();
     let mut list_clicked = false;
+    let pointer_mode = !interact.touch_mode;
 
     ui.vertical(|ui| {
         if let Some(err) = &remote.error {
             ui.colored_label(egui::Color32::LIGHT_RED, err);
         }
-        let show_bottom = remote.select_mode || has_clipboard;
-        let bottom_h = if show_bottom { BOTTOM_BAR_H } else { 0.0 };
+        let show_bottom = !interact.touch_mode && (remote.select_mode || has_clipboard);
+        let bottom_h = pane_bottom_chrome_h(ui, show_bottom);
         let list_h = (ui.available_height() - bottom_h).max(32.0);
 
         let entries = remote.entries.clone();
@@ -474,8 +663,10 @@ fn paint_remote_pane(
         list_clicked = paint_browser_host(
             ui,
             list_h,
+            scroll_id,
             remote.select_mode,
             has_clipboard,
+            pointer_mode,
             &mut ops,
             |ui, ops| {
                 let labels = labels::labels();
@@ -508,11 +699,19 @@ fn paint_remote_pane(
                         |idx: usize, resp: &egui::Response, selected: &HashSet<usize>| {
                             remote.selected = selected.clone();
                             if let Some(ent) = entries.get(idx) {
-                                install_context_menu(resp, |ui| {
-                                    row_context_menu_remote(ui, remote, idx, ent, ops);
-                                });
+                                install_context_menu(
+                                    resp,
+                                    pointer_mode,
+                                    Some(row_context_menu_width(&resp.ctx)),
+                                    |ui| {
+                                        row_context_menu_remote(ui, remote, idx, ent, ops);
+                                    },
+                                );
                             }
                         };
+                    let mut row_hook = |idx: usize, resp: &egui::Response, ent: &dyn FileRow| {
+                        hook_fm_row(interact, idx, resp, ent);
+                    };
                     FileBrowserView::show(
                         ui,
                         "",
@@ -533,6 +732,7 @@ fn paint_remote_pane(
                         true,
                         accept_kb,
                         Some(&mut row_menu),
+                        Some(&mut row_hook),
                     )
                 };
                 if let Some(col) = action.sort_clicked {
@@ -599,16 +799,18 @@ fn paint_local_pane(
     has_clipboard: bool,
     block_keyboard: bool,
     is_active: bool,
+    interact: &mut FmInteractParams<'_>,
 ) -> (bool, PaneOps) {
     let mut ops = PaneOps::default();
     let mut list_clicked = false;
+    let pointer_mode = !interact.touch_mode;
 
     ui.vertical(|ui| {
         if let Some(err) = &pane.error {
             ui.colored_label(egui::Color32::LIGHT_RED, err);
         }
-        let show_bottom = pane.select_mode || has_clipboard;
-        let bottom_h = if show_bottom { BOTTOM_BAR_H } else { 0.0 };
+        let show_bottom = !interact.touch_mode && (pane.select_mode || has_clipboard);
+        let bottom_h = pane_bottom_chrome_h(ui, show_bottom);
         let list_h = (ui.available_height() - bottom_h).max(32.0);
 
         let entries = pane.entries.clone();
@@ -624,8 +826,10 @@ fn paint_local_pane(
         list_clicked = paint_browser_host(
             ui,
             list_h,
+            scroll_id,
             pane.select_mode,
             has_clipboard,
+            pointer_mode,
             &mut ops,
             |ui, ops| {
                 let labels = labels::labels();
@@ -658,11 +862,19 @@ fn paint_local_pane(
                         |idx: usize, resp: &egui::Response, selected: &HashSet<usize>| {
                             pane.selected = selected.clone();
                             if let Some(ent) = entries.get(idx) {
-                                install_context_menu(resp, |ui| {
-                                    row_context_menu_local(ui, pane, idx, ent, ops);
-                                });
+                                install_context_menu(
+                                    resp,
+                                    pointer_mode,
+                                    Some(row_context_menu_width(&resp.ctx)),
+                                    |ui| {
+                                        row_context_menu_local(ui, pane, idx, ent, ops);
+                                    },
+                                );
                             }
                         };
+                    let mut row_hook = |idx: usize, resp: &egui::Response, ent: &dyn FileRow| {
+                        hook_fm_row(interact, idx, resp, ent);
+                    };
                     FileBrowserView::show(
                         ui,
                         "",
@@ -683,6 +895,7 @@ fn paint_local_pane(
                         true,
                         accept_kb,
                         Some(&mut row_menu),
+                        Some(&mut row_hook),
                     )
                 };
                 if let Some(col) = action.sort_clicked {
@@ -790,30 +1003,41 @@ fn merge_browser_action(
 fn paint_browser_host(
     ui: &mut egui::Ui,
     list_h: f32,
+    scroll_id: &str,
     select_mode: bool,
     has_clipboard: bool,
+    enable_context_menu: bool,
     ops: &mut PaneOps,
     paint_browser: impl FnOnce(&mut egui::Ui, &mut PaneOps) -> bool,
 ) -> bool {
-    let list_size = egui::vec2(ui.available_width(), list_h);
-    let (list_rect, list_bg) = ui.allocate_exact_size(list_size, egui::Sense::click());
-    if !select_mode {
-        install_context_menu(&list_bg, |ui| {
-            paint_blank_context_menu(ui, has_clipboard, ops);
-        });
-    }
+    let viewport_id = egui::Id::new(scroll_id).with("viewport");
+    ui.push_id(viewport_id, |ui| {
+        let list_size = egui::vec2(ui.available_width(), list_h);
+        let (list_rect, list_bg) = ui.allocate_exact_size(list_size, egui::Sense::click());
+        if !select_mode {
+            install_context_menu(
+                &list_bg,
+                enable_context_menu,
+                Some(blank_context_menu_width(ui.ctx(), has_clipboard)),
+                |ui| {
+                    paint_blank_context_menu(ui, has_clipboard, ops);
+                },
+            );
+        }
 
-    let mut interacted = ui
-        .scope_builder(egui::UiBuilder::new().max_rect(list_rect), |ui| {
-            paint_browser(ui, ops)
-        })
-        .inner;
+        let mut interacted = ui
+            .scope_builder(egui::UiBuilder::new().max_rect(list_rect), |ui| {
+                paint_browser(ui, ops)
+            })
+            .inner;
 
-    if list_bg.clicked_by(egui::PointerButton::Primary) {
-        interacted = true;
-    }
+        if list_bg.clicked_by(egui::PointerButton::Primary) {
+            interacted = true;
+        }
 
-    interacted
+        interacted
+    })
+    .inner
 }
 
 /// Multi-select on: Copy / Cut / Delete / Cancel — any click ends multi-select.
@@ -906,21 +1130,19 @@ fn paint_fm_top_bar(
     chrome: &mut PaneChrome<'_>,
     view_mode: &mut FileViewMode,
     pane_layout: &mut FilePaneLayout,
+    search_panel_open: &mut bool,
+    settings_menu: &mut PopupMenuState,
     pending_prefs: &mut Option<FileManagerPrefs>,
     transfer_ui: &rsterm_fs::TransferSnapshot,
     labels: &labels::FileManagerLabels,
     action: &mut FileManagerAction,
-) -> (bool, bool) {
-    use rsterm_uiframe::components::toolbar_button::{icon_toolbar_button, icon_toolbar_danger};
+) -> path_bar::PathBarAction {
+    use rsterm_uiframe::components::toolbar_button::{
+        icon_toolbar_button, icon_toolbar_danger, text_toolbar_button,
+    };
     use rsterm_uiframe::vector_icons::Icon;
 
-    let active_id = match session.active_pane {
-        FileActivePane::Remote => "fm_active_remote",
-        FileActivePane::LeftLocal => "fm_active_left",
-        FileActivePane::Right => "fm_active_right",
-    };
-    let mut go_up = false;
-    let mut listing_changed = false;
+    let mut top = path_bar::PathBarAction::default();
 
     ui.horizontal(|ui| {
         ui.style_mut().spacing.button_padding =
@@ -928,220 +1150,216 @@ fn paint_fm_top_bar(
         ui.style_mut().spacing.item_spacing.x = tokens::space::XS;
 
         if chrome.show_hamburger
-            && icon_toolbar_button(ui, ui.id().with("fm_menu"), Icon::Hamburger).clicked()
+            && icon_toolbar_button(ui, egui::Id::new("fm_topbar_menu"), Icon::Hamburger).clicked()
         {
             (chrome.on_hamburger)();
         }
 
-        let chrome_result = paint_active_pane_chrome(ui, session, active_id);
-        go_up = chrome_result.0;
-        listing_changed = chrome_result.1;
+        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+            ui.style_mut().spacing.item_spacing.x = tokens::space::XS;
+            let path_action = path_bar::paint_active_path_chrome(ui, session);
+            top.go_up = path_action.go_up;
+            top.listing_changed |= path_action.listing_changed;
+            top.path_submitted = path_action.path_submitted;
 
-        if transfer_ui.active {
-            ui.add_space(tokens::space::SM);
-            ui.add(
-                egui::ProgressBar::new(transfer_ui.progress.clamp(0.0, 1.0))
-                    .desired_width(100.0)
-                    .show_percentage(),
-            );
-            ui.label(
-                egui::RichText::new(&transfer_ui.label)
-                    .size(tokens::text::CAPTION)
-                    .color(ui.visuals().weak_text_color()),
-            );
-        } else if let Some(msg) = &session.status {
-            ui.add_space(tokens::space::SM);
-            ui.label(egui::RichText::new(msg).size(tokens::text::CAPTION).weak());
-        }
+            if transfer_ui.active {
+                ui.add_space(tokens::space::SM);
+                ui.add(
+                    egui::ProgressBar::new(transfer_ui.progress.clamp(0.0, 1.0))
+                        .desired_width(72.0)
+                        .show_percentage(),
+                );
+                ui.label(
+                    egui::RichText::new(&transfer_ui.label)
+                        .size(tokens::text::CAPTION)
+                        .color(ui.visuals().weak_text_color()),
+                );
+            } else if let Some(msg) = &session.status {
+                ui.add_space(tokens::space::SM);
+                ui.add(
+                    egui::Label::new(egui::RichText::new(msg).size(tokens::text::CAPTION).weak())
+                        .truncate(),
+                );
+            }
+        });
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if icon_toolbar_danger(ui, ui.id().with("fm_close"), Icon::Close)
+            ui.style_mut().spacing.item_spacing.x = tokens::space::XS;
+            if icon_toolbar_danger(ui, egui::Id::new("fm_topbar_close"), Icon::Close)
                 .on_hover_text(&labels.close_pane)
                 .clicked()
             {
                 action.close = true;
             }
-            if transfer_ui.active
-                && ui
-                    .add(
-                        egui::Button::new(&labels.stop)
-                            .corner_radius(style::CORNER_RADIUS_SM)
-                            .min_size(egui::vec2(64.0, tokens::size::TOOLBAR_HEIGHT)),
-                    )
-                    .clicked()
-            {
-                session.transfer.request_cancel();
+            if transfer_ui.active {
+                let stop = ui
+                    .push_id(egui::Id::new("fm_topbar_stop"), |ui| {
+                        ui.add(
+                            egui::Button::new(&labels.stop)
+                                .corner_radius(style::CORNER_RADIUS_SM)
+                                .min_size(egui::vec2(56.0, tokens::size::TOOLBAR_HEIGHT)),
+                        )
+                    })
+                    .inner;
+                if stop.clicked() {
+                    session.transfer.request_cancel();
+                }
             }
-            paint_view_layout_controls(ui, view_mode, pane_layout, pending_prefs, labels);
+            let settings_btn =
+                icon_toolbar_button(ui, egui::Id::new("fm_topbar_settings"), Icon::Settings);
+            let menu_action = paint_fm_settings_menu(
+                &settings_btn,
+                settings_menu,
+                session,
+                view_mode,
+                pane_layout,
+                pending_prefs,
+            );
+            top.listing_changed |= menu_action.listing_changed;
+            if menu_action.open_settings {
+                action.open_settings = true;
+            }
+            let search_label = if *search_panel_open { "▾" } else { "🔍" };
+            if text_toolbar_button(ui, egui::Id::new("fm_topbar_search"), search_label)
+                .on_hover_text(&labels.search_toggle)
+                .clicked()
+            {
+                *search_panel_open = !*search_panel_open;
+            }
         });
     });
+    ui.add(egui::Separator::default().spacing(tokens::space::XS));
 
-    (go_up, listing_changed)
+    if *search_panel_open {
+        let searching = session
+            .recursive_search
+            .as_ref()
+            .map(|s| s.is_running())
+            .unwrap_or(false);
+        let search = path_bar::paint_search_panel(ui, session, searching);
+        top.listing_changed |= search.listing_changed;
+        top.kick_recursive_search |= search.kick_recursive_search;
+        top.cancel_recursive_search |= search.cancel_recursive_search;
+    }
+
+    top
 }
 
-/// Shared top chrome for the focused pane: ↑ / cwd / filter / hidden / multi-select.
-fn paint_active_pane_chrome(
-    ui: &mut egui::Ui,
-    session: &mut FileManagerSession,
-    id_salt: &str,
-) -> (bool, bool) {
+fn hook_fm_row(
+    interact: &mut FmInteractParams<'_>,
+    idx: usize,
+    resp: &egui::Response,
+    ent: &dyn FileRow,
+) {
+    if interact.touch_mode {
+        track_row_press(interact.touch, idx, resp, true);
+        return;
+    }
+    let size_line = if ent.is_dir() {
+        None
+    } else {
+        Some(format_bytes(ent.size()))
+    };
+    let mod_line = ent
+        .modified()
+        .map(|t| format_modified_label(t, interact.labels));
+    let detail = file_entry_detail(ent.name(), size_line, mod_line);
+    install_hover_detail(resp, detail, HoverInstallMode::PointerHover, interact.hover);
+}
+
+fn row_detail_for_active_pane(
+    session: &FileManagerSession,
+    row: usize,
+    labels: &labels::FileManagerLabels,
+) -> Option<HoverDetail> {
+    let ent = match session.active_pane {
+        FileActivePane::Remote => session.remote.as_ref()?.entries.get(row)?,
+        FileActivePane::LeftLocal => session.left_local.as_ref()?.entries.get(row)?,
+        FileActivePane::Right => session.right.entries.get(row)?,
+    };
+    let size_line = if ent.is_dir {
+        None
+    } else {
+        Some(format_bytes(ent.size))
+    };
+    let mod_line = ent.modified.map(|t| format_modified_label(t, labels));
+    Some(file_entry_detail(&ent.name, size_line, mod_line))
+}
+
+fn format_bytes(n: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+    let mut v = n as f64;
+    let mut i = 0;
+    while v >= 1024.0 && i < UNITS.len() - 1 {
+        v /= 1024.0;
+        i += 1;
+    }
+    if i == 0 {
+        format!("{} {}", n, UNITS[i])
+    } else {
+        format!("{v:.1} {}", UNITS[i])
+    }
+}
+
+fn format_modified_label(t: SystemTime, labels: &labels::FileManagerLabels) -> String {
+    let _ = labels;
+    use std::time::UNIX_EPOCH;
+    let Ok(dur) = t.duration_since(UNIX_EPOCH) else {
+        return String::new();
+    };
+    let secs = dur.as_secs();
+    let days = secs / 86_400;
+    let tod = secs % 86_400;
+    let hh = tod / 3600;
+    let mm = (tod % 3600) / 60;
+    format!("{days}d {hh:02}:{mm:02}")
+}
+
+fn apply_touch_ops(session: &mut FileManagerSession, ops: &mut PaneOps) {
+    let mut status = session.status.take();
+    let mut rename = session.rename_dialog.clone();
+    let mut info = session.info_dialog.clone();
     match session.active_pane {
         FileActivePane::Remote => {
-            let Some(remote) = session.remote.as_mut() else {
-                return (false, false);
-            };
-            paint_pane_toolbar(
-                ui,
-                id_salt,
-                &remote.cwd.clone(),
-                &mut remote.select_mode,
-                &mut remote.selected,
-                &mut remote.filter,
-                &mut remote.show_hidden,
-            )
+            if let Some(remote) = session.remote.as_mut() {
+                run_remote_ops(
+                    remote,
+                    &mut session.clipboard,
+                    &mut status,
+                    &mut rename,
+                    &mut info,
+                    ops,
+                );
+            }
         }
         FileActivePane::LeftLocal => {
-            let Some(left) = session.left_local.as_mut() else {
-                return (false, false);
-            };
-            let cwd = left.cwd.display().to_string();
-            paint_pane_toolbar(
-                ui,
-                id_salt,
-                &cwd,
-                &mut left.select_mode,
-                &mut left.selected,
-                &mut left.filter,
-                &mut left.show_hidden,
-            )
+            if let Some(left) = session.left_local.as_mut() {
+                run_local_ops(
+                    left,
+                    FileActivePane::LeftLocal,
+                    &mut session.clipboard,
+                    &mut status,
+                    &mut rename,
+                    &mut info,
+                    ops,
+                );
+            }
         }
         FileActivePane::Right => {
-            let cwd = session.right.cwd.display().to_string();
-            paint_pane_toolbar(
-                ui,
-                id_salt,
-                &cwd,
-                &mut session.right.select_mode,
-                &mut session.right.selected,
-                &mut session.right.filter,
-                &mut session.right.show_hidden,
-            )
+            run_local_ops(
+                &mut session.right,
+                FileActivePane::Right,
+                &mut session.clipboard,
+                &mut status,
+                &mut rename,
+                &mut info,
+                ops,
+            );
         }
     }
-}
-
-fn paint_pane_toolbar(
-    ui: &mut egui::Ui,
-    id_salt: &str,
-    cwd: &str,
-    select_mode: &mut bool,
-    selected: &mut HashSet<usize>,
-    filter: &mut String,
-    show_hidden: &mut bool,
-) -> (bool, bool) {
-    let mut go_up = false;
-    let mut listing_changed = false;
-    let labels = labels::labels();
-    ui.style_mut().spacing.item_spacing.x = tokens::space::SM;
-    if ui
-        .add(
-            egui::Button::new("↑")
-                .frame(false)
-                .corner_radius(style::CORNER_RADIUS_XS)
-                .min_size(egui::vec2(
-                    tokens::size::TOOLBAR_WIDTH,
-                    tokens::size::TOOLBAR_HEIGHT,
-                )),
-        )
-        .on_hover_text(&labels.parent_folder)
-        .clicked()
-    {
-        go_up = true;
-    }
-    ui.label(egui::RichText::new(cwd).size(tokens::text::SMALL).weak());
-    let filter_edit = ui.add(
-        egui::TextEdit::singleline(filter)
-            .id_salt((id_salt, "fm_filter"))
-            .desired_width(120.0)
-            .hint_text(&labels.filter_placeholder),
-    );
-    if filter_edit.changed() {
-        listing_changed = true;
-    }
-    if ui.checkbox(show_hidden, &labels.show_hidden).changed() {
-        listing_changed = true;
-    }
-    if ui.checkbox(select_mode, &labels.multi_select).changed() && !*select_mode {
-        selected.clear();
-    }
-    (go_up, listing_changed)
-}
-
-fn paint_view_layout_controls(
-    ui: &mut egui::Ui,
-    view_mode: &mut FileViewMode,
-    pane_layout: &mut FilePaneLayout,
-    pending_prefs: &mut Option<FileManagerPrefs>,
-    labels: &labels::FileManagerLabels,
-) {
-    let mut changed = false;
-    ui.scope(|ui| {
-        ui.style_mut().spacing.interact_size.y = tokens::size::TOOLBAR_HEIGHT;
-        ui.style_mut().spacing.button_padding =
-            egui::vec2(tokens::space::SM, tokens::space::XS * 0.5);
-
-        let view_text = match *view_mode {
-            FileViewMode::List => labels.view_list.as_str(),
-            FileViewMode::Details => labels.view_details.as_str(),
-            FileViewMode::IconsSmall => labels.view_icons_small.as_str(),
-            FileViewMode::IconsLarge => labels.view_icons_large.as_str(),
-        };
-        egui::ComboBox::from_id_salt("fm_view_mode")
-            .selected_text(view_text)
-            .width(100.0)
-            .show_ui(ui, |ui| {
-                for (mode, text) in [
-                    (FileViewMode::List, labels.view_list.as_str()),
-                    (FileViewMode::Details, labels.view_details.as_str()),
-                    (FileViewMode::IconsSmall, labels.view_icons_small.as_str()),
-                    (FileViewMode::IconsLarge, labels.view_icons_large.as_str()),
-                ] {
-                    if ui.selectable_label(*view_mode == mode, text).clicked() {
-                        *view_mode = mode;
-                        changed = true;
-                    }
-                }
-            });
-        let layout_text = match *pane_layout {
-            FilePaneLayout::Single => labels.layout_single.as_str(),
-            FilePaneLayout::Dual => labels.layout_dual.as_str(),
-        };
-        egui::ComboBox::from_id_salt("fm_pane_layout")
-            .selected_text(layout_text)
-            .width(90.0)
-            .show_ui(ui, |ui| {
-                if ui
-                    .selectable_label(*pane_layout == FilePaneLayout::Dual, &labels.layout_dual)
-                    .clicked()
-                {
-                    *pane_layout = FilePaneLayout::Dual;
-                    changed = true;
-                }
-                if ui
-                    .selectable_label(
-                        *pane_layout == FilePaneLayout::Single,
-                        &labels.layout_single,
-                    )
-                    .clicked()
-                {
-                    *pane_layout = FilePaneLayout::Single;
-                    changed = true;
-                }
-            });
-    });
-    if changed {
-        *pending_prefs = Some(persist_file_manager_prefs(*view_mode, *pane_layout));
-    }
+    session.status = status;
+    session.rename_dialog = rename;
+    session.info_dialog = info;
 }
 
 fn paint_transfer_queue_panel(

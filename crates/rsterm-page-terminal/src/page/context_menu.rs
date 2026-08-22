@@ -1,5 +1,6 @@
 use rsterm_session_core::{ActiveSession, ConnectionViewAction};
 use rsterm_uiframe::clipboard::{read_text, write_text};
+use rsterm_uiframe::{install_context_popup, menu_action, menu_action_enabled};
 
 #[derive(Default, Clone, Copy)]
 pub(super) struct TerminalMenuAction {
@@ -15,43 +16,32 @@ pub(super) fn install(
     force_popup: bool,
     action: &mut TerminalMenuAction,
 ) {
-    let menu_id = resp.id.with("terminal_ctx_popup");
     let is_touch = ui.input(|i| i.has_touch_screen());
-
+    let touch_open = is_touch
+        .then_some(force_popup)
+        .filter(|&open| open)
+        .map(|_| egui::SetOpenCommand::Bool(true));
     if !is_touch {
-        resp.context_menu(|ui| contents(ui, has_selection, action));
-    }
-
-    let touch_open = force_popup.then_some(egui::SetOpenCommand::Bool(true));
-    egui::Popup::from_response(resp)
-        .id(menu_id)
-        .open_memory(touch_open)
-        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-        .show(|ui| {
-            ui.set_min_width(150.0);
-            contents(ui, has_selection, action);
+        install_context_popup(resp, true, None, None, |ui| {
+            contents(ui, has_selection, action)
         });
+    } else {
+        install_context_popup(resp, false, touch_open, None, |ui| {
+            contents(ui, has_selection, action)
+        });
+    }
 }
 
 fn contents(ui: &mut egui::Ui, has_selection: bool, action: &mut TerminalMenuAction) {
     let labels = crate::labels::labels();
-    if ui
-        .add_enabled(has_selection, egui::Button::new(&labels.copy))
-        .clicked()
-    {
+    if menu_action_enabled(ui, &labels.copy, has_selection) {
         action.copy = true;
-        ui.close();
     }
-    if ui.button(&labels.paste).clicked() {
+    if menu_action(ui, &labels.paste) {
         action.paste = true;
-        ui.close();
     }
-    if ui
-        .add_enabled(has_selection, egui::Button::new(&labels.clear_selection))
-        .clicked()
-    {
+    if menu_action_enabled(ui, &labels.clear_selection, has_selection) {
         action.clear_selection = true;
-        ui.close();
     }
 }
 

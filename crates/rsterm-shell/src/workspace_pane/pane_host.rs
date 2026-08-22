@@ -110,9 +110,14 @@ pub fn render_pane(
                         .content_mut()
                         .as_any_mut()
                         .downcast_mut::<rsterm_page_file_manager::FileManagerContent>(
-                    ) && let Some(prefs) = fm.pending_prefs.take()
-                    {
-                        action.file_manager.prefs = Some(prefs);
+                    ) {
+                        if let Some(prefs) = fm.pending_prefs.take() {
+                            action.file_manager.prefs = Some(prefs);
+                        }
+                        if fm.pending_open_settings {
+                            fm.pending_open_settings = false;
+                            action.file_manager.open_settings = true;
+                        }
                     }
                     if let Some(fm) = ctx.sessions[idx]
                         .content_mut()

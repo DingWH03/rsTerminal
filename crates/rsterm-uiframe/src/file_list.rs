@@ -7,6 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use egui::{Key, Modifiers};
 
 use crate::style;
+use crate::text_fit::{paint_text_fitted, truncate_to_width};
 use crate::tokens;
 use crate::vector_icons::{self, Icon};
 
@@ -208,6 +209,9 @@ pub struct FileBrowserAction {
 /// Per-row context menu installer: `(index, response, current_selection)`.
 pub type FileBrowserRowMenu<'a> = dyn FnMut(usize, &egui::Response, &HashSet<usize>) + 'a;
 
+/// Per-row response hook for hover / touch-hold (index, response, row).
+pub type FileBrowserRowHook<'a> = dyn FnMut(usize, &egui::Response, &dyn FileRow) + 'a;
+
 /// Paint a path header + scrollable file browser (list / details / icons).
 pub struct FileBrowserView;
 
@@ -226,6 +230,7 @@ impl FileBrowserView {
         interactive: bool,
         accept_keyboard: bool,
         mut row_menu: Option<&mut FileBrowserRowMenu<'_>>,
+        mut row_hook: Option<&mut FileBrowserRowHook<'_>>,
     ) -> FileBrowserAction {
         let mut action = FileBrowserAction::default();
         let n = entries.len();
@@ -294,6 +299,7 @@ impl FileBrowserView {
                         interactive,
                         &mut action,
                         &mut row_menu,
+                        &mut row_hook,
                     ),
                     FileViewMode::Details => paint_details_rows(
                         ui,
@@ -305,6 +311,7 @@ impl FileBrowserView {
                         &labels,
                         &mut action,
                         &mut row_menu,
+                        &mut row_hook,
                     ),
                     FileViewMode::IconsSmall => paint_icon_grid(
                         ui,
@@ -316,6 +323,7 @@ impl FileBrowserView {
                         56.0,
                         &mut action,
                         &mut row_menu,
+                        &mut row_hook,
                     ),
                     FileViewMode::IconsLarge => paint_icon_grid(
                         ui,
@@ -327,6 +335,7 @@ impl FileBrowserView {
                         88.0,
                         &mut action,
                         &mut row_menu,
+                        &mut row_hook,
                     ),
                 }
             });
@@ -479,17 +488,32 @@ fn paint_list_rows(
     interactive: bool,
     action: &mut FileBrowserAction,
     row_menu: &mut Option<&mut FileBrowserRowMenu<'_>>,
+    row_hook: &mut Option<&mut FileBrowserRowHook<'_>>,
 ) {
+    let max_w = ui.available_width().max(1.0);
     for (idx, ent) in entries.iter().enumerate() {
         let selected = state.selected.contains(&idx);
         let focused = state.focus_index == Some(idx);
-        let label = list_label(ent, focused && interactive);
+        let marker = if ent.is_dir() { "▸" } else { " " };
+        let prefix = if focused && interactive {
+            format!("● {marker} ")
+        } else {
+            format!("  {marker} ")
+        };
+        let name_fit = truncate_to_width(
+            ui,
+            ent.name(),
+            tokens::text::BODY,
+            (max_w - 24.0).max(1.0),
+            ui.visuals().text_color(),
+        );
+        let label = format!("{prefix}{name_fit}");
         let resp = ui.add(
             egui::Button::new(egui::RichText::new(label).size(tokens::text::BODY))
                 .selected(selected && interactive)
                 .frame(selected && interactive)
                 .corner_radius(style::CORNER_RADIUS_XS)
-                .min_size(egui::vec2(ui.available_width(), tokens::size::NAV_ROW)),
+                .min_size(egui::vec2(max_w, tokens::size::NAV_ROW)),
         );
         handle_row_interact(
             ui,
@@ -501,6 +525,7 @@ fn paint_list_rows(
             interactive,
             action,
             row_menu,
+            row_hook,
         );
     }
 }
@@ -515,6 +540,7 @@ fn paint_details_rows(
     labels: &FileBrowserLabels<'_>,
     action: &mut FileBrowserAction,
     row_menu: &mut Option<&mut FileBrowserRowMenu<'_>>,
+    row_hook: &mut Option<&mut FileBrowserRowHook<'_>>,
 ) {
     let avail = ui.available_width().max(1.0);
     let mut cols = config
@@ -654,11 +680,12 @@ fn paint_details_rows(
         } else {
             ui.visuals().text_color()
         };
-        paint_text_in(
+        paint_text_fitted(
             ui,
             egui::pos2(x + pad, rect.center().y),
             &list_label(ent, false),
             (name_w - pad * 2.0).max(1.0),
+            tokens::text::BODY,
             text_color,
         );
         x += name_w + gap;
@@ -667,20 +694,22 @@ fn paint_details_rows(
         } else {
             format_bytes(ent.size())
         };
-        paint_text_in(
+        paint_text_fitted(
             ui,
             egui::pos2(x + pad, rect.center().y),
             &size_str,
             (size_w - pad * 2.0).max(1.0),
+            tokens::text::BODY,
             ui.visuals().weak_text_color(),
         );
         x += size_w + gap;
         let mod_str = format_modified(ent.modified());
-        paint_text_in(
+        paint_text_fitted(
             ui,
             egui::pos2(x + pad, rect.center().y),
             &mod_str,
             (modified_w - pad * 2.0).max(1.0),
+            tokens::text::BODY,
             ui.visuals().weak_text_color(),
         );
 
@@ -694,6 +723,7 @@ fn paint_details_rows(
             interactive,
             action,
             row_menu,
+            row_hook,
         );
     }
 }
@@ -752,10 +782,17 @@ fn paint_icon_grid(
     cell: f32,
     action: &mut FileBrowserAction,
     row_menu: &mut Option<&mut FileBrowserRowMenu<'_>>,
+    row_hook: &mut Option<&mut FileBrowserRowHook<'_>>,
 ) {
     let avail = ui.available_width().max(cell);
     let cols = ((avail / (cell + tokens::space::SM)).floor() as usize).max(1);
-    let icon_size = (cell * 0.45).clamp(16.0, 40.0);
+    let name_band = 18.0;
+    let pad = tokens::space::SM;
+    let icon_area_h = (cell - name_band).max(16.0);
+    let icon_size = (cell * 0.78)
+        .min(icon_area_h - pad)
+        .min(cell - pad * 2.0)
+        .max(16.0);
 
     egui::Grid::new(ui.id().with(id_salt).with("icons"))
         .num_columns(cols)
@@ -764,7 +801,7 @@ fn paint_icon_grid(
             for (idx, ent) in entries.iter().enumerate() {
                 let selected = state.selected.contains(&idx);
                 let (rect, resp) = ui.allocate_exact_size(
-                    egui::vec2(cell, cell + 18.0),
+                    egui::vec2(cell, cell + name_band),
                     egui::Sense::click_and_drag(),
                 );
 
@@ -776,11 +813,12 @@ fn paint_icon_grid(
                     );
                 }
 
+                let icon_zone = egui::Rect::from_min_max(
+                    rect.min,
+                    egui::pos2(rect.right(), rect.top() + icon_area_h),
+                );
                 let icon_rect = egui::Rect::from_center_size(
-                    egui::pos2(
-                        rect.center().x,
-                        rect.top() + icon_size * 0.5 + tokens::space::MD,
-                    ),
+                    icon_zone.center(),
                     egui::vec2(icon_size, icon_size),
                 );
                 let icon = if ent.is_dir() {
@@ -795,20 +833,42 @@ fn paint_icon_grid(
                 };
                 vector_icons::paint(ui, icon_rect, icon, color, tokens::stroke::EMPHASIS);
 
-                let name = truncate_name(ent.name(), 14);
+                let full_name = ent.name();
+                let text_max_w = (cell - pad * 2.0).max(1.0);
+                let text_color = ui.visuals().text_color();
                 let galley = ui.fonts_mut(|f| {
-                    f.layout_no_wrap(
-                        name,
+                    f.layout(
+                        full_name.to_string(),
                         egui::FontId::proportional(tokens::text::SMALL),
-                        ui.visuals().text_color(),
+                        text_color,
+                        text_max_w,
                     )
                 });
+                // Force single visual line: if layout wrapped, rebuild truncated with ellipsis.
+                let galley = if galley.rows.len() > 1 || galley.size().x > text_max_w + 0.5 {
+                    let truncated = truncate_to_width(
+                        ui,
+                        full_name,
+                        tokens::text::SMALL,
+                        text_max_w,
+                        text_color,
+                    );
+                    ui.fonts_mut(|f| {
+                        f.layout_no_wrap(
+                            truncated,
+                            egui::FontId::proportional(tokens::text::SMALL),
+                            text_color,
+                        )
+                    })
+                } else {
+                    galley
+                };
                 let text_pos = egui::pos2(
                     rect.center().x - galley.size().x * 0.5,
                     rect.bottom() - galley.size().y - tokens::space::XS,
                 );
-                ui.painter()
-                    .galley(text_pos, galley, ui.visuals().text_color());
+                let painter = ui.painter_at(rect);
+                painter.galley(text_pos, galley, text_color);
 
                 handle_row_interact(
                     ui,
@@ -820,6 +880,7 @@ fn paint_icon_grid(
                     interactive,
                     action,
                     row_menu,
+                    row_hook,
                 );
 
                 if (idx + 1) % cols == 0 {
@@ -839,10 +900,14 @@ fn handle_row_interact(
     interactive: bool,
     action: &mut FileBrowserAction,
     row_menu: &mut Option<&mut FileBrowserRowMenu<'_>>,
+    row_hook: &mut Option<&mut FileBrowserRowHook<'_>>,
 ) {
     if !interactive {
         if let Some(menu) = row_menu.as_mut() {
             menu(idx, resp, &state.selected);
+        }
+        if let Some(hook) = row_hook.as_mut() {
+            hook(idx, resp, ent);
         }
         return;
     }
@@ -888,6 +953,9 @@ fn handle_row_interact(
     // Install after selection updates so context menus see current state.
     if let Some(menu) = row_menu.as_mut() {
         menu(idx, resp, &state.selected);
+    }
+    if let Some(hook) = row_hook.as_mut() {
+        hook(idx, resp, ent);
     }
 }
 
@@ -948,19 +1016,6 @@ fn list_label(ent: &impl FileRow, focused: bool) -> String {
     }
 }
 
-fn paint_text_in(ui: &egui::Ui, pos: egui::Pos2, text: &str, max_w: f32, color: egui::Color32) {
-    let galley = ui.fonts_mut(|f| {
-        f.layout(
-            text.to_string(),
-            egui::FontId::proportional(tokens::text::BODY),
-            color,
-            max_w,
-        )
-    });
-    let y = pos.y - galley.size().y * 0.5;
-    ui.painter().galley(egui::pos2(pos.x, y), galley, color);
-}
-
 fn format_bytes(n: u64) -> String {
     const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
     let mut v = n as f64;
@@ -1005,14 +1060,4 @@ fn civil_from_days(z: i64) -> (i32, u32, u32) {
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let y = if m <= 2 { y + 1 } else { y };
     (y as i32, m as u32, d as u32)
-}
-
-fn truncate_name(name: &str, max_chars: usize) -> String {
-    let count = name.chars().count();
-    if count <= max_chars {
-        name.to_string()
-    } else {
-        let t: String = name.chars().take(max_chars.saturating_sub(1)).collect();
-        format!("{t}…")
-    }
 }

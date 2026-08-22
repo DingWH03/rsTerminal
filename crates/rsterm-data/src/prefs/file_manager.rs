@@ -26,4 +26,6 @@ pub struct FileManagerPrefs {
     pub view_mode: PrefsFileViewMode,
     #[serde(default)]
     pub pane_layout: PrefsFilePaneLayout,
+    #[serde(default)]
+    pub show_hidden: bool,
 }

@@ -14,3 +14,4 @@ rsterm-session-core = { workspace = true }
 rsterm-uiframe = { workspace = true }
 rsterm-workspace = { workspace = true }
 rsterm-data = { workspace = true }
+regex = "1"

@@ -6,6 +6,7 @@ mod appearance;
 mod chrome;
 mod file_manager;
 mod general;
+mod input_mode;
 pub(crate) mod io;
 mod ui_state;
 
@@ -13,6 +14,7 @@ pub use appearance::AppearancePrefs;
 pub use chrome::ChromePrefs;
 pub use file_manager::{FileManagerPrefs, PrefsFilePaneLayout, PrefsFileViewMode};
 pub use general::GeneralPrefs;
+pub use input_mode::{InputInteractionMode, default_input_mode};
 pub use ui_state::{FileManagerUiState, UiStatePrefs};
 
 use serde::ser::SerializeStruct;
@@ -84,6 +86,7 @@ impl<'de> Deserialize<'de> for Prefs {
         let raw = Raw::deserialize(deserializer)?;
         let general = raw.general.unwrap_or_else(|| GeneralPrefs {
             language: raw.language.unwrap_or_default(),
+            input_mode: default_input_mode(),
         });
         let chrome = raw.chrome.unwrap_or(ChromePrefs {
             function_pane_width: raw.function_pane_width,
